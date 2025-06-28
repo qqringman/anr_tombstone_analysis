@@ -3942,3 +3942,167 @@ a.btn {
     overflow-x: auto;
     max-width: 100%;
 }
+
+/* ========================================================= */
+
+/* ===== 修復 AI 回應區域滾動問題 ===== */
+.ai-response {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    height: 100%;
+    position: relative;
+    min-height: 0; /* 重要：確保 flexbox 子元素可以收縮 */
+}
+
+.ai-response-content {
+    color: #d4d4d4;
+    line-height: 1.8;
+    font-size: 14px;
+    /* 移除這些會阻止滾動的設定 */
+    /* max-height: none; */
+    /* overflow-y: visible; */
+}
+
+/* 確保對話項目不會破壞滾動 */
+.conversation-item {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #3e3e42;
+    /* 移除可能影響滾動的設定 */
+    /* max-width: 100%; */
+}
+
+/* 確保分析內容不會破壞容器 */
+.ai-analysis-content {
+    color: #d4d4d4;
+    line-height: 1.8;
+    font-size: 14px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* 移除可能影響滾動的設定 */
+    /* white-space: pre-wrap; */
+}
+
+/* 程式碼區塊樣式 */
+.ai-analysis-content pre,
+.ai-analysis-content code {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* 確保 pre 標籤有滾動條 */
+.code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+/* GPT 內容容器也要確保不會破壞滾動 */
+.gpt-content {
+    max-width: 100%;
+    overflow-wrap: break-word;
+}
+
+/* ===== 修復 Loading 動畫對齊問題 ===== */
+.ai-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    gap: 15px; /* 圖標和文字之間的間距 */
+}
+
+.ai-spinner {
+    width: 24px; /* 縮小一點，與文字更協調 */
+    height: 24px;
+    border: 2px solid #3c3c3c;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0; /* 移除原本的 margin */
+    flex-shrink: 0; /* 防止被擠壓 */
+}
+
+.ai-loading > div:last-child {
+    color: #d4d4d4;
+    font-size: 14px;
+}
+
+/* 如果需要垂直排列的版本 */
+.ai-loading.vertical {
+    flex-direction: column;
+    gap: 20px;
+}
+
+.ai-loading.vertical .ai-spinner {
+    width: 40px;
+    height: 40px;
+    border-width: 3px;
+}
+
+/* ===== 額外確保聊天區域正常滾動 ===== */
+.ai-chat-area {
+    flex: 1;
+    min-height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 0; /* 重要：允許收縮 */
+}
+
+/* 全屏模式下的聊天區域 */
+.fullscreen-mode .ai-chat-area {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 100%;
+    overflow-y: auto; /* 確保全屏模式也能滾動 */
+}
+
+/* 確保主面板結構正確 */
+.ai-panel-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* 重要：允許收縮 */
+    overflow: hidden;
+}
+
+.ai-panel-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0; /* 重要：允許收縮 */
+}
+
+/* 移除可能衝突的樣式 */
+#aiResponse {
+    height: auto; /* 改為 auto 而不是 100% */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* 為 loading 在不同情境下的調整 */
+.analysis-progress .ai-spinner {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+/* 快速分析進度的特別調整 */
+.analysis-progress.quick-mode {
+    text-align: center;
+    padding: 30px;
+}
+
+.analysis-progress.quick-mode .ai-spinner {
+    margin: 0 auto 20px;
+    display: block;
+}

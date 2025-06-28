@@ -1038,12 +1038,7 @@ async function askCustomQuestion() {
     responseDiv.classList.add('active');
     
     // 創建新的 loading 元素
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'ai-loading';
-    loadingDiv.innerHTML = `
-        <div class="ai-spinner"></div>
-        <div>正在使用 ${getModelDisplayName(selectedModel)} 處理您的問題...</div>
-    `;
+	const loadingDiv = createLoadingElement(getModelDisplayName(selectedModel));
     responseContent.appendChild(loadingDiv);
     
     // 滾動到 loading 元素
@@ -1162,7 +1157,7 @@ async function askCustomQuestion() {
 
         // 錯誤時也更新
         setTimeout(updateRateLimitDisplay, 500);
-				
+
         // 如果是速率限制錯誤，也更新狀態
         if (error.message.includes('429') || error.message.includes('速率限制')) {
             setTimeout(refreshRateLimitStatus, 1000);
@@ -1180,6 +1175,18 @@ async function askCustomQuestion() {
             </svg>
         `;
     }
+
+	// 修改 askCustomQuestion 函數中創建 loading 的部分
+	function createLoadingElement(modelName) {
+		const loadingDiv = document.createElement('div');
+		loadingDiv.className = 'ai-loading';
+		loadingDiv.innerHTML = `
+			<div class="ai-spinner"></div>
+			<div>正在使用 ${modelName} 處理您的問題...</div>
+		`;
+		return loadingDiv;
+	}
+		
 }
 
 // 添加重試函數
@@ -3833,10 +3840,12 @@ function createQuickAnalysisProgress() {
     div.className = 'analysis-progress quick-mode';
     div.innerHTML = `
         <h4>⚡ 正在執行快速分析...</h4>
-        <div class="ai-spinner"></div>
+        <div class="ai-loading">
+            <div class="ai-spinner"></div>
+            <div>預計 30 秒內完成</div>
+        </div>
         <div class="progress-stats">
             <span class="mode-indicator" style="color: #ffd700;">快速模式</span>
-            <span>預計 30 秒內完成</span>
         </div>
     `;
     return div;
