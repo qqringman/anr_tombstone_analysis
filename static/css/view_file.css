@@ -3166,3 +3166,176 @@ a.btn {
         transform: translateY(0);
     }
 }
+
+/* 精簡的分析模式選擇器 */
+.analysis-mode-selector-compact {
+    background: #2d2d30;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 15px;
+}
+
+.mode-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 8px;
+}
+
+.mode-label {
+    color: #d4d4d4;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.mode-buttons {
+    display: flex;
+    gap: 5px;
+    flex: 1;
+}
+
+.mode-btn {
+    flex: 1;
+    background: #1e1e1e;
+    border: 2px solid #3e3e42;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #d4d4d4;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 13px;
+    min-width: 0;
+}
+
+.mode-btn:hover {
+    border-color: #007acc;
+    background: #2d2d30;
+    transform: translateY(-1px);
+}
+
+.mode-btn.active {
+    border-color: #667eea;
+    background: #3e3e42;
+    color: white;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.mode-btn .mode-icon {
+    font-size: 16px;
+}
+
+.mode-description {
+    font-size: 12px;
+    color: #969696;
+    line-height: 1.4;
+    text-align: center;
+    padding: 0 10px;
+}
+
+/* 移除原有的分析選項，整合到更緊湊的位置 */
+.analysis-options {
+    display: flex;
+    gap: 20px;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.analysis-options .option-item {
+    font-size: 12px;
+}
+
+/* 結構化分析顯示 */
+.structured-analysis {
+    padding: 20px;
+}
+
+.analysis-section {
+    margin-bottom: 25px;
+    background: #2d2d30;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #3e3e42;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #4ec9b0;
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.section-icon {
+    font-size: 20px;
+}
+
+.section-content {
+    color: #d4d4d4;
+    line-height: 1.8;
+}
+
+.section-content p {
+    margin: 10px 0;
+}
+
+.section-content ul.section-list {
+    margin: 10px 0;
+    padding-left: 25px;
+}
+
+.section-content ul.section-list li {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+.section-content code {
+    background: #1e1e1e;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #ce9178;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.section-content strong {
+    color: #4ec9b0;
+}
+
+.thinking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #d4d4d4;
+    font-size: 14px;
+    cursor: pointer;
+    margin-left: 10px;
+    padding: 5px 10px;
+    background: #1e1e1e;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.thinking-toggle:hover {
+    background: #2d2d30;
+}
+
+.thinking-toggle input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.thinking-toggle span {
+    font-size: 16px;
+}
+
+/* 移除原有的 analysis-options */
+.analysis-options {
+    display: none;
+}
+
+

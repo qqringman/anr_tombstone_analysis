@@ -1626,6 +1626,14 @@ def perform_auto_analysis(analyzer, content, log_type, enable_thinking):
             key_sections = analyzer.extract_key_sections(content, log_type)
             prompts = analyzer.generate_smart_prompts(key_sections, log_type, 'auto')
             
+            # 檢查 prompts 是否為空
+            if not prompts:
+                # 如果沒有生成提示，使用預設提示
+                prompts = [{
+                    'system': f"你是 Android {log_type.value} 分析專家。請分析這個日誌檔案。",
+                    'user': content[:50000]  # 限制內容長度
+                }]
+            
             client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
             
             message = client.messages.create(

@@ -4615,17 +4615,30 @@ function normalizeAnalysisData(data, mode) {
     return normalized;
 }
 
-function selectAnalysisMode(mode) {
+function selectAnalysisMode(mode, showToast = true) {
     if (!ANALYSIS_MODES[mode]) return;
     
     // 更新選中狀態
-    document.querySelectorAll('.mode-card').forEach(card => {
-        card.classList.remove('selected');
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.remove('active');
     });
     
-    const selectedCard = document.querySelector(`.mode-card[data-mode="${mode}"]`);
-    if (selectedCard) {
-        selectedCard.classList.add('selected');
+    const selectedBtn = document.querySelector(`.mode-btn[data-mode="${mode}"]`);
+    if (selectedBtn) {
+        selectedBtn.classList.add('active');
+    }
+    
+    // 更新描述
+    const descriptions = {
+        'auto': '自動選擇最佳分析策略，平衡速度與深度',
+        'quick': '30秒內快速獲得關鍵分析結果',
+        'comprehensive': '深入分析每個細節，提供完整診斷報告',
+        'max_tokens': '在 token 限制內最大化分析內容'
+    };
+    
+    const descElement = document.getElementById('modeDescription');
+    if (descElement) {
+        descElement.textContent = descriptions[mode] || '';
     }
     
     // 更新全局變量
@@ -4634,8 +4647,10 @@ function selectAnalysisMode(mode) {
     // 更新分析按鈕
     updateAnalyzeButton(mode);
     
-    // 顯示選擇提示
-    showModeSelectionToast(mode);
+    // 只在需要時顯示選擇提示
+    if (showToast) {
+        showModeSelectionToast(mode);
+    }
 }
 
 // 更新分析按鈕的函數
@@ -4726,6 +4741,9 @@ function displaySmartAnalysisResult(data, modeConfig) {
     // 根據模式顯示不同的內容
     if (data.analysis_mode === 'quick') {
         resultHTML += createQuickAnalysisDisplay(data, modeConfig);
+    } else if (data.analysis_mode === 'comprehensive') {
+        // 使用結構化顯示
+        resultHTML += createComprehensiveAnalysisDisplay(data, modeConfig);
     } else if (data.is_segmented) {
         resultHTML += createSegmentedAnalysisDisplay(data, modeConfig);
     } else {
@@ -4894,7 +4912,6 @@ async function performAnalysis(responseContent, sizeInfo) {
                 mode: selectedAnalysisMode,
                 model: selectedModel,
                 enable_thinking: document.getElementById('enableDeepThinking')?.checked,
-                include_recommendations: document.getElementById('includeRecommendations')?.checked,
                 expected_segments: sizeInfo.suggested_segments  // 傳遞預期的段數
             })
         });
@@ -5008,24 +5025,170 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeAnalysisModes() {
-    // 設置默認模式
+    // 設置默認模式，但不顯示提示
     selectedAnalysisMode = 'auto';
     
-    // 綁定模式卡片點擊事件
-    document.querySelectorAll('.mode-card').forEach(card => {
-        card.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const mode = this.dataset.mode;
-            selectAnalysisMode(mode);
-        });
-    });
-    
-    // 設置初始選中狀態
-    const autoCard = document.querySelector('.mode-card[data-mode="auto"]');
-    if (autoCard) {
-        autoCard.classList.add('selected');
+    // 更新按鈕狀態
+    const autoBtn = document.querySelector('.mode-btn[data-mode="auto"]');
+    if (autoBtn) {
+        autoBtn.classList.add('active');
         updateAnalyzeButton('auto');
     }
+    
+    // 設置描述
+    const descElement = document.getElementById('modeDescription');
+    if (descElement) {
+        descElement.textContent = '自動選擇最佳分析策略，平衡速度與深度';
+    }
+}
+
+// 更新深度分析顯示
+function createComprehensiveAnalysisDisplay(data, modeConfig) {
+    return `
+        <div class="comprehensive-analysis-content">
+            <div class="result-header">
+                <div class="mode-indicator">
+                    <span class="mode-icon">${modeConfig.icon}</span>
+                    <span class="mode-name">${modeConfig.name}</span>
+                    ${modeConfig.badge ? `<span class="mode-badge">${modeConfig.badge}</span>` : ''}
+                </div>
+                <div class="result-meta">
+                    <span>模型：${getModelDisplayName(data.model)}</span>
+                    ${data.elapsed_time ? `<span>耗時：${data.elapsed_time}</span>` : ''}
+                </div>
+            </div>
+            ${createStructuredAnalysisDisplay(data.analysis)}
+        </div>
+    `;
+}
+
+function createStructuredAnalysisDisplay(content) {
+    // 解析內容，識別不同的部分
+    const sections = parseAnalysisContent(content);
+    
+    let html = '<div class="structured-analysis">';
+    
+    sections.forEach(section => {
+        html += `
+            <div class="analysis-section">
+                <h3 class="section-title">
+                    <span class="section-icon">${section.icon}</span>
+                    ${section.title}
+                </h3>
+                <div class="section-content">
+                    ${formatSectionContent(section.content)}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// 解析分析內容
+function parseAnalysisContent(content) {
+    const sections = [];
+    
+    // 定義區段模式和對應的圖標
+    const sectionPatterns = [
+        { pattern: /問題摘要[:：]/i, icon: '📋', title: '問題摘要' },
+        { pattern: /根本原因[:：]/i, icon: '🎯', title: '根本原因' },
+        { pattern: /技術細節[:：]/i, icon: '🔧', title: '技術細節' },
+        { pattern: /影響評估[:：]/i, icon: '⚠️', title: '影響評估' },
+        { pattern: /解決方案[:：]/i, icon: '💡', title: '解決方案' },
+        { pattern: /立即措施[:：]/i, icon: '🚨', title: '立即措施' },
+        { pattern: /短期方案[:：]/i, icon: '📅', title: '短期方案' },
+        { pattern: /長期優化[:：]/i, icon: '🎯', title: '長期優化' },
+        { pattern: /預防措施[:：]/i, icon: '🛡️', title: '預防措施' },
+        { pattern: /關鍵發現[:：]/i, icon: '🔍', title: '關鍵發現' },
+        { pattern: /堆棧分析[:：]/i, icon: '📚', title: '堆棧分析' },
+        { pattern: /記憶體狀態[:：]/i, icon: '💾', title: '記憶體狀態' }
+    ];
+    
+    // 分割內容
+    const lines = content.split('\n');
+    let currentSection = null;
+    let currentContent = [];
+    
+    lines.forEach(line => {
+        let foundSection = false;
+        
+        // 檢查是否是新的區段
+        for (const { pattern, icon, title } of sectionPatterns) {
+            if (pattern.test(line)) {
+                // 保存前一個區段
+                if (currentSection) {
+                    sections.push({
+                        ...currentSection,
+                        content: currentContent.join('\n')
+                    });
+                }
+                
+                // 開始新區段
+                currentSection = { icon, title };
+                currentContent = [];
+                foundSection = true;
+                
+                // 提取標題後的內容
+                const contentAfterTitle = line.replace(pattern, '').trim();
+                if (contentAfterTitle) {
+                    currentContent.push(contentAfterTitle);
+                }
+                break;
+            }
+        }
+        
+        // 如果不是新區段，添加到當前內容
+        if (!foundSection && currentSection) {
+            currentContent.push(line);
+        }
+    });
+    
+    // 保存最後一個區段
+    if (currentSection) {
+        sections.push({
+            ...currentSection,
+            content: currentContent.join('\n')
+        });
+    }
+    
+    // 如果沒有識別到任何區段，創建一個默認區段
+    if (sections.length === 0) {
+        sections.push({
+            icon: '📄',
+            title: '分析結果',
+            content: content
+        });
+    }
+    
+    return sections;
+}
+
+// 格式化區段內容
+function formatSectionContent(content) {
+    if (!content) return '';
+    
+    // 將列表項轉換為 HTML
+    let formatted = content
+        .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
+        .replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\s*)+/g, '<ul class="section-list">$&</ul>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // 處理段落
+    const paragraphs = formatted.split('\n\n');
+    formatted = paragraphs
+        .map(p => p.trim())
+        .filter(p => p)
+        .map(p => {
+            if (p.startsWith('<ul') || p.startsWith('<ol')) {
+                return p;
+            }
+            return `<p>${p}</p>`;
+        })
+        .join('\n');
+    
+    return formatted;
 }
