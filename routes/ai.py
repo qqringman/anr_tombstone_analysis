@@ -21,6 +21,7 @@ import uuid
 import asyncio
 import queue
 from rate_limiter import TokenRateLimiter, LimitedCache
+from android_log_analyzer import LogType, AnalysisResult, AndroidLogAnalyzer
 
 # 創建一個藍圖實例
 ai_bp = Blueprint('ai', __name__)
@@ -43,41 +44,87 @@ AI_CONFIG = {
 }
 
 MODEL_LIMITS = {
+    # Claude 4 系列（最新）
+    'claude-4-opus-20250514': {
+        'max_tokens': 300000,  # 增加到 300K tokens
+        'max_output_tokens': 16384,  # 16K 輸出
+        'chars_per_token': 2.5,
+        'rate_limit': 60000,  # 每分鐘 60K tokens
+        'name': 'Claude 4 Opus',
+        'description': '最強大的模型，適合複雜分析'
+    },
+    'claude-4-sonnet-20250514': {
+        'max_tokens': 250000,  # 250K tokens
+        'max_output_tokens': 12288,  # 12K 輸出
+        'chars_per_token': 2.5,
+        'rate_limit': 80000,  # 每分鐘 80K tokens
+        'name': 'Claude 4 Sonnet',
+        'description': '平衡效能與成本，推薦使用'
+    },
+    
+    # Claude 3.5 系列（保留現有）
     'claude-3-5-sonnet-20241022': {
-        'max_tokens': 200000,  # 輸入 token 限制
-        'max_output_tokens': 8192,  # 輸出 token 限制
-        'chars_per_token': 2.5,  # 平均字符/token 比率
-        'rate_limit': 40000,  # 每分鐘 token 限制
-        'name': 'Claude 3.5 Sonnet'
+        'max_tokens': 200000,
+        'max_output_tokens': 8192,
+        'chars_per_token': 2.5,
+        'rate_limit': 40000,
+        'name': 'Claude 3.5 Sonnet',
+        'description': '快速準確，適合大部分場景'
     },
     'claude-3-5-haiku-20241022': {
         'max_tokens': 200000,
         'max_output_tokens': 8192,
         'chars_per_token': 2.5,
-        'rate_limit': 80000,  # Haiku 通常有更高的速率限制
-        'name': 'Claude 3.5 Haiku'
+        'rate_limit': 80000,
+        'name': 'Claude 3.5 Haiku',
+        'description': '輕量快速，適合簡單分析'
     },
+    
+    # Claude 3 系列（保留兼容）
     'claude-3-opus-20240229': {
         'max_tokens': 200000,
         'max_output_tokens': 4096,
         'chars_per_token': 2.5,
         'rate_limit': 40000,
-        'name': 'Claude 3 Opus'
+        'name': 'Claude 3 Opus',
+        'description': '深度分析，較慢但詳細'
     },
     'claude-3-haiku-20240307': {
         'max_tokens': 200000,
         'max_output_tokens': 4096,
         'chars_per_token': 2.5,
         'rate_limit': 80000,
-        'name': 'Claude 3 Haiku'
+        'name': 'Claude 3 Haiku',
+        'description': '經濟實惠，基本分析'
     }
 }
+
+# 更新默認模型為 Claude 4 Sonnet
+DEFAULT_MODEL = 'claude-4-sonnet-20250514'
 
 # 創建全局速率限制器
 rate_limiter = TokenRateLimiter(AI_CONFIG['RATE_LIMIT_TOKENS_PER_MINUTE'])
 
-
-# 添加新的 AI 分析端點
+# 新增智能模型選擇功能
+def select_optimal_model(content_size, analysis_type, user_preference=None):
+    """根據內容大小和分析類型智能選擇最佳模型"""
+    if user_preference and user_preference in MODEL_LIMITS:
+        return user_preference
+    
+    # 根據內容大小選擇
+    if content_size > 500000:  # 超過 500KB
+        # 大檔案使用 Claude 4 Opus
+        return 'claude-4-opus-20250514'
+    elif content_size > 200000:  # 200KB - 500KB
+        # 中等檔案使用 Claude 4 Sonnet
+        return 'claude-4-sonnet-20250514'
+    elif analysis_type == 'quick':
+        # 快速分析使用 Haiku
+        return 'claude-3-5-haiku-20241022'
+    else:
+        # 一般情況使用 Claude 3.5 Sonnet
+        return 'claude-3-5-sonnet-20241022'
+        
 @ai_bp.route('/analyze-with-ai', methods=['POST'])
 async def analyze_with_ai():
     """使用 Claude API 分析日誌內容（優化版本）"""
@@ -105,181 +152,87 @@ async def analyze_with_ai():
         # 使用更嚴格的限制
         needs_segmentation = estimated_tokens > AI_CONFIG['RATE_LIMIT_TOKENS_PER_SEGMENT']
         
-        #if needs_segmentation:
-        #    # 使用快速分段分析
-        #    return await analyze_in_segments_fast(
-        #        file_path, content, file_type, selected_model,
-        #        is_custom_question, original_question, enable_thinking
-        #    )
-        #else:
-        #    # 單次分析
-        #    return analyze_single_request(
-        #        file_path, content, file_type, selected_model,
-        #        is_custom_question, original_question, enable_thinking
-        #    )
-
-        return analyze_single_request(
+        # 修復：取消註解並啟用分段邏輯
+        if needs_segmentation:
+            # 使用快速分段分析
+            return await analyze_in_segments_fast(
                 file_path, content, file_type, selected_model,
                 is_custom_question, original_question, enable_thinking
-        )            
+            )
+        else:
+            # 單次分析
+            return analyze_single_request(
+                file_path, content, file_type, selected_model,
+                is_custom_question, original_question, enable_thinking
+            )
         
     except Exception as e:
         print(f"AI analysis error: {str(e)}")
         return jsonify({'error': f'分析錯誤: {str(e)}'}), 500
-        
-@ai_bp.route('/analyze-with-ai-stream', methods=['POST'])
-def analyze_with_ai_stream():
-    """使用 SSE 的流式分析端點"""
-    request_id = str(uuid.uuid4())
-    progress_queue = queue.Queue()
-    progress_queues[request_id] = progress_queue
     
-    def generate():
-        try:
-            # 獲取請求數據
-            data = request.get_json()
-            file_path = data.get('file_path', '')
-            content = data.get('content', '')
-            file_type = data.get('file_type', 'ANR')
-            selected_model = data.get('model', 'claude-3-5-sonnet-20241022')
-            is_custom_question = data.get('is_custom_question', False)
-            original_question = data.get('original_question', '')
-            enable_thinking = data.get('enable_thinking', True)
-            
-            # 發送初始化消息
-            yield f"data: {json.dumps({'type': 'init', 'request_id': request_id})}\n\n"
-            
-            # 創建分段
-            segments = create_intelligent_segments_v2(content, selected_model)
-            
-            # 發送分段信息
-            yield f"data: {json.dumps({'type': 'segments', 'total': len(segments)})}\n\n"
-            
-            # 如果不需要分段
-            if len(segments) == 1 and not segments[0].get('needs_segmentation', True):
-                # 直接分析
-                result = analyze_single_segment(segments[0], file_path, file_type, 
-                                              selected_model, original_question, enable_thinking)
-                yield f"data: {json.dumps({'type': 'complete', 'result': result})}\n\n"
-                return
-            
-            # 分段分析
-            results = []
-            client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-            accumulated_context = ""
-            
-            for i, segment in enumerate(segments):
-                # 發送進度更新
-                yield f"data: {json.dumps({
-                    'type': 'progress',
-                    'current': i + 1,
-                    'total': len(segments),
-                    'percentage': int((i + 1) / len(segments) * 100),
-                    'message': f'正在分析第 {i + 1}/{len(segments)} 段...'
-                })}\n\n"
-                
-                # 檢查速率限制
-                wait_time = rate_limiter.get_wait_time(segment['estimated_tokens'])
-                if wait_time > 0:
-                    yield f"data: {json.dumps({
-                        'type': 'rate_limit',
-                        'wait_time': wait_time,
-                        'message': f'等待速率限制重置 ({wait_time:.1f}秒)...'
-                    })}\n\n"
-                    time.sleep(wait_time)
-                
-                # 分析段落
-                try:
-                    segment_result = analyze_segment_with_retry(
-                        segment, client, file_type, original_question, 
-                        accumulated_context, selected_model, enable_thinking
-                    )
-                    
-                    results.append(segment_result)
-                    
-                    # 發送段落結果
-                    yield f"data: {json.dumps({
-                        'type': 'segment_complete',
-                        'segment': i + 1,
-                        'result': segment_result
-                    })}\n\n"
-                    
-                    # 更新累積上下文
-                    if segment_result.get('success'):
-                        key_findings = extract_key_findings(segment_result['analysis'])
-                        accumulated_context += f"\n\n段落 {i + 1} 關鍵發現：\n{key_findings}"
-                    
-                except Exception as e:
-                    error_result = {
-                        'segment_number': i + 1,
-                        'error': str(e),
-                        'success': False
-                    }
-                    results.append(error_result)
-                    
-                    yield f"data: {json.dumps({
-                        'type': 'segment_error',
-                        'segment': i + 1,
-                        'error': str(e)
-                    })}\n\n"
-            
-            # 生成綜合分析
-            yield f"data: {json.dumps({
-                'type': 'synthesizing',
-                'message': '正在生成綜合分析報告...'
-            })}\n\n"
-            
-            synthesis = synthesize_segments_v2(results, original_question, selected_model, client)
-            
-            # 發送最終結果
-            final_result = {
-                'success': True,
-                'is_segmented': True,
-                'total_segments': len(segments),
-                'segments': results,
-                'full_analysis': synthesis['analysis'],
-                'thinking_log': synthesis.get('thinking_log', []),
-                'model': selected_model
-            }
-            
-            yield f"data: {json.dumps({'type': 'final', 'result': final_result})}\n\n"
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-        finally:
-            # 清理
-            progress_queues.pop(request_id, None)
-    
-    return Response(generate(), mimetype="text/event-stream")
-
-# 新增一個端點來預檢檔案大小
 @ai_bp.route('/check-file-size-for-ai', methods=['POST'])
 def check_file_size_for_ai():
-    """預檢檔案大小並提供分析建議"""
+    """預檢檔案大小並根據分析模式提供建議"""
     try:
         data = request.json
         content = data.get('content', '')
+        mode = data.get('mode', 'auto')
         
         content_length = len(content)
-        estimated_tokens = content_length // int(AI_CONFIG['CHARS_PER_TOKEN'])
+        estimated_tokens = estimate_tokens_accurate(content)
         
-        # 計算建議的分段數
-        if estimated_tokens <= AI_CONFIG['MAX_TOKENS_PER_REQUEST']:
+        # 根據模式調整建議
+        if mode == 'quick':
+            # 快速模式永遠不分段
+            return jsonify({
+                'content_length': content_length,
+                'estimated_tokens': estimated_tokens,
+                'max_tokens_per_request': 50000,  # 快速分析的限制
+                'suggested_segments': 1,
+                'strategy': 'single',
+                'estimated_time': 30  # 30 秒
+            })
+        
+        # 其他模式的邏輯
+        model_limits = MODEL_LIMITS.get('claude-4-sonnet-20250514')
+        max_tokens = int(model_limits['max_tokens'] * 0.8)
+        
+        # 根據模式調整分段策略
+        if mode == 'comprehensive':
+            # 深度分析更積極分段
+            segment_threshold = max_tokens * 0.6
+        elif mode == 'max_tokens':
+            # 最大化分析盡量不分段
+            segment_threshold = max_tokens
+        else:  # auto
+            # 智能模式使用標準閾值
+            segment_threshold = max_tokens * 0.8
+        
+        if estimated_tokens <= segment_threshold:
             suggested_segments = 1
             strategy = 'single'
         else:
-            max_chars = int(AI_CONFIG['MAX_TOKENS_PER_REQUEST'] * AI_CONFIG['CHARS_PER_TOKEN'])
+            max_chars = int(segment_threshold * model_limits['chars_per_token'])
             suggested_segments = max(1, (content_length + max_chars - 1) // max_chars)
             strategy = 'segmented'
+        
+        # 時間估算
+        time_per_segment = {
+            'comprehensive': 60,  # 深度分析每段 60 秒
+            'max_tokens': 45,     # 最大化分析每段 45 秒
+            'auto': 30            # 智能分析每段 30 秒
+        }
+        
+        estimated_time = suggested_segments * time_per_segment.get(mode, 30)
         
         return jsonify({
             'content_length': content_length,
             'estimated_tokens': estimated_tokens,
-            'max_tokens_per_request': AI_CONFIG['MAX_TOKENS_PER_REQUEST'],
+            'max_tokens_per_request': max_tokens,
             'suggested_segments': suggested_segments,
             'strategy': strategy,
-            'estimated_time': suggested_segments * 5,  # 假設每段需要 5 秒
-            'supports_thinking': True
+            'estimated_time': estimated_time,
+            'mode': mode
         })
         
     except Exception as e:
@@ -660,6 +613,20 @@ def analyze_single_request(file_path, content, file_type, selected_model,
     try:
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         
+        # 新增：檢查內容是否需要截取
+        model_config = MODEL_LIMITS.get(selected_model, MODEL_LIMITS[DEFAULT_MODEL])
+        max_tokens = int(model_config['max_tokens'] * 0.8)  # 留 20% 餘量給系統提示
+        max_chars = int(max_tokens * model_config['chars_per_token'])
+        
+        truncated = False
+        original_length = len(content)
+        
+        if len(content) > max_chars:
+            # 內容太長，需要截取
+            content = content[:max_chars]
+            truncated = True
+            print(f"Content truncated from {original_length} to {len(content)} chars")
+        
         # 根據文件類型和問題類型構建提示詞
         if is_custom_question:
             system_prompt = f"""你是一位 Android 系統專家，擅長分析 Android 日誌和解決系統問題。
@@ -694,6 +661,10 @@ def analyze_single_request(file_path, content, file_type, selected_model,
 
 請用繁體中文回答，並使用結構化的格式。"""
         
+        # 如果內容被截取，在提示中說明
+        if truncated:
+            system_prompt += f"\n\n注意：由於檔案過大，只提供了前 {len(content)} 個字符（原始大小：{original_length} 字符）。"
+        
         # 調用 Claude API
         message_params = {
             "model": selected_model,
@@ -726,8 +697,9 @@ def analyze_single_request(file_path, content, file_type, selected_model,
         return jsonify({
             'success': True,
             'analysis': response_text,
-            'truncated': False,
-            'original_length': len(content),
+            'truncated': truncated,
+            'original_length': original_length,
+            'analyzed_length': len(content) if truncated else original_length,
             'model': selected_model,
             'thinking': thinking_text
         })
@@ -1425,4 +1397,1375 @@ def estimate_tokens_advanced(text, model='claude-3-5-sonnet-20241022'):
     
     return int(estimated_tokens)
                   
+# ==========================================================================================
+# android_log_analysis.py
+# ==========================================================================================        
+
+@ai_bp.route('/smart-analyze', methods=['POST'])
+async def smart_analyze():
+    """智能分析 Android 日誌，根據模式自動選擇策略"""
+    try:
+        data = request.json
+        content = data.get('content', '')
+        file_path = data.get('file_path', '')
+        analysis_mode = data.get('mode', 'auto')
+        file_type = data.get('file_type', 'ANR')
+        enable_thinking = data.get('enable_thinking', True)
         
+        print(f"Smart analyze - mode: {analysis_mode}, file size: {len(content)}")
+        
+        # 根據模式選擇最佳模型
+        if analysis_mode == 'quick':
+            # 快速分析：使用最快的模型，不分段
+            optimal_model = 'claude-3-5-haiku-20241022'
+            
+            # 直接執行快速分析，不檢查檔案大小
+            return await quick_analysis_direct(content, file_path, optimal_model)
+            
+        elif analysis_mode == 'comprehensive':
+            # 深度分析：使用最強的模型
+            optimal_model = 'claude-4-opus-20250514'
+        elif analysis_mode == 'max_tokens':
+            # 最大分析：使用平衡的模型
+            optimal_model = 'claude-4-sonnet-20250514'
+        else:  # auto
+            # 智能模式：根據檔案大小選擇
+            content_size = len(content)
+            if content_size > 500000:  # > 500KB
+                optimal_model = 'claude-4-opus-20250514'
+            elif content_size > 200000:  # > 200KB
+                optimal_model = 'claude-4-sonnet-20250514'
+            else:
+                optimal_model = 'claude-3-5-sonnet-20241022'
+        
+        print(f"分析模式: {analysis_mode}, 檔案大小: {len(content)}, 選擇模型: {optimal_model}")
+        
+        # 記錄開始時間
+        start_time = time.time()
+        
+        # 根據模式決定分析策略
+        if analysis_mode == 'quick':
+            # 快速分析：永遠不分段，只分析關鍵部分
+            result = await quick_analysis_strategy(content, file_path, optimal_model)
+            
+        elif analysis_mode == 'comprehensive':
+            # 深度分析：積極分段，詳細分析每個部分
+            result = await comprehensive_analysis_strategy(content, file_path, optimal_model, enable_thinking)
+            
+        elif analysis_mode == 'max_tokens':
+            # 最大化分析：在限制內分析盡可能多的內容
+            result = await max_tokens_analysis_strategy(content, file_path, optimal_model)
+            
+        else:  # auto
+            # 智能分析：根據內容自動決定策略
+            result = await auto_analysis_strategy(content, file_path, optimal_model, enable_thinking)
+        
+        # 添加分析時間
+        elapsed_time = round(time.time() - start_time, 2)
+        
+        if isinstance(result, tuple):
+            # 如果返回的是 Flask response
+            return result
+        
+        # 添加額外信息
+        result_data = result.get_json() if hasattr(result, 'get_json') else result
+        result_data['elapsed_time'] = f"{elapsed_time}秒"
+        result_data['analysis_mode'] = analysis_mode
+        result_data['model'] = optimal_model
+        
+        return jsonify(result_data)
+        
+    except Exception as e:
+        print(f"Smart analysis error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'分析錯誤: {str(e)}',
+            'success': False
+        }), 500
+
+async def quick_analysis_direct(content, file_path, model):
+    """快速分析的直接實現 - 不分段"""
+    try:
+        # 提取最關鍵的 50KB 內容
+        key_sections = []
+        total_size = 0
+        max_size = 50000
+        
+        # 1. 檔案頭部（重要的元信息）
+        header_size = min(2000, len(content))
+        key_sections.append(("檔案開頭", content[:header_size]))
+        total_size += header_size
+        
+        # 2. 查找關鍵錯誤模式
+        critical_patterns = [
+            (r'FATAL EXCEPTION.*?(?=\n\n|\Z)', "致命異常"),
+            (r'AndroidRuntime.*?(?=\n\n|\Z)', "運行時錯誤"),
+            (r'signal \d+.*?(?=\n\n|\Z)', "信號錯誤"),
+            (r'Abort message.*?(?=\n\n|\Z)', "中止消息"),
+            (r'"main".*?held by.*?(?=\n\n|\Z)', "主線程阻塞"),
+        ]
+        
+        for pattern, label in critical_patterns:
+            if total_size >= max_size:
+                break
+            matches = list(re.finditer(pattern, content, re.DOTALL | re.IGNORECASE))
+            if matches:
+                # 只取第一個匹配
+                match_content = matches[0].group(0)
+                if total_size + len(match_content) <= max_size:
+                    key_sections.append((label, match_content))
+                    total_size += len(match_content)
+        
+        # 組合關鍵部分
+        final_content = "\n\n===== 關鍵部分提取 =====\n\n".join([
+            f"【{label}】\n{content}" for label, content in key_sections
+        ])
+        
+        # 調用 Claude API
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        
+        message = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            temperature=0,
+            system="""你是 Android 專家。快速分析提供的關鍵日誌部分。
+請在 30 秒內提供簡潔的分析，包含：
+1. 問題是什麼？（1句話）
+2. 為什麼發生？（1-2句話）
+3. 如何修復？（2-3個要點）
+
+使用簡潔明瞭的語言，直接給出結論。""",
+            messages=[{"role": "user", "content": final_content}]
+        )
+        
+        return jsonify({
+            'success': True,
+            'analysis': message.content[0].text if message.content else "",
+            'analysis_mode': 'quick',
+            'is_quick': True,
+            'model': model,
+            'analyzed_size': total_size,
+            'original_size': len(content),
+            'key_sections_found': len(key_sections)
+        })
+        
+    except Exception as e:
+        print(f"Quick analysis error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'快速分析失敗: {str(e)}'
+        }), 500
+    
+async def segmented_analysis_improved(analyzer, content, log_type, model, mode, enable_thinking):
+    """改進的分段分析"""
+    try:
+        # 根據日誌類型創建智能分段
+        if log_type == LogType.ANR:
+            segments = create_anr_segments(content)
+        elif log_type == LogType.TOMBSTONE:
+            segments = create_tombstone_segments(content)
+        else:
+            segments = create_intelligent_segments_v2(content, model)
+        
+        print(f"創建了 {len(segments)} 個分段")
+        
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        segment_results = []
+        errors = []
+        
+        # 分析每個段落
+        for i, segment in enumerate(segments):
+            try:
+                # 速率限制檢查
+                segment_tokens = estimate_tokens_accurate(segment.get('content', ''))
+                wait_time = rate_limiter.get_wait_time(segment_tokens)
+                
+                if wait_time > 0:
+                    print(f"段落 {i+1} 需要等待 {wait_time:.1f} 秒")
+                    await asyncio.sleep(wait_time)
+                
+                # 記錄 token 使用
+                rate_limiter.use_tokens(segment_tokens)
+                
+                # 生成段落提示
+                if log_type == LogType.ANR:
+                    prompt = generate_anr_segment_prompt(segment, i, len(segments))
+                elif log_type == LogType.TOMBSTONE:
+                    prompt = generate_tombstone_segment_prompt(segment, i, len(segments))
+                else:
+                    prompt = build_segment_prompt_v2(segment, '', '', '', model)
+                
+                # 調用 API
+                message = await asyncio.to_thread(
+                    client.messages.create,
+                    model=model,
+                    max_tokens=3000,
+                    temperature=0,
+                    system=prompt['system'],
+                    messages=[{"role": "user", "content": prompt['user']}]
+                )
+                
+                segment_results.append({
+                    'segment_number': i + 1,
+                    'analysis': message.content[0].text if message.content else "",
+                    'success': True,
+                    'tokens_used': segment_tokens
+                })
+                
+            except Exception as e:
+                print(f"段落 {i+1} 分析失敗: {str(e)}")
+                errors.append({
+                    'segment': i + 1,
+                    'error': str(e)
+                })
+                segment_results.append({
+                    'segment_number': i + 1,
+                    'error': str(e),
+                    'success': False
+                })
+        
+        # 生成綜合報告
+        if any(r.get('success') for r in segment_results):
+            final_report = generate_smart_final_report(segment_results, log_type, analyzer)
+        else:
+            final_report = {'error': '所有段落分析都失敗了'}
+        
+        return jsonify({
+            'success': True,
+            'analysis_mode': mode,
+            'log_type': log_type.value,
+            'model': model,
+            'is_segmented': True,
+            'total_segments': len(segments),
+            'segment_results': segment_results,
+            'final_report': final_report,
+            'result': final_report,  # 兼容前端
+            'errors': errors
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'分段分析失敗: {str(e)}',
+            'success': False
+        }), 500
+    
+async def single_analysis_improved(analyzer, content, log_type, model, mode, enable_thinking):
+    """改進的單次分析"""
+    try:
+        # 提取關鍵部分
+        key_sections = analyzer.extract_key_sections(content, log_type)
+        
+        # 根據模式生成提示
+        prompts = analyzer.generate_smart_prompts(key_sections, log_type, mode)
+        
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        
+        # 根據模式調整輸出長度
+        output_tokens = {
+            'quick': 2000,
+            'auto': 4000,
+            'comprehensive': MODEL_LIMITS[model]['max_output_tokens'],
+            'max_tokens': MODEL_LIMITS[model]['max_output_tokens']
+        }
+        
+        max_output = output_tokens.get(mode, 4000)
+        
+        # 調用 API
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model=model,
+            max_tokens=max_output,
+            temperature=0,
+            system=prompts[0]['system'],
+            messages=[{"role": "user", "content": prompts[0]['user']}]
+        )
+        
+        analysis_text = message.content[0].text if message.content else ""
+        thinking_text = getattr(message, 'thinking', None) if enable_thinking else None
+        
+        # 結構化解析
+        result = parse_detailed_analysis(analysis_text, log_type)
+        
+        return jsonify({
+            'success': True,
+            'analysis_mode': mode,
+            'log_type': log_type.value,
+            'model': model,
+            'result': result,
+            'detailed_analysis': analysis_text,
+            'thinking': thinking_text,
+            'is_segmented': False,
+            'total_segments': 1
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'分析失敗: {str(e)}',
+            'success': False
+        }), 500
+    
+async def quick_analysis_direct(analyzer, content, log_type, model):
+    """快速分析 - 只分析最關鍵的部分"""
+    try:
+        # 提取關鍵部分（限制在 50KB 以內）
+        key_sections = analyzer.extract_key_sections(content, log_type)
+        
+        # 構建精簡的內容
+        condensed_content = []
+        total_chars = 0
+        max_chars = 50000  # 50KB
+        
+        # 優先級順序
+        if log_type == LogType.ANR:
+            priority_keys = ['header', 'main_thread', 'deadlocks', 'cpu_info']
+        else:
+            priority_keys = ['signal_info', 'abort_message', 'backtrace']
+        
+        for key in priority_keys:
+            if key in key_sections and key_sections[key]:
+                section_content = key_sections[key]
+                if total_chars + len(section_content) < max_chars:
+                    condensed_content.append(f"=== {key.upper()} ===\n{section_content}")
+                    total_chars += len(section_content)
+        
+        final_content = '\n\n'.join(condensed_content)
+        
+        # 快速分析提示
+        prompts = analyzer.generate_smart_prompts(key_sections, log_type, 'quick')
+        prompt = prompts[0]
+        
+        # 調用 API
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model=model,
+            max_tokens=2000,  # 快速分析用較少的輸出
+            temperature=0,
+            system=prompt['system'],
+            messages=[{"role": "user", "content": final_content + "\n\n" + prompt['user']}]
+        )
+        
+        analysis_text = message.content[0].text if message.content else ""
+        
+        # 解析結果
+        result = parse_analysis_result(analysis_text, log_type)
+        
+        return jsonify({
+            'success': True,
+            'analysis_mode': 'quick',
+            'log_type': log_type.value,
+            'model': model,
+            'result': result,
+            'detailed_analysis': analysis_text,
+            'is_segmented': False,
+            'total_segments': 1,
+            'content_size': len(content),
+            'analyzed_size': total_chars
+        })
+        
+    except Exception as e:
+        print(f"Quick analysis error: {str(e)}")
+        return jsonify({
+            'error': f'快速分析失敗: {str(e)}',
+            'success': False
+        }), 500
+    
+async def quick_analysis(analyzer, sections, log_type, model):
+    """快速分析模式"""
+    prompts = analyzer.generate_smart_prompts(sections, log_type, 'quick')
+    
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    # 只使用第一個提示
+    prompt = prompts[0]
+    
+    try:
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model=model,
+            max_tokens=4000,
+            temperature=0,
+            system=prompt['system'],
+            messages=[{"role": "user", "content": prompt['user']}]
+        )
+        
+        analysis = message.content[0].text if message.content else ""
+        
+        # 解析分析結果
+        result = parse_analysis_result(analysis, log_type)
+        
+        return jsonify({
+            'success': True,
+            'analysis_mode': 'quick',
+            'log_type': log_type.value,
+            'model': model,
+            'result': result,
+            'raw_analysis': analysis
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'快速分析失敗: {str(e)}'}), 500
+
+async def comprehensive_analysis(analyzer, sections, log_type, model):
+    """全面分析模式"""
+    prompts = analyzer.generate_smart_prompts(sections, log_type, 'comprehensive')
+    
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    all_analyses = []
+    
+    # 分段分析
+    for i, prompt in enumerate(prompts):
+        try:
+            # 檢查速率限制
+            wait_time = rate_limiter.get_wait_time(10000)  # 估算 tokens
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+            
+            message = await asyncio.to_thread(
+                client.messages.create,
+                model=model,
+                max_tokens=4000,
+                temperature=0,
+                system=prompt['system'],
+                messages=[{"role": "user", "content": prompt['user']}]
+            )
+            
+            analysis = message.content[0].text if message.content else ""
+            all_analyses.append({
+                'part': i + 1,
+                'analysis': analysis
+            })
+            
+            # 記錄 token 使用
+            rate_limiter.use_tokens(10000)
+            
+        except Exception as e:
+            all_analyses.append({
+                'part': i + 1,
+                'error': str(e)
+            })
+    
+    # 綜合所有分析
+    final_result = synthesize_comprehensive_analysis(all_analyses, log_type)
+    
+    return jsonify({
+        'success': True,
+        'analysis_mode': 'comprehensive',
+        'log_type': log_type.value,
+        'model': model,
+        'parts': all_analyses,
+        'final_result': final_result
+    })
+
+async def max_token_analysis(analyzer, sections, log_type, model):
+    """最大 token 分析模式"""
+    prompts = analyzer.generate_smart_prompts(sections, log_type, 'max_tokens')
+    prompt = prompts[0]
+    
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    try:
+        # 使用模型的最大輸出能力
+        model_config = MODEL_LIMITS.get(model, MODEL_LIMITS['claude-4-sonnet-20250514'])
+        
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model=model,
+            max_tokens=model_config['max_output_tokens'],
+            temperature=0,
+            system=prompt['system'],
+            messages=[{"role": "user", "content": prompt['user']}]
+        )
+        
+        analysis = message.content[0].text if message.content else ""
+        
+        # 結構化解析
+        result = parse_detailed_analysis(analysis, log_type)
+        
+        return jsonify({
+            'success': True,
+            'analysis_mode': 'max_tokens',
+            'log_type': log_type.value,
+            'model': model,
+            'tokens_used': estimate_tokens_accurate(prompt['user']),
+            'result': result,
+            'detailed_analysis': analysis
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'最大 token 分析失敗: {str(e)}'}), 500
+
+async def segmented_smart_analysis(analyzer, content, log_type, model):
+    """智能分段分析"""
+    # 根據日誌結構智能分段
+    if log_type == LogType.ANR:
+        segments = create_anr_segments(content)
+    elif log_type == LogType.TOMBSTONE:
+        segments = create_tombstone_segments(content)
+    else:
+        segments = create_intelligent_segments_v2(content, model)
+    
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    segment_results = []
+    
+    # 並行分析優化
+    from concurrent.futures import ThreadPoolExecutor
+    import asyncio
+    
+    async def analyze_segment(segment, index):
+        try:
+            # 為每個段落生成專門的提示
+            if log_type == LogType.ANR:
+                prompt = generate_anr_segment_prompt(segment, index, len(segments))
+            elif log_type == LogType.TOMBSTONE:
+                prompt = generate_tombstone_segment_prompt(segment, index, len(segments))
+            else:
+                prompt = build_segment_prompt_v2(segment, 'Unknown', '', '', model)
+            
+            # 速率限制檢查
+            estimated_tokens = estimate_tokens_accurate(prompt['user'])
+            wait_time = rate_limiter.get_wait_time(estimated_tokens)
+            
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+            
+            # 調用 API
+            message = await asyncio.to_thread(
+                client.messages.create,
+                model=model,
+                max_tokens=3000,
+                temperature=0,
+                system=prompt['system'],
+                messages=[{"role": "user", "content": prompt['user']}]
+            )
+            
+            rate_limiter.use_tokens(estimated_tokens)
+            
+            return {
+                'segment': index + 1,
+                'success': True,
+                'analysis': message.content[0].text if message.content else "",
+                'tokens': estimated_tokens
+            }
+            
+        except Exception as e:
+            return {
+                'segment': index + 1,
+                'success': False,
+                'error': str(e)
+            }
+    
+    # 批次並行處理
+    batch_size = 2  # 同時處理 2 個段落
+    for i in range(0, len(segments), batch_size):
+        batch = segments[i:i+batch_size]
+        tasks = [analyze_segment(seg, i+j) for j, seg in enumerate(batch)]
+        results = await asyncio.gather(*tasks)
+        segment_results.extend(results)
+    
+    # 生成最終報告
+    final_report = generate_smart_final_report(segment_results, log_type, analyzer)
+    
+    return jsonify({
+        'success': True,
+        'analysis_mode': 'segmented',
+        'log_type': log_type.value,
+        'model': model,
+        'total_segments': len(segments),
+        'segment_results': segment_results,
+        'final_report': final_report
+    })
+
+def create_anr_segments(content: str) -> List[Dict]:
+    """為 ANR 日誌創建智能分段"""
+    segments = []
+    
+    # ANR 的自然分段點
+    segment_markers = [
+        (r'\n----- pid \d+', 'Process Section'),
+        (r'\nCmd line:', 'Command Line'),
+        (r'\n".*?" prio=\d+', 'Thread Section'),
+        (r'\nHeld by thread', 'Lock Information'),
+        (r'\nCPU usage', 'CPU Statistics'),
+        (r'\nTotal memory', 'Memory Statistics')
+    ]
+    
+    current_pos = 0
+    content_length = len(content)
+    
+    # 首先提取頭部信息
+    header_end = min(5000, content_length)
+    segments.append({
+        'content': content[:header_end],
+        'type': 'header',
+        'description': 'ANR 頭部信息和概要'
+    })
+    current_pos = header_end
+    
+    # 按自然分段點分割
+    while current_pos < content_length:
+        best_match = None
+        best_pos = content_length
+        best_type = 'unknown'
+        
+        # 尋找下一個分段點
+        for pattern, seg_type in segment_markers:
+            match = re.search(pattern, content[current_pos:current_pos+100000])
+            if match and match.start() < best_pos:
+                best_match = match
+                best_pos = match.start()
+                best_type = seg_type
+        
+        if best_match:
+            segment_end = current_pos + best_pos
+            if segment_end > current_pos:
+                segments.append({
+                    'content': content[current_pos:segment_end],
+                    'type': best_type,
+                    'description': f'{best_type} 部分'
+                })
+            current_pos = segment_end
+        else:
+            # 沒有找到更多標記，添加剩餘內容
+            segments.append({
+                'content': content[current_pos:],
+                'type': 'remainder',
+                'description': '剩餘內容'
+            })
+            break
+    
+    return segments
+
+def create_tombstone_segments(content: str) -> List[Dict]:
+    """為 Tombstone 日誌創建智能分段"""
+    segments = []
+    
+    # Tombstone 的關鍵部分
+    sections = [
+        (r'\*\*\* \*\*\*.*?(?=\n\n)', 'header', 'Tombstone 頭部'),
+        (r'Build fingerprint:.*?(?=\n\n)', 'build_info', '構建信息'),
+        (r'ABI:.*?(?=\n)', 'abi_info', 'ABI 信息'),
+        (r'signal \d+.*?(?=\n\n)', 'signal_info', '信號信息'),
+        (r'Abort message:.*?(?=\n)', 'abort_message', '中止消息'),
+        (r'registers:.*?(?=backtrace:|$)', 'registers', '寄存器狀態'),
+        (r'backtrace:.*?(?=stack:|memory map:|$)', 'backtrace', '堆棧追蹤'),
+        (r'stack:.*?(?=memory map:|$)', 'stack', '堆棧內容'),
+        (r'memory map:.*?(?=open files:|$)', 'memory_map', '內存映射'),
+        (r'open files:.*?$', 'open_files', '打開的文件')
+    ]
+    
+    for pattern, seg_type, description in sections:
+        match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+        if match:
+            segments.append({
+                'content': match.group(0),
+                'type': seg_type,
+                'description': description,
+                'start': match.start(),
+                'end': match.end()
+            })
+    
+    # 如果沒有找到標準結構，使用通用分段
+    if not segments:
+        return create_intelligent_segments_v2(content, 'claude-4-sonnet-20250514')
+    
+    # 按位置排序
+    segments.sort(key=lambda x: x.get('start', 0))
+    
+    return segments
+
+def generate_anr_segment_prompt(segment: Dict, index: int, total: int) -> Dict[str, str]:
+    """生成 ANR 段落分析提示詞"""
+    seg_type = segment.get('type', 'unknown')
+    
+    type_prompts = {
+        'header': "分析 ANR 的基本信息，包括發生時間、影響的應用和初步原因。",
+        'Process Section': "分析進程信息，識別受影響的進程和服務。",
+        'Thread Section': "分析線程狀態，找出被阻塞或等待的線程。",
+        'Lock Information': "分析鎖信息，檢測死鎖或鎖競爭。",
+        'CPU Statistics': "分析 CPU 使用情況，判斷是否存在 CPU 瓶頸。",
+        'Memory Statistics': "分析內存使用，檢查是否存在內存壓力。"
+    }
+    
+    system_prompt = type_prompts.get(seg_type, "分析這個 ANR 日誌段落。")
+    
+    return {
+        'system': f"Android ANR 專家。這是第 {index+1}/{total} 段，類型：{seg_type}。{system_prompt}",
+        'user': f"""
+段落類型：{segment.get('description', '')}
+
+內容：
+{segment['content'][:50000]}  # 限制長度
+
+請提供：
+1. 這個段落的關鍵發現
+2. 與 ANR 原因的關聯
+3. 需要在其他段落確認的信息
+"""
+    }
+
+def generate_tombstone_segment_prompt(segment: Dict, index: int, total: int) -> Dict[str, str]:
+    """生成 Tombstone 段落分析提示詞"""
+    seg_type = segment.get('type', 'unknown')
+    
+    type_prompts = {
+        'signal_info': "分析崩潰信號，確定崩潰類型和嚴重性。",
+        'abort_message': "解析中止消息，理解崩潰的直接原因。",
+        'registers': "分析寄存器狀態，判斷崩潰時的 CPU 狀態。",
+        'backtrace': "分析堆棧追蹤，定位崩潰發生的確切位置和調用鏈。",
+        'memory_map': "分析內存映射，確定崩潰地址的歸屬。"
+    }
+    
+    system_prompt = type_prompts.get(seg_type, "分析這個 Tombstone 日誌段落。")
+    
+    return {
+        'system': f"Android 崩潰分析專家。段落 {index+1}/{total}，類型：{seg_type}。{system_prompt}",
+        'user': f"""
+段落描述：{segment.get('description', '')}
+
+內容：
+{segment['content'][:50000]}
+
+請分析：
+1. 這個段落揭示的崩潰信息
+2. 與崩潰根本原因的關係
+3. 可能的修復方向
+"""
+    }
+
+def parse_analysis_result(raw_analysis: str, log_type: LogType) -> Dict:
+    """解析 AI 分析結果為結構化數據"""
+    result = {
+        'summary': '',
+        'root_cause': '',
+        'affected_processes': [],
+        'key_evidence': [],
+        'recommendations': [],
+        'severity': 'Unknown',
+        'confidence': 0.0
+    }
+    
+    # 使用簡單的模式匹配提取信息
+    sections = raw_analysis.split('\n\n')
+    
+    for section in sections:
+        section_lower = section.lower()
+        
+        if any(keyword in section_lower for keyword in ['摘要', 'summary', '概要']):
+            result['summary'] = section.strip()
+        elif any(keyword in section_lower for keyword in ['原因', 'cause', 'reason']):
+            result['root_cause'] = section.strip()
+        elif any(keyword in section_lower for keyword in ['建議', 'recommendation', '解決']):
+            result['recommendations'].append(section.strip())
+        elif any(keyword in section_lower for keyword in ['進程', 'process', '應用']):
+            # 提取進程名
+            processes = re.findall(r'(?:進程|process|應用)[:：]\s*(.+)', section)
+            result['affected_processes'].extend(processes)
+    
+    # 評估嚴重性
+    if any(word in raw_analysis.lower() for word in ['critical', '嚴重', 'fatal', '致命']):
+        result['severity'] = 'Critical'
+    elif any(word in raw_analysis.lower() for word in ['high', '高', 'major']):
+        result['severity'] = 'High'
+    elif any(word in raw_analysis.lower() for word in ['medium', '中等']):
+        result['severity'] = 'Medium'
+    else:
+        result['severity'] = 'Low'
+    
+    # 計算置信度（基於分析的完整性）
+    filled_fields = sum(1 for v in result.values() if v and v != 'Unknown' and v != 0.0)
+    result['confidence'] = filled_fields / 7.0
+    
+    return result
+
+def synthesize_comprehensive_analysis(analyses: List[Dict], log_type: LogType) -> Dict:
+    """綜合多個分析部分的結果"""
+    synthesis = {
+        'comprehensive_summary': '',
+        'root_causes': [],
+        'evidence_chain': [],
+        'action_items': {
+            'immediate': [],
+            'short_term': [],
+            'long_term': []
+        },
+        'technical_details': {}
+    }
+    
+    # 合併所有分析
+    all_text = '\n\n'.join(a['analysis'] for a in analyses if 'analysis' in a)
+    
+    # 提取和整理信息
+    # 這裡可以使用更複雜的 NLP 技術
+    
+    synthesis['comprehensive_summary'] = f"""
+基於 {len(analyses)} 個部分的深入分析，{log_type.value} 問題的完整診斷如下：
+{all_text[:500]}...
+"""
+    
+    return synthesis
+
+def generate_smart_final_report(segment_results: List[Dict], log_type: LogType, 
+                               analyzer: AndroidLogAnalyzer) -> Dict:
+    """生成智能最終報告"""
+    successful_segments = [r for r in segment_results if r.get('success')]
+    
+    report = {
+        'executive_summary': '',
+        'detailed_findings': {},
+        'root_cause_analysis': '',
+        'impact_assessment': '',
+        'remediation_plan': {
+            'immediate_actions': [],
+            'preventive_measures': [],
+            'monitoring_recommendations': []
+        },
+        'technical_appendix': {}
+    }
+    
+    # 基於成功分析的段落生成報告
+    if log_type == LogType.ANR:
+        report['executive_summary'] = f"""
+ANR 分析完成。共分析 {len(successful_segments)}/{len(segment_results)} 個段落。
+
+主要發現：
+- 檢測到的 ANR 類型和嚴重程度
+- 受影響的主要組件
+- 系統資源使用情況
+"""
+    elif log_type == LogType.TOMBSTONE:
+        report['executive_summary'] = f"""
+Tombstone 崩潰分析完成。共分析 {len(successful_segments)}/{len(segment_results)} 個段落。
+
+崩潰概要：
+- 崩潰信號和類型
+- 崩潰位置和調用鏈
+- 內存狀態分析
+"""
+    
+    # 整合所有段落的發現
+    for result in successful_segments:
+        if result.get('analysis'):
+            # 提取關鍵信息添加到報告中
+            # 這裡可以進一步解析每個段落的分析結果
+            pass
+    
+    return report
+
+def parse_detailed_analysis(raw_analysis: str, log_type: LogType) -> Dict:
+    """解析詳細的 AI 分析結果為結構化數據"""
+    result = {
+        'summary': '',
+        'root_cause': '',
+        'affected_processes': [],
+        'key_evidence': [],
+        'recommendations': [],
+        'severity': 'Unknown',
+        'confidence': 0.0,
+        'technical_details': {},
+        'timeline': []
+    }
+    
+    try:
+        # 使用更智能的解析
+        lines = raw_analysis.split('\n')
+        current_section = None
+        current_content = []
+        
+        section_keywords = {
+            'summary': ['摘要', 'summary', '概要', '總結', '問題摘要'],
+            'root_cause': ['原因', 'cause', 'reason', '根本原因', 'root cause'],
+            'processes': ['進程', 'process', '應用', 'app', 'pid'],
+            'evidence': ['證據', 'evidence', '堆棧', 'stack', 'trace', '追蹤'],
+            'recommendations': ['建議', 'recommendation', '解決', 'solution', '修復'],
+            'severity': ['嚴重', 'severity', 'critical', 'high', 'medium', 'low'],
+            'technical': ['技術', 'technical', '詳細', 'detail']
+        }
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # 檢查是否是新的段落標題
+            line_lower = line.lower()
+            new_section = None
+            
+            for section, keywords in section_keywords.items():
+                if any(keyword in line_lower for keyword in keywords):
+                    new_section = section
+                    break
+            
+            if new_section:
+                # 保存前一個段落的內容
+                if current_section and current_content:
+                    save_section_content(result, current_section, current_content)
+                
+                current_section = new_section
+                current_content = []
+            else:
+                current_content.append(line)
+        
+        # 保存最後一個段落
+        if current_section and current_content:
+            save_section_content(result, current_section, current_content)
+        
+        # 如果沒有找到結構化內容，使用簡單分割
+        if not result['summary'] and raw_analysis:
+            paragraphs = raw_analysis.split('\n\n')
+            if paragraphs:
+                result['summary'] = paragraphs[0]
+                if len(paragraphs) > 1:
+                    result['root_cause'] = paragraphs[1]
+                if len(paragraphs) > 2:
+                    result['recommendations'] = paragraphs[2:]
+        
+        # 評估嚴重性
+        result['severity'] = assess_severity(raw_analysis, log_type)
+        
+        # 計算置信度
+        result['confidence'] = calculate_confidence(result)
+        
+    except Exception as e:
+        print(f"解析分析結果時出錯: {str(e)}")
+        result['summary'] = raw_analysis[:500] + '...' if len(raw_analysis) > 500 else raw_analysis
+    
+    return result
+
+def save_section_content(result: Dict, section: str, content: List[str]):
+    """保存段落內容到結果中"""
+    content_text = '\n'.join(content)
+    
+    if section == 'summary':
+        result['summary'] = content_text
+    elif section == 'root_cause':
+        result['root_cause'] = content_text
+    elif section == 'processes':
+        # 提取進程列表
+        processes = extract_processes(content_text)
+        result['affected_processes'].extend(processes)
+    elif section == 'evidence':
+        # 分割證據項目
+        evidence_items = [item.strip() for item in content_text.split('\n') if item.strip()]
+        result['key_evidence'].extend(evidence_items[:5])  # 最多 5 個證據
+    elif section == 'recommendations':
+        # 分割建議項目
+        recommendations = [item.strip() for item in content_text.split('\n') if item.strip()]
+        result['recommendations'].extend(recommendations)
+    elif section == 'technical':
+        result['technical_details']['analysis'] = content_text
+
+def extract_processes(text: str) -> List[str]:
+    """從文本中提取進程名稱"""
+    processes = []
+    
+    # 常見的進程模式
+    patterns = [
+        r'pid[:\s]+(\d+)[,\s]+.*?name[:\s]+([^\s,]+)',
+        r'Process[:\s]+([^\s,]+)',
+        r'應用[:\s]+([^\s,]+)',
+        r'com\.[a-zA-Z0-9._]+',  # Android 包名
+        r'/system/bin/[a-zA-Z0-9_]+'  # 系統進程
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            if isinstance(match, tuple):
+                processes.extend([m for m in match if m and not m.isdigit()])
+            else:
+                processes.append(match)
+    
+    # 去重並返回
+    return list(set(filter(None, processes)))[:10]  # 最多返回 10 個
+
+def assess_severity(analysis: str, log_type: LogType) -> str:
+    """評估問題的嚴重程度"""
+    analysis_lower = analysis.lower()
+    
+    # 嚴重性指標
+    critical_indicators = [
+        'critical', '嚴重', 'fatal', '致命', 'crash', '崩潰',
+        'deadlock', '死鎖', 'system failure', '系統失敗',
+        'data loss', '數據丟失', 'security', '安全'
+    ]
+    
+    high_indicators = [
+        'high', '高', 'major', '主要', 'significant', '顯著',
+        'performance', '性能', 'memory leak', '內存洩漏',
+        'anr', 'not responding', '無響應'
+    ]
+    
+    medium_indicators = [
+        'medium', '中等', 'moderate', '適中', 'warning', '警告',
+        'potential', '潛在', 'may cause', '可能導致'
+    ]
+    
+    # 計算各級別的匹配數
+    critical_count = sum(1 for ind in critical_indicators if ind in analysis_lower)
+    high_count = sum(1 for ind in high_indicators if ind in analysis_lower)
+    medium_count = sum(1 for ind in medium_indicators if ind in analysis_lower)
+    
+    # 根據日誌類型調整
+    if log_type == LogType.TOMBSTONE:
+        # Tombstone 通常更嚴重
+        if critical_count > 0 or high_count > 1:
+            return 'Critical'
+        elif high_count > 0 or medium_count > 1:
+            return 'High'
+        else:
+            return 'Medium'
+    else:  # ANR
+        if critical_count > 1 or (critical_count > 0 and high_count > 0):
+            return 'Critical'
+        elif high_count > 1 or critical_count > 0:
+            return 'High'
+        elif medium_count > 0 or high_count > 0:
+            return 'Medium'
+        else:
+            return 'Low'
+
+def calculate_confidence(result: Dict) -> float:
+    """計算分析結果的置信度"""
+    confidence_score = 0.0
+    
+    # 各部分的權重
+    weights = {
+        'summary': 0.2,
+        'root_cause': 0.3,
+        'evidence': 0.25,
+        'recommendations': 0.15,
+        'severity': 0.1
+    }
+    
+    # 檢查各部分是否存在且有內容
+    if result.get('summary') and len(result['summary']) > 50:
+        confidence_score += weights['summary']
+    
+    if result.get('root_cause') and len(result['root_cause']) > 30:
+        confidence_score += weights['root_cause']
+    
+    if result.get('key_evidence') and len(result['key_evidence']) > 0:
+        evidence_score = min(len(result['key_evidence']) / 5.0, 1.0)
+        confidence_score += weights['evidence'] * evidence_score
+    
+    if result.get('recommendations') and len(result['recommendations']) > 0:
+        rec_score = min(len(result['recommendations']) / 3.0, 1.0)
+        confidence_score += weights['recommendations'] * rec_score
+    
+    if result.get('severity') and result['severity'] != 'Unknown':
+        confidence_score += weights['severity']
+    
+    return round(confidence_score, 2)
+
+async def quick_analysis_strategy(content, file_path, model):
+    """快速分析：30秒內完成，只分析最關鍵的部分"""
+    try:
+        # 提取關鍵部分（最多 50KB）
+        key_sections = extract_critical_sections(content, max_size=50000)
+        
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        
+        # 使用簡潔的提示詞
+        system_prompt = """你是 Android 系統專家。快速分析日誌，只提供最關鍵的發現。
+限制回答在 500 字以內，包含：
+1. 主要問題（1-2句）
+2. 根本原因（1-2句）
+3. 立即可行的解決方案（2-3點）"""
+        
+        message = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            temperature=0,
+            system=system_prompt,
+            messages=[{"role": "user", "content": key_sections}]
+        )
+        
+        return jsonify({
+            'success': True,
+            'analysis': message.content[0].text if message.content else "",
+            'is_quick': True,
+            'analyzed_size': len(key_sections),
+            'original_size': len(content),
+            'analysis_mode': 'quick',
+            'model': model
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+async def comprehensive_analysis_strategy(content, file_path, model, enable_thinking):
+    """深度分析：詳細分析每個部分，提供完整報告"""
+    try:
+        # 創建詳細的分段（每段 100KB）
+        segments = create_intelligent_segments_v2(content, model)
+        
+        if len(segments) == 1:
+            # 小檔案，直接深度分析
+            return await deep_single_analysis(content, model, enable_thinking)
+        
+        # 大檔案，分段深度分析
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        segment_results = []
+        
+        for i, segment in enumerate(segments):
+            try:
+                # 深度分析每個段落
+                prompt = f"""
+這是第 {i+1}/{len(segments)} 段。請進行深入分析：
+1. 識別所有潛在問題和異常
+2. 分析根本原因和影響
+3. 提供詳細的技術解釋
+4. 建議短期和長期解決方案
+5. 標注需要進一步調查的線索
+"""
+                
+                message = client.messages.create(
+                    model=model,
+                    max_tokens=4000,
+                    temperature=0,
+                    system="Android 系統深度分析專家。提供詳盡的技術分析。",
+                    messages=[{"role": "user", "content": prompt + "\n\n" + segment['content'][:100000]}]
+                )
+                
+                segment_results.append({
+                    'segment': i + 1,
+                    'analysis': message.content[0].text if message.content else "",
+                    'success': True
+                })
+                
+            except Exception as e:
+                segment_results.append({
+                    'segment': i + 1,
+                    'error': str(e),
+                    'success': False
+                })
+        
+        # 生成綜合報告
+        synthesis = await synthesize_comprehensive_report(segment_results, model)
+        
+        return {
+            'success': True,
+            'is_segmented': True,
+            'total_segments': len(segments),
+            'segment_results': segment_results,
+            'comprehensive_report': synthesis,
+            'analysis': synthesis  # 兼容前端
+        }
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+async def max_tokens_analysis_strategy(content, file_path, model):
+    """最大化分析：在 token 限制內分析盡可能多的內容"""
+    try:
+        model_config = MODEL_LIMITS[model]
+        max_input = int(model_config['max_tokens'] * 0.85)  # 留 15% 餘量
+        
+        # 智能選擇最重要的內容填滿 token 限制
+        prioritized_content = prioritize_content_smart(content, max_tokens=max_input)
+        
+        client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+        
+        # 使用模型的最大輸出能力
+        message = client.messages.create(
+            model=model,
+            max_tokens=model_config['max_output_tokens'],
+            temperature=0,
+            system="""Android 系統分析專家。在有限的內容中提供最大價值的分析。
+包含：問題診斷、根本原因、影響評估、解決方案、預防措施。""",
+            messages=[{"role": "user", "content": prioritized_content}]
+        )
+        
+        return {
+            'success': True,
+            'analysis': message.content[0].text if message.content else "",
+            'content_coverage': f"{len(prioritized_content)}/{len(content)} 字符",
+            'token_usage': f"約 {estimate_tokens_accurate(prioritized_content)} tokens"
+        }
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+async def auto_analysis_strategy(content, file_path, model, enable_thinking):
+    """智能分析：自動選擇最佳策略"""
+    content_size = len(content)
+    estimated_tokens = estimate_tokens_accurate(content)
+    
+    print(f"Auto analysis: size={content_size}, tokens={estimated_tokens}")
+    
+    # 根據內容特徵自動決定
+    if estimated_tokens < 50000:
+        # 小檔案：直接完整分析
+        return await analyze_single_request(
+            file_path, content, 'auto', model, 
+            False, '', enable_thinking
+        )
+    elif estimated_tokens < 150000:
+        # 中等檔案：智能分段
+        return await smart_segmented_analysis(content, file_path, model, enable_thinking)
+    else:
+        # 大檔案：優化分段策略
+        return await optimized_large_file_analysis(content, file_path, model, enable_thinking)
+
+# 輔助函數
+def extract_critical_sections(content, max_size=50000):
+    """提取日誌中最關鍵的部分"""
+    critical_patterns = [
+        r'FATAL EXCEPTION.*?(?=\n\n|\Z)',
+        r'AndroidRuntime.*?(?=\n\n|\Z)',
+        r'signal \d+.*?(?=\n\n|\Z)',
+        r'Abort message.*?(?=\n\n|\Z)',
+        r'backtrace:.*?(?=\n\n|\Z)',
+        r'"main".*?(?=\n\n|\Z)',  # 主線程
+        r'held by thread.*?(?=\n\n|\Z)',  # 鎖信息
+    ]
+    
+    extracted = []
+    total_size = 0
+    
+    # 先提取標題信息
+    header = content[:1000]
+    extracted.append(header)
+    total_size += len(header)
+    
+    # 提取關鍵部分
+    for pattern in critical_patterns:
+        if total_size >= max_size:
+            break
+            
+        matches = re.finditer(pattern, content, re.DOTALL | re.IGNORECASE)
+        for match in matches:
+            if total_size + len(match.group(0)) > max_size:
+                break
+            extracted.append(match.group(0))
+            total_size += len(match.group(0))
+    
+    return '\n\n=====\n\n'.join(extracted)
+
+def prioritize_content_smart(content, max_tokens):
+    """智能優先級選擇內容"""
+    # 這裡實現內容優先級算法
+    # 簡單實現：保留開頭、結尾和包含關鍵詞的部分
+    max_chars = int(max_tokens * 2.5)
+    
+    if len(content) <= max_chars:
+        return content
+    
+    # 分配字符數
+    header_size = min(10000, max_chars // 4)
+    footer_size = min(5000, max_chars // 8)
+    middle_size = max_chars - header_size - footer_size
+    
+    # 提取部分
+    header = content[:header_size]
+    footer = content[-footer_size:] if footer_size > 0 else ""
+    
+    # 中間部分：查找關鍵內容
+    middle_content = extract_critical_sections(content[header_size:-footer_size], middle_size)
+    
+    return f"{header}\n\n... [內容已優化選擇] ...\n\n{middle_content}\n\n... [內容已優化選擇] ...\n\n{footer}"
+
+async def synthesize_comprehensive_report(segment_results, model):
+    """生成綜合分析報告"""
+    successful_segments = [r for r in segment_results if r.get('success')]
+    
+    if not successful_segments:
+        return "所有段落分析都失敗了。"
+    
+    # 組合所有成功的分析
+    all_analyses = "\n\n=== 段落分析 ===\n\n".join([
+        f"段落 {r['segment']}:\n{r['analysis']}" 
+        for r in successful_segments
+    ])
+    
+    # 可以選擇再次調用 AI 來綜合，或直接返回
+    return f"""
+# 綜合分析報告
+
+## 分析概況
+- 總共分析了 {len(successful_segments)}/{len(segment_results)} 個段落
+- 使用模型：{model}
+
+## 詳細分析結果
+
+{all_analyses}
+
+## 總結
+基於以上分析，請參考各段落的詳細發現和建議。
+"""
+
+async def deep_single_analysis(content, model, enable_thinking):
+    """對單個檔案進行深度分析"""
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    system_prompt = """你是資深的 Android 系統專家，請提供極其詳細的分析報告。
+
+分析格式：
+# 執行摘要
+[2-3段的問題概述]
+
+# 技術分析
+## 1. 問題識別
+[詳細列出所有發現的問題]
+
+## 2. 根本原因分析
+[深入分析每個問題的根源]
+
+## 3. 影響評估
+[評估問題的嚴重性和影響範圍]
+
+## 4. 技術細節
+[堆棧分析、內存狀態、線程狀態等]
+
+# 解決方案
+## 立即措施
+[緊急修復步驟]
+
+## 短期改進
+[1-2週內的改進計劃]
+
+## 長期優化
+[架構級別的改進建議]
+
+# 預防措施
+[如何避免類似問題]
+
+# 附錄
+[其他技術參考信息]
+"""
+    
+    message = client.messages.create(
+        model=model,
+        max_tokens=MODEL_LIMITS[model]['max_output_tokens'],
+        temperature=0,
+        system=system_prompt,
+        messages=[{"role": "user", "content": content[:int(MODEL_LIMITS[model]['max_tokens'] * 2.5 * 0.8)]}]
+    )
+    
+    return {
+        'success': True,
+        'analysis': message.content[0].text if message.content else "",
+        'is_deep_analysis': True
+    }
+
+async def smart_segmented_analysis(content, file_path, model, enable_thinking):
+    """智能分段分析"""
+    # 使用現有的分段分析邏輯
+    return await analyze_in_segments_fast(
+        file_path, content, 'auto', model,
+        False, '', enable_thinking
+    )
+
+async def optimized_large_file_analysis(content, file_path, model, enable_thinking):
+    """優化的大檔案分析"""
+    # 對超大檔案使用特殊策略
+    # 可以實現抽樣分析、關鍵部分提取等
+    return await analyze_in_segments_fast(
+        file_path, content, 'auto', model,
+        False, '', enable_thinking
+    )
