@@ -211,31 +211,22 @@ function toggleAIPanel(e) {
 
 // Analyze current file
 async function analyzeCurrentFile() {
-    const btn = document.getElementById('analyzeBtn');
-    const btnText = document.getElementById('btnText');
-    
-    if (isAnalyzing) return;
-    
-    // 檢查是否有選中的分析模式
-    const selectedCard = document.querySelector('.mode-card.selected');
-    if (!selectedCard) {
-        // 如果沒有選中，默認選擇 auto
-        selectAnalysisMode('auto');
-    }
-    
-    // 使用智能分析
-    return startSmartAnalysis();
+	return startSmartAnalysis();
 }
 
 // 重置分析按鈕狀態
 function resetAnalyzeButton() {
-	const analyzeBtn = document.getElementById('analyzeBtn');
-	if (analyzeBtn) {
-		analyzeBtn.classList.remove('loading');
-		analyzeBtn.disabled = false;
-		analyzeBtn.innerHTML = '<span>🔍</span> 分析本文';
-	}
-	isAnalyzing = false;
+    const btn = document.getElementById('analyzeBtn');
+    const modeConfig = ANALYSIS_MODES[selectedAnalysisMode];
+    
+    if (btn && modeConfig) {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.innerHTML = `<span id="analyzeIcon">${modeConfig.icon}</span> <span id="analyzeText">${modeConfig.buttonText}</span>`;
+        btn.style.background = modeConfig.buttonColor;
+    }
+    
+    isAnalyzing = false;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -3909,22 +3900,21 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function showAnalysisError(errorMessage) {
-	const responseContent = document.getElementById('aiResponseContent');
-	if (!responseContent) return;
-	
-	const errorDiv = document.createElement('div');
-	errorDiv.className = 'ai-error';
-	errorDiv.innerHTML = `
-		<h3>❌ 分析錯誤</h3>
-		<p>${escapeHtml(errorMessage || '發生未知錯誤')}</p>
-		<p style="margin-top: 10px;">
-			<button class="retry-btn" onclick="analyzeCurrentFileImproved()">🔄 重試</button>
-		</p>
-	`;
-	
-	responseContent.appendChild(errorDiv);
-	
-	conversationHistory.push(errorDiv);
+    const responseContent = document.getElementById('aiResponseContent');
+    if (!responseContent) return;
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'ai-error';
+    errorDiv.innerHTML = `
+        <h3>❌ 分析失敗</h3>
+        <p>${escapeHtml(errorMessage || '發生未知錯誤')}</p>
+        <p style="margin-top: 10px;">
+            <button class="retry-btn" onclick="startSmartAnalysis()">🔄 重試</button>
+        </p>
+    `;
+    
+    responseContent.appendChild(errorDiv);
+    conversationHistory.push(errorDiv);
 }
 
 // 創建段落結果顯示
@@ -4289,61 +4279,340 @@ async function startSmartAnalysis() {
     const mode = selectedAnalysisMode;
     const modeConfig = ANALYSIS_MODES[mode];
     
-    console.log('開始智能分析 - 模式:', mode, modeConfig.name);
+    console.log('開始智能分析 - 模式:', mode);
     
-    // 禁用按鈕
+    // 更新按鈕狀態
     btn.disabled = true;
     btn.classList.add('loading');
-    btn.innerHTML = `<div class="ai-spinner"></div> ${modeConfig.icon} ${modeConfig.name}中...`;
+    btn.innerHTML = `<div class="ai-spinner"></div> ${modeConfig.icon} 分析中...`;
     
     responseDiv.classList.add('active');
     
+    // 快速分析模式：跳過檔案大小檢查，直接分析
+    if (mode === 'quick') {
+        // 直接執行快速分析，不檢查檔案大小
+        try {
+            const progressDiv = createQuickAnalysisProgress();
+            responseContent.appendChild(progressDiv);
+            
+            const response = await fetch('/smart-analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file_path: filePath,
+                    content: fileContent,
+                    mode: 'quick',  // 強制快速模式
+                    file_type: filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR',
+                    force_single_analysis: true,  // 強制單次分析
+                    skip_size_check: true  // 跳過大小檢查
+                })
+            });
+            
+            const data = await response.json();
+            progressDiv.remove();
+            
+            if (response.ok && data.success) {
+                const normalizedData = normalizeAnalysisData(data, mode);
+                displaySmartAnalysisResult(normalizedData, modeConfig);
+            } else {
+                throw new Error(data.error || '分析失敗');
+            }
+        } catch (error) {
+            console.error('Quick analysis error:', error);
+            showAnalysisError(error.message);
+        } finally {
+            resetAnalyzeButton();
+        }
+        return;
+    }
+    
+    // 其他模式：先檢查檔案大小
     try {
-        // 統一使用 smart-analyze 端點
+        // 檢查檔案大小（但傳遞模式信息）
+        const sizeCheck = await checkFileSizeWithMode(mode);
+        
+        // 根據模式決定是否顯示分段對話框
+        if (shouldShowSegmentDialog(mode, sizeCheck)) {
+            const proceed = await showSegmentedAnalysisDialog(sizeCheck);
+            if (!proceed) {
+                resetAnalyzeButton();
+                return;
+            }
+        }
+        
+        // 執行分析
         const response = await fetch('/smart-analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 file_path: filePath,
                 content: fileContent,
-                mode: mode,  // 傳遞選中的模式
+                mode: mode,
                 file_type: filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR',
-                enable_thinking: document.getElementById('enableDeepThinking')?.checked || false,
-                include_recommendations: document.getElementById('includeRecommendations')?.checked || true
+                enable_thinking: document.getElementById('enableDeepThinking')?.checked || false
             })
         });
         
         const data = await response.json();
         
         if (response.ok && data.success) {
-            // 顯示結果
-            displaySmartAnalysisResult(data, modeConfig);
+            const normalizedData = normalizeAnalysisData(data, mode);
+            displaySmartAnalysisResult(normalizedData, modeConfig);
         } else {
             throw new Error(data.error || '分析失敗');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'ai-error';
-        errorDiv.innerHTML = `
-            <h3>❌ 分析失敗</h3>
-            <p>${escapeHtml(error.message)}</p>
-            <p style="margin-top: 10px;">
-                <button class="retry-btn" onclick="startSmartAnalysis()">🔄 重試</button>
-            </p>
-        `;
-        responseContent.appendChild(errorDiv);
-        conversationHistory.push(errorDiv);
-        
+        showAnalysisError(error.message);
     } finally {
-        isAnalyzing = false;
-        btn.disabled = false;
-        btn.classList.remove('loading');
-        // 恢復按鈕原始狀態
-        btn.innerHTML = `<span id="analyzeIcon">${modeConfig.icon}</span> <span id="analyzeText">${modeConfig.buttonText}</span>`;
+        resetAnalyzeButton();
     }
+}
+
+async function checkFileSizeWithMode(mode) {
+    try {
+        const response = await fetch('/check-file-size-for-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                content: fileContent,
+                mode: mode  // 傳遞模式信息
+            })
+        });
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Size check error:', error);
+        return { strategy: 'single', suggested_segments: 1 };
+    }
+}
+
+function createQuickAnalysisProgress() {
+    const div = document.createElement('div');
+    div.className = 'analysis-progress quick-mode';
+    div.innerHTML = `
+        <h4>⚡ 正在執行快速分析...</h4>
+        <div class="ai-spinner"></div>
+        <div class="progress-stats">
+            <span class="mode-indicator" style="color: #ffd700;">快速模式</span>
+            <span>預計 30 秒內完成</span>
+        </div>
+    `;
+    return div;
+}
+
+function createAnalysisProgress(mode) {
+    const div = document.createElement('div');
+    div.className = 'analysis-progress';
+    
+    const modeMessages = {
+        'quick': '正在執行快速分析，預計 30 秒內完成...',
+        'comprehensive': '正在執行深度分析，可能需要 2-5 分鐘...',
+        'max_tokens': '正在最大化分析內容...',
+        'auto': '正在智能分析檔案...'
+    };
+    
+    div.innerHTML = `
+        <div class="ai-loading">
+            <div class="ai-spinner"></div>
+            <div>${modeMessages[mode] || '正在分析...'}</div>
+        </div>
+    `;
+    
+    return div;
+}
+
+function createErrorDisplay(message) {
+    const div = document.createElement('div');
+    div.className = 'ai-error';
+    div.innerHTML = `
+        <h3>❌ 分析失敗</h3>
+        <p>${escapeHtml(message)}</p>
+        <p style="margin-top: 10px;">
+            <button class="retry-btn" onclick="startSmartAnalysis()">🔄 重試</button>
+        </p>
+    `;
+    return div;
+}
+
+function createQuickAnalysisDisplay(data, modeConfig) {
+    return `
+        <div class="quick-analysis-content">
+            <div class="result-header">
+                <div class="mode-indicator">
+                    <span class="mode-icon">${modeConfig.icon}</span>
+                    <span class="mode-name">${modeConfig.name}</span>
+                    <span class="mode-badge">${modeConfig.badge}</span>
+                </div>
+                <div class="result-meta">
+                    <span>模型：${getModelDisplayName(data.model)}</span>
+                    <span>耗時：${data.elapsed_time}</span>
+                </div>
+            </div>
+            <div class="analysis-summary">
+                ${formatAnalysisContent(data.analysis)}
+            </div>
+            ${data.analyzed_size ? `
+                <div class="analysis-info">
+                    分析了 ${(data.analyzed_size/1024).toFixed(1)}KB / ${(data.original_size/1024).toFixed(1)}KB
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function createSegmentedAnalysisDisplay(data, modeConfig) {
+    let html = `
+        <div class="segmented-analysis-content">
+            <div class="result-header">
+                <div class="mode-indicator">
+                    <span class="mode-icon">${modeConfig.icon}</span>
+                    <span class="mode-name">${modeConfig.name}</span>
+                    <span class="mode-badge">${modeConfig.badge}</span>
+                </div>
+                <div class="result-meta">
+                    <span>模型：${getModelDisplayName(data.model)}</span>
+                    <span>分 ${data.total_segments} 段分析</span>
+                </div>
+            </div>
+    `;
+    
+    // 顯示綜合分析
+    html += `
+        <div class="final-analysis">
+            <h3>📊 綜合分析結果</h3>
+            ${formatAnalysisContent(data.analysis)}
+        </div>
+    `;
+    
+    // 可選：顯示各段落詳情
+    if (data.segments && data.segments.length > 0) {
+        html += `
+            <details class="segments-detail">
+                <summary>查看各段落分析詳情</summary>
+                <div class="segments-list">
+                    ${data.segments.map(seg => `
+                        <div class="segment-item">
+                            <h4>段落 ${seg.segment_number || seg.segment}</h4>
+                            <div>${seg.analysis || '無內容'}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </details>
+        `;
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function createStandardAnalysisDisplay(data, modeConfig) {
+    return `
+        <div class="standard-analysis-content">
+            <div class="result-header">
+                <div class="mode-indicator">
+                    <span class="mode-icon">${modeConfig.icon}</span>
+                    <span class="mode-name">${modeConfig.name}</span>
+                    <span class="mode-badge">${modeConfig.badge}</span>
+                </div>
+                <div class="result-meta">
+                    <span>模型：${getModelDisplayName(data.model)}</span>
+                    <span>耗時：${data.elapsed_time}</span>
+                </div>
+            </div>
+            <div class="ai-response-item">
+                <div class="ai-icon">🤖</div>
+                <div class="ai-message">
+                    ${data.truncated ? '<div class="ai-warning">⚠️ 由於檔案過大，只分析了部分內容</div>' : ''}
+                    <div class="ai-analysis-content">
+                        ${formatAnalysisContent(data.analysis)}
+                    </div>
+                    ${data.thinking ? `
+                        <details class="ai-thinking-section">
+                            <summary>🧠 AI 思考過程</summary>
+                            <div class="thinking-content">
+                                <pre>${escapeHtml(data.thinking)}</pre>
+                            </div>
+                        </details>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function formatStructuredResult(result) {
+    // 格式化結構化的分析結果
+    let formatted = '';
+    
+    if (result.summary) {
+        formatted += `<h3>📋 問題摘要</h3><p>${result.summary}</p>`;
+    }
+    
+    if (result.root_cause) {
+        formatted += `<h3>🎯 根本原因</h3><p>${result.root_cause}</p>`;
+    }
+    
+    if (result.affected_processes && result.affected_processes.length > 0) {
+        formatted += `<h3>📱 受影響的進程</h3><ul>`;
+        result.affected_processes.forEach(proc => {
+            formatted += `<li>${escapeHtml(proc)}</li>`;
+        });
+        formatted += '</ul>';
+    }
+    
+    if (result.recommendations && result.recommendations.length > 0) {
+        formatted += `<h3>💡 建議解決方案</h3><ul>`;
+        result.recommendations.forEach(rec => {
+            formatted += `<li>${escapeHtml(rec)}</li>`;
+        });
+        formatted += '</ul>';
+    }
+    
+    return formatted;
+}
+
+function normalizeAnalysisData(data, mode) {
+    // 確保數據格式一致
+    const normalized = {
+        success: true,
+        analysis_mode: mode,
+        model: data.model || selectedModel,
+        elapsed_time: data.elapsed_time || 'N/A',
+        is_segmented: data.is_segmented || false,
+        truncated: data.truncated || false
+    };
+    
+    // 根據不同的返回格式提取分析內容
+    if (data.analysis) {
+        normalized.analysis = data.analysis;
+    } else if (data.result) {
+        // 處理結構化結果
+        if (typeof data.result === 'object') {
+            normalized.analysis = formatStructuredResult(data.result);
+            normalized.structured_result = data.result;
+        } else {
+            normalized.analysis = data.result;
+        }
+    } else if (data.final_report) {
+        normalized.analysis = data.final_report;
+    } else {
+        normalized.analysis = '無分析結果';
+    }
+    
+    // 處理分段結果
+    if (data.is_segmented) {
+        normalized.segments = data.segments || data.segment_results || [];
+        normalized.total_segments = data.total_segments || normalized.segments.length;
+    }
+    
+    // 額外的元數據
+    if (data.analyzed_size) normalized.analyzed_size = data.analyzed_size;
+    if (data.original_size) normalized.original_size = data.original_size;
+    if (data.thinking) normalized.thinking = data.thinking;
+    
+    return normalized;
 }
 
 function selectAnalysisMode(mode) {
@@ -4435,8 +4704,6 @@ function showModeSelectionToast(mode) {
 
 // 顯示智能分析結果
 function displaySmartAnalysisResult(data, modeConfig) {
-    console.log('Displaying result:', data);  // 調試日誌
-    
     const responseContent = document.getElementById('aiResponseContent');
     
     if (!responseContent) {
@@ -4448,61 +4715,21 @@ function displaySmartAnalysisResult(data, modeConfig) {
     const conversationItem = document.createElement('div');
     conversationItem.className = 'conversation-item smart-analysis-result';
     
-    // 根據不同模式構建不同的顯示格式
     let resultHTML = `
         <div class="conversation-header">
             <span class="conversation-icon">${modeConfig.icon}</span>
             <span class="conversation-type">${modeConfig.name}</span>
             <span class="conversation-time">${new Date().toLocaleString('zh-TW')}</span>
         </div>
-        <div class="result-header">
-            <div class="mode-indicator">
-                <span class="mode-icon">${modeConfig.icon}</span>
-                <span class="mode-name">${modeConfig.name}</span>
-                <span class="mode-badge ${modeConfig.badgeClass}">${modeConfig.badge}</span>
-            </div>
-            <div class="result-meta">
-                <span>模型：${getModelDisplayName(data.model || selectedModel)}</span>
-                <span>耗時：${data.elapsed_time || 'N/A'}</span>
-            </div>
-        </div>
     `;
     
-    // 根據不同的分析模式顯示不同的內容
-    if (data.analysis_mode === 'quick' || data.is_quick) {
-        // 快速分析：簡潔顯示
-        resultHTML += `
-            <div class="quick-analysis-content">
-                <div class="analysis-summary">
-                    ${formatQuickAnalysis(data.analysis || data.result)}
-                </div>
-                ${data.analyzed_size ? `
-                    <div class="analysis-info">
-                        分析了 ${(data.analyzed_size/1024).toFixed(1)}KB / ${(data.original_size/1024).toFixed(1)}KB
-                    </div>
-                ` : ''}
-            </div>
-        `;
+    // 根據模式顯示不同的內容
+    if (data.analysis_mode === 'quick') {
+        resultHTML += createQuickAnalysisDisplay(data, modeConfig);
     } else if (data.is_segmented) {
-        // 分段分析：顯示段落結果
-        resultHTML += displaySegmentedResults(data);
+        resultHTML += createSegmentedAnalysisDisplay(data, modeConfig);
     } else {
-        // 標準分析：完整顯示
-        resultHTML += `
-            <div class="ai-response-item">
-                <div class="ai-icon">🤖</div>
-                <div class="ai-message">
-                    ${data.truncated ? '<div class="ai-warning">⚠️ 由於檔案過大，只分析了部分內容</div>' : ''}
-                    <div class="ai-analysis-content">
-                        ${formatAnalysisContent(data.analysis || data.result || data.comprehensive_report)}
-                    </div>
-                    <div class="ai-footer">
-                        <span>由 ${getModelDisplayName(data.model)} 提供分析</span>
-                        ${data.thinking ? '<span style="margin-left: 10px;">• 包含深度思考</span>' : ''}
-                    </div>
-                </div>
-            </div>
-        `;
+        resultHTML += createStandardAnalysisDisplay(data, modeConfig);
     }
     
     conversationItem.innerHTML = resultHTML;
@@ -4590,17 +4817,15 @@ function shouldShowSegmentDialog(mode, sizeInfo) {
     // 快速分析：永遠不顯示
     if (mode === 'quick') return false;
     
-    // 最大分析：只在超過單次限制時顯示
+    // 其他模式的邏輯保持不變
     if (mode === 'max_tokens') {
         return sizeInfo.estimated_tokens > sizeInfo.max_tokens_per_request;
     }
     
-    // 深度分析：建議分段數 > 2 時顯示
     if (mode === 'comprehensive') {
         return sizeInfo.suggested_segments > 2;
     }
     
-    // 智能分析：根據 API 返回的策略決定
     if (mode === 'auto') {
         return sizeInfo.strategy === 'segmented' && sizeInfo.suggested_segments > 3;
     }
@@ -4712,150 +4937,6 @@ function getAnalysisModeDescription(sizeInfo) {
     return `檔案將分成 ${sizeInfo.suggested_segments} 段進行分析。`;
 }
 
-// 強化版修復代碼
-(function enhancedFix() {
-    console.log('=== 執行強化版修復 ===');
-    
-    // 1. 添加更明顯的選中樣式
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .mode-card.selected {
-            border: 3px solid #667eea !important;
-            background: #3a3a4a !important;
-            box-shadow: 0 0 15px rgba(102, 126, 234, 0.8) !important;
-            transform: scale(1.02) !important;
-            position: relative;
-        }
-        .mode-card.selected::after {
-            content: '✓ 已選擇';
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #667eea;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: bold;
-        }
-        .mode-card {
-            transition: all 0.3s ease !important;
-        }
-        .mode-card:hover {
-            transform: translateY(-3px) !important;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // 2. 重新綁定所有事件
-    const modeCards = document.querySelectorAll('.mode-card');
-    
-    modeCards.forEach(card => {
-        const mode = card.dataset.mode;
-        
-        // 移除所有舊事件
-        const newCard = card.cloneNode(true);
-        card.parentNode.replaceChild(newCard, card);
-        
-        // 添加新事件
-        newCard.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            console.log(`✅ 點擊了 ${mode} 模式`);
-            
-            // 移除所有選中狀態
-            document.querySelectorAll('.mode-card').forEach(c => {
-                c.classList.remove('selected');
-                c.style.transform = '';
-            });
-            
-            // 添加選中狀態
-            this.classList.add('selected');
-            
-            // 更新全局變量
-            window.selectedAnalysisMode = mode;
-            
-            // 更新按鈕 - 包含顏色變化
-            const btn = document.getElementById('analyzeBtn');
-            const icon = document.getElementById('analyzeIcon');
-            const text = document.getElementById('analyzeText');
-            
-            const modeInfo = {
-                'auto': { 
-                    icon: '🤖', 
-                    text: '開始智能分析', 
-                    color: 'linear-gradient(135deg, #667eea, #764ba2)'
-                },
-                'quick': { 
-                    icon: '⚡', 
-                    text: '快速分析 (30秒)', 
-                    color: 'linear-gradient(135deg, #ffd700, #ffed4b)'
-                },
-                'comprehensive': { 
-                    icon: '🔍', 
-                    text: '深度分析 (2-5分鐘)', 
-                    color: 'linear-gradient(135deg, #4ec9b0, #45d3b8)'
-                },
-                'max_tokens': { 
-                    icon: '📊', 
-                    text: '最大化分析', 
-                    color: 'linear-gradient(135deg, #ff6b6b, #ff8787)'
-                }
-            };
-            
-            const info = modeInfo[mode];
-            if (icon) icon.textContent = info.icon;
-            if (text) text.textContent = info.text;
-            if (btn) {
-                btn.style.background = info.color;
-                btn.style.transform = 'scale(1.05)';
-                setTimeout(() => {
-                    btn.style.transform = 'scale(1)';
-                }, 200);
-            }
-            
-            // 添加點擊動畫
-            this.style.animation = 'none';
-            setTimeout(() => {
-                this.style.animation = 'pulse 0.5s ease';
-            }, 10);
-            
-            // 顯示選擇提示
-            showSelectionToast(mode);
-        });
-    });
-    
-    // 3. 設置默認選中（如果沒有）
-    if (!document.querySelector('.mode-card.selected')) {
-        const autoCard = document.querySelector('.mode-card[data-mode="auto"]');
-        if (autoCard) {
-            autoCard.click();
-        }
-    }
-    
-    // 4. 添加脈動動畫
-    if (!document.querySelector('#enhanced-animations')) {
-        const animStyle = document.createElement('style');
-        animStyle.id = 'enhanced-animations';
-        animStyle.innerHTML = `
-            @keyframes pulse {
-                0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.05); opacity: 0.8; }
-                100% { transform: scale(1); opacity: 1; }
-            }
-            
-            .analyze-current-btn {
-                transition: all 0.3s ease !important;
-            }
-        `;
-        document.head.appendChild(animStyle);
-    }
-    
-    console.log('=== 強化修復完成 ===');
-})();
-
 // 顯示選擇提示的函數
 function showSelectionToast(mode) {
     // 移除舊的提示
@@ -4908,3 +4989,43 @@ toastStyle.innerHTML = `
     }
 `;
 document.head.appendChild(toastStyle);
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化分析模式
+    initializeAnalysisModes();
+
+	// 確保分析按鈕綁定正確的函數
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    if (analyzeBtn) {
+        // 移除可能的舊事件
+        analyzeBtn.onclick = null;
+        // 綁定新事件
+        analyzeBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            startSmartAnalysis();
+        });
+    }
+});
+
+function initializeAnalysisModes() {
+    // 設置默認模式
+    selectedAnalysisMode = 'auto';
+    
+    // 綁定模式卡片點擊事件
+    document.querySelectorAll('.mode-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const mode = this.dataset.mode;
+            selectAnalysisMode(mode);
+        });
+    });
+    
+    // 設置初始選中狀態
+    const autoCard = document.querySelector('.mode-card[data-mode="auto"]');
+    if (autoCard) {
+        autoCard.classList.add('selected');
+        updateAnalyzeButton('auto');
+    }
+}

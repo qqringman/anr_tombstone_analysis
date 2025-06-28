@@ -2972,3 +2972,197 @@ a.btn {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* 智能分析結果樣式 */
+.smart-analysis-result {
+    margin: 20px 0;
+    animation: fadeInUp 0.5s ease;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #2d2d30;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.mode-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mode-icon {
+    font-size: 24px;
+}
+
+.mode-name {
+    font-weight: 600;
+    color: #4ec9b0;
+}
+
+.mode-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    background: #3e3e42;
+    color: #d4d4d4;
+}
+
+.mode-badge.recommended {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+}
+
+.result-meta {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: #969696;
+}
+
+/* 快速分析內容 */
+.quick-analysis-content {
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.analysis-summary {
+    color: #d4d4d4;
+    line-height: 1.8;
+}
+
+.analysis-info {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #3e3e42;
+    font-size: 13px;
+    color: #969696;
+}
+
+/* 分段分析內容 */
+.segmented-analysis-content {
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.final-analysis {
+    margin-bottom: 20px;
+}
+
+.final-analysis h3 {
+    color: #4ec9b0;
+    margin-bottom: 15px;
+}
+
+.segments-detail {
+    margin-top: 20px;
+    background: #2d2d30;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.segments-detail summary {
+    cursor: pointer;
+    color: #d4d4d4;
+    font-weight: 600;
+    padding: 5px;
+    outline: none;
+}
+
+.segments-detail summary:hover {
+    color: #4ec9b0;
+}
+
+.segments-list {
+    margin-top: 15px;
+}
+
+.segment-item {
+    background: #1e1e1e;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.segment-item h4 {
+    color: #4ec9b0;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+/* 標準分析內容 */
+.standard-analysis-content {
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+/* AI 思考過程 */
+.ai-thinking-section {
+    background: #2d2d30;
+    border-radius: 6px;
+    padding: 10px;
+    margin: 15px 0;
+}
+
+.ai-thinking-section summary {
+    cursor: pointer;
+    color: #4ec9b0;
+    font-weight: 600;
+    padding: 5px;
+    outline: none;
+}
+
+.ai-thinking-section[open] summary {
+    margin-bottom: 10px;
+}
+
+.thinking-content pre {
+    white-space: pre-wrap;
+    color: #969696;
+    font-size: 13px;
+    margin: 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* 分析進度樣式 */
+.analysis-progress {
+    text-align: center;
+    padding: 40px;
+}
+
+/* 錯誤提示樣式 */
+.retry-btn {
+    background: #0e639c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.retry-btn:hover {
+    background: #1177bb;
+    transform: translateY(-1px);
+}
+
+/* 動畫效果 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
