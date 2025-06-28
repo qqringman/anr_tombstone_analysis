@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ file_path }} - Android Log Viewer</title>
+	<link href="{{ url_for('static', filename='css/view_file.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <div class="file-info">
+                <h1 id="filename"></h1>
+                <p id="filepath"></p>
+            </div>
+        </div>
+        <div class="header-buttons">
+            <button class="btn" onclick="toggleHelp()">⌨️ 快捷鍵說明 (F1)</button>
+            <button class="btn btn-ai" id="aiToggleBtn" onclick="toggleAIPanel()">🤖 AI 助手</button>
+            <button class="btn btn-danger" onclick="clearAllHighlights()">🗑️ 清除高亮</button>
+            <button class="btn btn-success" onclick="downloadAsHTML()">💾 匯出 HTML</button>
+			<a href="/view-file?path={{ escaped_file_path.replace('"', '') }}&download=true" class="btn">📥 下載原始檔</a>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="toolbar">
+                <div class="search-container">
+                    <input type="text" class="search-box" id="searchBox" placeholder="搜尋... (Ctrl+F)">
+                    <label class="regex-toggle">
+                        <input type="checkbox" id="regexToggle">
+                        Regex
+                    </label>           
+                    <button class="btn" onclick="findPrevious()" id="prevSearchBtn" style="display: none;">◀ 上一個</button>
+                    <button class="btn" onclick="findNext()" id="nextSearchBtn" style="display: none;">下一個 ▶</button>
+                </div>
+                <div class="search-info" id="searchInfo"></div>
+                <span class="grep-indicator" id="grepIndicator">⚡ Grep 加速搜尋</span>
+                <div class="bookmark-info" id="bookmarkInfo">F2: 標記行 | F3: 下一個書籤</div>
+            </div>
+            
+            <div class="keywords-bar" id="keywordsBar">
+                <div class="keyword-list" id="keywordList">
+                    <span style="color: #969696; font-size: 12px; margin-right: 10px;">高亮關鍵字：</span>
+                </div>
+            </div>
+            
+            <div class="content-wrapper">
+                <div class="line-numbers" id="lineNumbers"></div>
+                <div class="content-area" id="contentArea">
+                    <pre id="content"></pre>
+                </div>
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-left">
+                    <span id="lineInfo">行 1, 列 1</span>
+                    <span id="selectionInfo"></span>
+                </div>
+                <div class="status-right">
+                    <span id="encodingInfo">UTF-8</span>
+                    <span id="fileSizeInfo"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="resize-handle" id="resizeHandle"></div>
+        
+        <!-- Claude 風格的 AI 面板結構 -->
+        <div class="right-panel" id="rightPanel">
+            <!-- AI 面板標題 -->
+            <div class="ai-panel-header">
+                <h2><span>🤖</span> AI 助手</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <!-- 新增全屏按鈕 -->
+                    <button class="fullscreen-btn" onclick="toggleAIFullscreen()" title="全屏模式">
+                        <span id="fullscreenIcon">⛶</span>
+                    </button>                
+                    <!-- 快速問題下拉選單 -->
+                    <div class="quick-questions-dropdown">
+                        <button class="quick-questions-toggle" onclick="toggleQuickQuestions()" title="快速問題">
+                            💡
+                        </button>
+                        <div class="quick-questions-menu" id="quickQuestionsMenu">
+                            <div class="quick-questions-header">快速問題</div>
+                            <button class="quick-question-item" onclick="useQuickQuestion('這個崩潰的根本原因是什麼？請詳細分析堆棧追蹤。')">
+                                🔍 分析崩潰原因
+                            </button>
+                            <button class="quick-question-item" onclick="useQuickQuestion('請列出所有涉及的進程和線程，並說明它們的狀態。')">
+                                📋 列出進程狀態
+                            </button>
+                            <button class="quick-question-item" onclick="useQuickQuestion('這個問題是否與記憶體相關？如果是，請解釋詳情。')">
+                                💾 檢查記憶體問題
+                            </button>
+                            <button class="quick-question-item" onclick="useQuickQuestion('請提供修復這個問題的具體步驟和程式碼建議。')">
+                                🛠️ 提供修復建議
+                            </button>
+                            <button class="quick-question-item" onclick="useQuickQuestion('這個崩潰發生的時間點和頻率如何？是否有模式？')">
+                                ⏰ 分析發生模式
+                            </button>
+                        </div>
+                    </div>
+                    <button class="export-chat-btn" onclick="exportAIChat()" title="匯出對話">
+                        📥
+                    </button>
+                    <button class="info-btn" onclick="toggleAIInfo()" title="使用限制">
+                        ℹ️
+                    </button>
+                    <button class="clear-conversation-btn" onclick="clearConversationHistory()" title="清空對話記錄">
+                        🗑️
+                    </button>
+                    <button class="close-ai-panel" onclick="toggleAIPanel()">×</button>
+                </div>
+            </div>
+            
+            <!-- AI 對話區（可調整大小） -->
+            <div class="ai-chat-area" id="aiChatArea">
+                <!-- 分析本文按鈕 -->
+                <div class="analyze-file-section">
+                    <button class="analyze-current-btn" id="analyzeBtn" onclick="analyzeCurrentFile()">
+                        <span>🔍</span> 分析本文件
+                    </button>
+                </div>
+                
+                <!-- AI Response -->
+                <div class="ai-response" id="aiResponse">
+                    <div class="ai-response-content" id="aiResponseContent">
+                        <!-- 分析結果將顯示在這裡 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 可拖曳的分隔線 -->
+            <div class="resize-divider" id="aiResizeDivider">
+                <div class="resize-handle-line"></div>
+            </div>
+            
+            <!-- 底部輸入區（可調整大小） -->
+            <div class="ai-input-area" id="aiInputArea">
+                <div class="custom-question-wrapper">
+                    <!-- Token 使用量顯示（移到上方） -->
+                    <div id="realtimeTokenCount" class="token-usage-top"></div>
+                    
+                    <!-- 輸入框容器 -->
+                    <div class="question-input-container">
+                        <textarea class="question-input" id="customQuestion" 
+                                  placeholder="詢問關於這個檔案的任何問題..."></textarea>
+                        
+                        <!-- 控制按鈕區（保持在底部） -->
+                        <div class="input-inline-controls">
+                            <!-- 模型選擇器 -->
+                            <div class="model-selector-inline">
+                                <button class="model-select-inline-btn" id="modelSelectInlineBtn" onclick="toggleModelPopup()">
+                                    <span id="selectedModelNameInline">Claude 3.5 Sonnet</span>
+                                    <span class="dropdown-arrow">▼</span>
+                                </button>
+								<!-- 模型選擇彈出卡片 -->
+								<div class="model-popup" id="modelPopup">
+									<div class="model-popup-grid">
+										<div class="model-card selected" data-model="claude-3-5-sonnet-20241022" onclick="selectModel(this)">
+											<div class="model-card-name">Claude 3.5 Sonnet</div>
+											<div class="model-card-desc">最新最強，推薦使用</div>
+										</div>
+										<div class="model-card" data-model="claude-3-5-haiku-20241022" onclick="selectModel(this)">
+											<div class="model-card-name">Claude 3.5 Haiku</div>
+											<div class="model-card-desc">快速回應，輕量級</div>
+										</div>
+										<div class="model-card" data-model="claude-3-opus-20240229" onclick="selectModel(this)">
+											<div class="model-card-name">Claude 3 Opus</div>
+											<div class="model-card-desc">功能強大，深度分析</div>
+										</div>
+										<div class="model-card" data-model="claude-3-haiku-20240307" onclick="selectModel(this)">
+											<div class="model-card-name">Claude 3 Haiku</div>
+											<div class="model-card-desc">經濟實惠，基本分析</div>
+										</div>
+									</div>
+								</div>								
+                            </div>
+                            <!-- 發送按鈕 -->
+                            <button class="send-btn-inline" id="askBtnInline" onclick="askCustomQuestion()" 
+                                    disabled title="輸入訊息後發送">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 2L11 13"></path>
+                                    <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 匯出選項彈出視窗 -->
+        <div class="export-modal" id="exportModal" style="display: none;">
+            <div class="export-modal-content">
+                <div class="export-modal-header">
+                    <h4>📥 匯出 AI 對話</h4>
+                    <button class="modal-close-btn" onclick="closeExportModal()">×</button>
+                </div>
+                <div class="export-modal-body">
+                    <p>選擇匯出格式：</p>
+                    <div class="export-options">
+                        <button class="export-option-btn" onclick="exportChat('markdown')">
+                            <span class="export-icon">📝</span>
+                            <span class="export-text">
+                                <strong>Markdown</strong>
+                                <small>適合在文件編輯器中使用</small>
+                            </span>
+                        </button>
+                        <button class="export-option-btn" onclick="exportChat('html')">
+                            <span class="export-icon">🌐</span>
+                            <span class="export-text">
+                                <strong>HTML</strong>
+                                <small>完整格式，可在瀏覽器中查看</small>
+                            </span>
+                        </button>
+                        <button class="export-option-btn" onclick="exportChat('text')">
+                            <span class="export-icon">📄</span>
+                            <span class="export-text">
+                                <strong>純文字</strong>
+                                <small>最簡單的格式</small>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="highlightKeyword(1)">
+            <div class="color-box" style="background-color: rgba(255, 235, 59, 0.5);"></div>
+            <span>高亮 1 (黃色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightKeyword(2)">
+            <div class="color-box" style="background-color: rgba(76, 175, 80, 0.5);"></div>
+            <span>高亮 2 (綠色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightKeyword(3)">
+            <div class="color-box" style="background-color: rgba(33, 150, 243, 0.5);"></div>
+            <span>高亮 3 (藍色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightKeyword(4)">
+            <div class="color-box" style="background-color: rgba(255, 152, 0, 0.5);"></div>
+            <span>高亮 4 (橘色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightKeyword(5)">
+            <div class="color-box" style="background-color: rgba(233, 30, 99, 0.5);"></div>
+            <span>高亮 5 (粉紅)</span>
+        </div>
+        <div class="separator"></div>
+        <div class="context-menu-item" onclick="removeHighlight()">
+            <span>移除此高亮</span>
+        </div>
+        <div class="context-menu-item" onclick="clearAllHighlights()">
+            <span>清除所有高亮</span>
+        </div>
+    </div>
+    
+    <div class="shortcuts-help" id="shortcutsHelp">
+        <button class="close-btn" onclick="toggleHelp()">×</button>
+        <h3>快捷鍵說明</h3>
+        <table>
+            <tr><td>F1</td><td>顯示/隱藏此說明</td></tr>
+            <tr><td>F2</td><td>切換滑鼠所在行的書籤</td></tr>
+            <tr><td>F3</td><td>跳到下一個書籤</td></tr>
+            <tr><td>Shift+F3</td><td>跳到上一個書籤</td></tr>
+            <tr><td>Ctrl+F</td><td>搜尋</td></tr>
+            <tr><td>Ctrl+G</td><td>跳到指定行</td></tr>
+            <tr><td>Ctrl+A</td><td>全選</td></tr>
+            <tr><td>Ctrl+C</td><td>複製</td></tr>
+            <tr><td>Esc</td><td>關閉搜尋/清除選取</td></tr>
+            <tr><td>滑鼠右鍵</td><td>高亮選取文字</td></tr>
+        </table>
+    </div>
+	<script>
+		window.escaped_content = {{ escaped_content | safe }};
+		window.escaped_filename = {{ escaped_filename | safe }};
+		window.escaped_file_path = {{ escaped_file_path | safe }};
+	</script>
+    <script src="{{ url_for('static', filename='js/view_file.js') }}"></script>
+</body>
+</html>
