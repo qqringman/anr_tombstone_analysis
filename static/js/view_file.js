@@ -82,43 +82,51 @@ const ANALYSIS_MODES = {
 let selectedAnalysisMode = 'auto';
 
 function toggleAIFullscreen() {
-	const rightPanel = document.getElementById('rightPanel');
-	const fullscreenIcon = document.getElementById('fullscreenIcon');
-	const mainContainer = document.querySelector('.main-container');
-	const modals = document.querySelectorAll('.ai-info-modal, .export-modal, .segmented-analysis-dialog');
+    const rightPanel = document.getElementById('rightPanel');
+    const fullscreenIcon = document.getElementById('fullscreenIcon');
+    const mainContainer = document.querySelector('.main-container');
+    // 添加 modelPopup 到要移動的彈窗列表
+    const modals = document.querySelectorAll('.ai-info-modal, .export-modal, .segmented-analysis-dialog, #modelPopup');
 
-	isAIFullscreen = !isAIFullscreen;
+    isAIFullscreen = !isAIFullscreen;
 
-	if (isAIFullscreen) {
-		rightPanel.classList.add('fullscreen-mode');
-		mainContainer.classList.add('ai-fullscreen');
-		fullscreenIcon.textContent = '⛶';
+    if (isAIFullscreen) {
+        rightPanel.classList.add('fullscreen-mode');
+        mainContainer.classList.add('ai-fullscreen');
+        fullscreenIcon.textContent = '⛶';
 
-		// 將彈窗掛入 rightPanel
-		modals.forEach(modal => rightPanel.appendChild(modal));
+        // 將彈窗掛入 rightPanel（包括 modelPopup）
+        modals.forEach(modal => {
+            if (modal) rightPanel.appendChild(modal);
+        });
 
-		// 使用原生全螢幕 API
-		if (rightPanel.requestFullscreen) {
-			rightPanel.requestFullscreen();
-		} else if (rightPanel.webkitRequestFullscreen) {
-			rightPanel.webkitRequestFullscreen();
-		} else if (rightPanel.msRequestFullscreen) {
-			rightPanel.msRequestFullscreen();
-		}
-	} else {
-		rightPanel.classList.remove('fullscreen-mode');
-		mainContainer.classList.remove('ai-fullscreen');
-		fullscreenIcon.textContent = '⛶';
+        // 使用原生全螢幕 API
+        if (rightPanel.requestFullscreen) {
+            rightPanel.requestFullscreen();
+        } else if (rightPanel.webkitRequestFullscreen) {
+            rightPanel.webkitRequestFullscreen();
+        } else if (rightPanel.msRequestFullscreen) {
+            rightPanel.msRequestFullscreen();
+        }
+    } else {
+        rightPanel.classList.remove('fullscreen-mode');
+        mainContainer.classList.remove('ai-fullscreen');
+        fullscreenIcon.textContent = '⛶';
 
-		// 退出原生全螢幕
-		if (document.exitFullscreen) {
-			document.exitFullscreen();
-		} else if (document.webkitExitFullscreen) {
-			document.webkitExitFullscreen();
-		} else if (document.msExitFullscreen) {
-			document.msExitFullscreen();
-		}
-	}
+        // 將彈窗移回 body
+        modals.forEach(modal => {
+            if (modal) document.body.appendChild(modal);
+        });
+
+        // 退出原生全螢幕
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
 }
 
 // 監聽 ESC 鍵退出全屏
@@ -209,11 +217,6 @@ function toggleAIPanel(e) {
 	}
 }
 
-// Analyze current file
-async function analyzeCurrentFile() {
-	return startSmartAnalysis();
-}
-
 // 重置分析按鈕狀態
 function resetAnalyzeButton() {
     const btn = document.getElementById('analyzeBtn');
@@ -293,27 +296,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 控制 AI 使用限制彈出視窗
 function toggleAIInfo() {
-	const modal = document.getElementById('aiInfoModal');
-	if (modal) {
-		if (modal.style.display === 'none' || !modal.style.display) {
-			modal.style.display = 'flex';
-			// 添加點擊外部關閉的功能
-			modal.addEventListener('click', handleModalOutsideClick);
-		} else {
-			modal.style.display = 'none';
-			modal.removeEventListener('click', handleModalOutsideClick);
-		}
-	}
-}
-
-// 點擊彈出視窗外部關閉
-function handleModalOutsideClick(e) {
-	const modal = document.getElementById('aiInfoModal');
-	const modalContent = modal.querySelector('.ai-info-modal-content');
-	
-	if (e.target === modal && !modalContent.contains(e.target)) {
-		toggleAIInfo();
-	}
+    const existingModal = document.getElementById('aiInfoModal');
+    if (existingModal && existingModal.style.display === 'flex') {
+        existingModal.style.display = 'none';
+        return;
+    }
+    
+    // 如果 modal 不存在，直接使用現有的結構
+    if (existingModal) {
+        existingModal.style.display = 'flex';
+    }
 }
 
 // 重新組織 AI 面板結構（如果需要）
@@ -433,10 +425,10 @@ function useQuickQuestion(question) {
 
 // 匯出對話功能
 function exportAIChat() {
-	const modal = document.getElementById('exportModal');
-	if (modal) {
-		modal.style.display = 'flex';
-	}
+    const existingModal = document.getElementById('exportModal');
+    if (existingModal) {
+        existingModal.style.display = 'flex';
+    }
 }
 
 function closeExportModal() {
@@ -673,162 +665,6 @@ function downloadFile(content, filename, mimeType) {
 	link.click();
 	document.body.removeChild(link);
 	URL.revokeObjectURL(link.href);
-}
-
-// 更新模型選擇邏輯
-function updateModelSelection() {
-	const select = document.getElementById('aiModelSelect');
-	if (select) {
-		select.addEventListener('change', function() {
-			selectedModel = this.value;
-			console.log('Selected model:', selectedModel);
-		});
-		
-		// 設定初始值
-		select.value = selectedModel;
-	}
-}
-
-
-// 拖曳分隔線功能
-function initializeResizeDivider() {
-	const divider = document.getElementById('aiResizeDivider');
-	const chatArea = document.getElementById('aiChatArea');
-	const inputArea = document.getElementById('aiInputArea');
-	const rightPanel = document.getElementById('rightPanel');
-	
-	if (!divider || !chatArea || !inputArea || !rightPanel) return;
-	
-	let isResizing = false;
-	let startY = 0;
-	let startChatHeight = 0;
-	let startInputHeight = 0;
-	
-	// 設定初始狀態
-	function setInitialSizes() {
-		const totalHeight = rightPanel.offsetHeight;
-		const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-		const dividerHeight = divider.offsetHeight;
-		const availableHeight = totalHeight - headerHeight - dividerHeight;
-		
-		// 預設：對話區 70%，輸入區 30%
-		const defaultChatHeight = availableHeight * 0.7;
-		const defaultInputHeight = availableHeight * 0.3;
-		
-		chatArea.style.height = `${defaultChatHeight}px`;
-		chatArea.style.flex = 'none';
-		inputArea.style.height = `${defaultInputHeight}px`;
-		inputArea.style.flex = 'none';
-	}
-	
-	// 初始化大小
-	setTimeout(setInitialSizes, 100);
-	
-	// 拖曳開始
-	divider.addEventListener('mousedown', function(e) {
-		isResizing = true;
-		startY = e.clientY;
-		startChatHeight = chatArea.offsetHeight;
-		startInputHeight = inputArea.offsetHeight;
-		
-		// 添加拖曳中的樣式
-		divider.classList.add('dragging');
-		document.body.style.cursor = 'ns-resize';
-		document.body.style.userSelect = 'none';
-		
-		// 防止文字選取
-		e.preventDefault();
-	});
-	
-	// 拖曳移動
-	document.addEventListener('mousemove', function(e) {
-		if (!isResizing) return;
-		
-		const deltaY = e.clientY - startY;
-		const totalHeight = rightPanel.offsetHeight;
-		const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-		const dividerHeight = divider.offsetHeight;
-		const availableHeight = totalHeight - headerHeight - dividerHeight;
-		
-		// 計算新的高度
-		let newChatHeight = startChatHeight + deltaY;
-		let newInputHeight = startInputHeight - deltaY;
-		
-		// 設定最小高度限制
-		const minHeight = 50; // 最小高度 50px
-		
-		// 應用限制
-		if (newChatHeight < minHeight) {
-			newChatHeight = minHeight;
-			newInputHeight = availableHeight - minHeight;
-		} else if (newInputHeight < minHeight) {
-			newInputHeight = minHeight;
-			newChatHeight = availableHeight - minHeight;
-		}
-		
-		// 確保總高度不超過可用高度
-		if (newChatHeight + newInputHeight > availableHeight) {
-			const ratio = availableHeight / (newChatHeight + newInputHeight);
-			newChatHeight *= ratio;
-			newInputHeight *= ratio;
-		}
-		
-		// 設定高度
-		chatArea.style.height = `${newChatHeight}px`;
-		chatArea.style.flex = 'none';
-		inputArea.style.height = `${newInputHeight}px`;
-		inputArea.style.flex = 'none';
-		
-		// 觸發 resize 事件
-		window.dispatchEvent(new Event('resize'));
-	});
-	
-	// 拖曳結束
-	document.addEventListener('mouseup', function() {
-		if (isResizing) {
-			isResizing = false;
-			divider.classList.remove('dragging');
-			document.body.style.cursor = '';
-			document.body.style.userSelect = '';
-			
-			// 儲存當前比例（可選）
-			const totalHeight = rightPanel.offsetHeight;
-			const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-			const dividerHeight = divider.offsetHeight;
-			const availableHeight = totalHeight - headerHeight - dividerHeight;
-			
-			const chatRatio = chatArea.offsetHeight / availableHeight;
-			const inputRatio = inputArea.offsetHeight / availableHeight;
-			
-			console.log('Resize complete. Ratios:', {
-				chat: (chatRatio * 100).toFixed(1) + '%',
-				input: (inputRatio * 100).toFixed(1) + '%'
-			});
-		}
-	});
-	
-	// 視窗大小改變時保持比例
-	window.addEventListener('resize', function() {
-		if (!isResizing) {
-			const totalHeight = rightPanel.offsetHeight;
-			const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-			const dividerHeight = divider.offsetHeight;
-			const availableHeight = totalHeight - headerHeight - dividerHeight;
-			
-			// 保持當前比例
-			const currentChatHeight = chatArea.offsetHeight;
-			const currentInputHeight = inputArea.offsetHeight;
-			const totalCurrent = currentChatHeight + currentInputHeight;
-			
-			if (totalCurrent > 0) {
-				const chatRatio = currentChatHeight / totalCurrent;
-				const inputRatio = currentInputHeight / totalCurrent;
-				
-				chatArea.style.height = `${availableHeight * chatRatio}px`;
-				inputArea.style.height = `${availableHeight * inputRatio}px`;
-			}
-		}
-	});
 }
 
 function improvedResizeDivider() {
@@ -1186,7 +1022,7 @@ async function askCustomQuestion() {
 	// 禁用輸入框和按鈕，防止重複提交
 	customQuestionElement.disabled = true;
 	askBtn.disabled = true;
-	askBtn.innerHTML = '➤ 發送中...';
+	//askBtn.innerHTML = '➤ 發送中...';
 	
 	responseDiv.classList.add('active');
 	
@@ -1307,235 +1143,6 @@ function retryQuestion(question) {
 	}
 }
 
-// 添加分段分析按鈕
-function addSegmentAnalysisOption() {
-	const quickMenu = document.getElementById('quickQuestionsMenu');
-	if (quickMenu) {
-		const segmentOption = document.createElement('button');
-		segmentOption.className = 'quick-question-item';
-		segmentOption.innerHTML = '📊 分段分析大檔案';
-		segmentOption.onclick = () => analyzeInSegments();
-		quickMenu.appendChild(segmentOption);
-	}
-}
-
-// 分段分析函數
-async function analyzeInSegments(customQuestion = null) {
-	const responseContent = document.getElementById('aiResponseContent');
-	
-	// 準備內容
-	const fileInfo = `檔案名稱: ${fileName}\n檔案路徑: ${filePath}\n`;
-	const fullFileContent = fileContent;
-	const question = customQuestion || '請分析這個檔案';
-	
-	// 檢查是否需要分段
-	const checkResponse = await fetch('/check-content-size', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ content: fullFileContent })
-	});
-	
-	const sizeInfo = await checkResponse.json();
-	
-	if (!sizeInfo.needs_segmentation) {
-		// 不需要分段，直接分析
-		return askCustomQuestion();
-	}
-	
-	// 確認分段分析
-	const proceed = confirm(
-		`檔案較大，建議分成 ${sizeInfo.suggested_segments} 段進行分析。\n` +
-		`每段約 ${(sizeInfo.max_chars_per_segment / 1024).toFixed(0)} KB。\n\n` +
-		`是否繼續？`
-	);
-	
-	if (!proceed) return;
-	
-	// 顯示分段分析進度
-	const progressDiv = document.createElement('div');
-	progressDiv.className = 'segment-analysis-progress';
-	progressDiv.innerHTML = `
-		<h3>🔄 分段分析中...</h3>
-		<div class="progress-bar">
-			<div class="progress-fill" style="width: 0%"></div>
-		</div>
-		<p class="progress-text">正在分析第 1/${sizeInfo.suggested_segments} 段...</p>
-	`;
-	responseContent.appendChild(progressDiv);
-	
-	// 分段並分析
-	const segmentSize = sizeInfo.max_chars_per_segment;
-	const segments = [];
-	let segmentContext = '';
-	
-	for (let i = 0; i < sizeInfo.suggested_segments; i++) {
-		const start = i * segmentSize;
-		const end = Math.min((i + 1) * segmentSize, fullFileContent.length);
-		const segmentContent = fullFileContent.substring(start, end);
-		
-		// 更新進度
-		const progress = ((i + 1) / sizeInfo.suggested_segments * 100).toFixed(0);
-		progressDiv.querySelector('.progress-fill').style.width = `${progress}%`;
-		progressDiv.querySelector('.progress-text').textContent = 
-			`正在分析第 ${i + 1}/${sizeInfo.suggested_segments} 段...`;
-		
-		// 構建分段內容
-		const segmentFullContent = 
-			`${fileInfo}=== 當前檔案內容 ===\n${segmentContent}\n=== 檔案內容結束 ===\n\n使用者問題：${question}`;
-		
-		try {
-			// 發送分段分析請求
-			const response = await fetch('/analyze-with-ai', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					file_path: filePath,
-					content: segmentFullContent,
-					file_type: 'custom_with_context',
-					model: selectedModel,
-					is_custom_question: true,
-					original_question: question,
-					is_segment_analysis: true,
-					segment_number: i + 1,
-					total_segments: sizeInfo.suggested_segments,
-					segment_context: segmentContext
-				})
-			});
-			
-			const result = await response.json();
-			
-			if (result.success) {
-				segments.push(result);
-				// 使用本段摘要作為下一段的上下文
-				segmentContext = result.segment_summary || '';
-				
-				// 顯示每段的結果
-				displaySegmentResult(result, i + 1, sizeInfo.suggested_segments);
-			}
-			
-		} catch (error) {
-			console.error(`分析第 ${i + 1} 段時出錯:`, error);
-		}
-	}
-	
-	// 移除進度條
-	progressDiv.remove();
-	
-	// 顯示綜合摘要
-	displaySegmentSummary(segments);
-}
-
-// 改進的前端分析函數
-async function analyzeCurrentFileWithProgress() {
-	if (isAnalyzing) {
-		console.log('已經在分析中，請稍候...');
-		return;
-	}
-	
-	const analyzeBtn = document.getElementById('analyzeBtn');
-	const responseDiv = document.getElementById('aiResponse');
-	const responseContent = document.getElementById('aiResponseContent');
-	
-	isAnalyzing = true;
-	
-	// 更新按鈕狀態
-	analyzeBtn.classList.add('loading');
-	analyzeBtn.disabled = true;
-	analyzeBtn.innerHTML = '<span>⏳</span> 準備分析...';
-	
-	// 創建進度容器
-	const progressContainer = createProgressContainer();
-	responseContent.appendChild(progressContainer);
-	
-	try {
-		const fileType = filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR';
-		
-		// 使用 EventSource 進行 SSE 連接
-		const eventSource = new EventSource('/analyze-with-ai-stream', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				file_path: filePath,
-				content: fileContent,
-				file_type: fileType,
-				model: selectedModel,
-				enable_thinking: true
-			})
-		});
-		
-		let segmentResults = [];
-		
-		eventSource.onmessage = function(event) {
-			const data = JSON.parse(event.data);
-			
-			switch(data.type) {
-				case 'init':
-					console.log('分析開始', data.request_id);
-					break;
-					
-				case 'segments':
-					updateProgressInfo(progressContainer, {
-						total_segments: data.total,
-						message: `檔案將分成 ${data.total} 段進行分析`
-					});
-					break;
-					
-				case 'progress':
-					updateProgressBar(progressContainer, data);
-					break;
-					
-				case 'rate_limit':
-					showRateLimitWarning(progressContainer, data);
-					break;
-					
-				case 'segment_complete':
-					segmentResults.push(data.result);
-					displaySegmentResult(progressContainer, data.result);
-					break;
-					
-				case 'segment_error':
-					displaySegmentError(progressContainer, data);
-					break;
-					
-				case 'synthesizing':
-					updateProgressInfo(progressContainer, {
-						message: data.message
-					});
-					break;
-					
-				case 'final':
-					eventSource.close();
-					handleFinalResult(progressContainer, data.result);
-					break;
-					
-				case 'error':
-					eventSource.close();
-					showAnalysisError(data.error);
-					break;
-					
-				case 'complete':
-					eventSource.close();
-					displaySingleAnalysis(data.result);
-					break;
-			}
-		};
-		
-		eventSource.onerror = function(error) {
-			console.error('SSE 錯誤:', error);
-			eventSource.close();
-			showAnalysisError('連接中斷，請重試');
-			resetAnalyzeButton();
-		};
-		
-	} catch (error) {
-		console.error('分析錯誤:', error);
-		showAnalysisError(error.message);
-		resetAnalyzeButton();
-	}
-}
-
 // 更新進度條
 function updateProgressBar(container, data) {
 	const progressFill = container.querySelector('#analysisProgress');
@@ -1583,65 +1190,6 @@ function showRateLimitWarning(container, data) {
 			}
 		}, 1000);
 	}
-}
-
-// 顯示分段結果
-function displaySegmentResult(container, result) {
-	const segmentResults = container.querySelector('#segmentResults');
-	if (!segmentResults) return;
-	
-	const segmentDiv = document.createElement('div');
-	segmentDiv.className = 'segment-result-item';
-	
-	if (result.success) {
-		// 顯示成功的段落摘要
-		const summary = extractSegmentSummary(result.analysis);
-		segmentDiv.innerHTML = `
-			<div class="segment-header">
-				<span class="segment-number">段落 ${result.segment_number}</span>
-				<span class="success-badge">✓ 完成</span>
-			</div>
-			<div class="segment-summary">${summary}</div>
-		`;
-	} else {
-		// 顯示錯誤
-		segmentDiv.innerHTML = `
-			<div class="segment-header">
-				<span class="segment-number">段落 ${result.segment_number}</span>
-				<span class="error-badge">✗ 錯誤</span>
-			</div>
-			<div class="error-content">${escapeHtml(result.error || '未知錯誤')}</div>
-		`;
-	}
-	
-	segmentResults.appendChild(segmentDiv);
-	
-	// 添加淡入動畫
-	setTimeout(() => {
-		segmentDiv.classList.add('show');
-	}, 50);
-}
-
-// 顯示綜合摘要
-function displaySegmentSummary(segments) {
-	if (segments.length === 0) return;
-	
-	const summaryDiv = document.createElement('div');
-	summaryDiv.className = 'segment-summary';
-	summaryDiv.innerHTML = `
-		<h3>📊 綜合分析摘要</h3>
-		<p>已完成 ${segments.length} 段的分析。</p>
-		<div class="summary-content">
-			${segments.map((seg, i) => `
-				<div class="summary-item">
-					<strong>第 ${i + 1} 段：</strong>
-					${seg.segment_summary || '無摘要'}
-				</div>
-			`).join('')}
-		</div>
-	`;
-	
-	document.getElementById('aiResponseContent').appendChild(summaryDiv);
 }
 
 // 監聽輸入框變化，啟用/禁用發送按鈕
@@ -1694,17 +1242,11 @@ function setupEnterKeySubmit() {
 
 document.addEventListener('DOMContentLoaded', function() {
 	
-	// 初始化拖曳功能
-	initializeResizeDivider();
-
 	// 使用改進的拖曳功能
 	improvedResizeDivider();
 
 	// 設定輸入框自動調整高度
 	setupAutoResizeTextarea();
-	
-	// 初始化模型選擇
-	updateModelSelection();
 
 	// 設置 Enter 鍵送出
 	setupEnterKeySubmit();
@@ -1920,13 +1462,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Get model display name
 function getModelDisplayName(modelId) {
-	const names = {
-		'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-		'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
-		'claude-3-opus-20240229': 'Claude 3 Opus',
-		'claude-3-haiku-20240307': 'Claude 3 Haiku'
-	};
-	return names[modelId] || modelId;
+    const names = {
+        'claude-4-opus-20250514': 'Claude 4 Opus',
+        'claude-4-sonnet-20250514': 'Claude 4 Sonnet',
+        'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+        'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
+        'claude-3-opus-20240229': 'Claude 3 Opus',
+        'claude-3-haiku-20240307': 'Claude 3 Haiku'
+    };
+    return names[modelId] || modelId;
 }
 
 // 自動滾動函數
@@ -2117,15 +1661,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	// Sync scroll
 	syncScroll();
-
-	// 優化：延遲載入和虛擬滾動
-	setupVirtualScrolling();
-	
-	// 優化：使用防抖動搜尋
-	document.getElementById('searchBox').addEventListener('input', function() {
-		clearTimeout(searchDebounceTimer);
-		searchDebounceTimer = setTimeout(performSearchOptimized, 300);
-	});
 	
 	// Setup AI panel
 	setupResizeHandle();
@@ -2719,106 +2254,6 @@ function highlightSearchResults() {
 	initialChildren.forEach(child => processNode(child));
 }
 
-// 設置虛擬滾動以提升大檔案效能
-function setupVirtualScrolling() {
-	const contentArea = document.getElementById('contentArea');
-	let lastScrollTop = 0;
-	
-	contentArea.addEventListener('scroll', function() {
-		const scrollTop = contentArea.scrollTop;
-		const scrollHeight = contentArea.scrollHeight;
-		const clientHeight = contentArea.clientHeight;
-		
-		// 計算可見範圍
-		const lineHeight = 20; // 每行高度
-		const buffer = 50; // 緩衝行數
-		
-		const startLine = Math.max(0, Math.floor(scrollTop / lineHeight) - buffer);
-		const endLine = Math.min(lines.length, Math.ceil((scrollTop + clientHeight) / lineHeight) + buffer);
-		
-		// 如果可見範圍改變，更新高亮
-		if (startLine !== visibleRange.start || endLine !== visibleRange.end) {
-			visibleRange = { start: startLine, end: endLine };
-			
-			// 如果有搜尋結果，只更新可見範圍的高亮
-			if (searchResults.length > 0) {
-				updateVisibleHighlights();
-			}
-		}
-		
-		lastScrollTop = scrollTop;
-	});
-}
-
-// 優化的搜尋函數
-async function performSearchOptimized() {
-	const searchText = document.getElementById('searchBox').value;
-	const useRegex = document.getElementById('regexToggle').checked;
-
-	const minLength = useRegex ? 1 : MIN_SEARCH_LENGTH;
-	
-	if (searchText && searchText.length < minLength) {
-		document.getElementById('searchInfo').textContent = 
-			`請輸入至少 ${minLength} 個字元`;
-		return;
-	}
-	
-	if (isSearching) return;
-	
-	clearSearchHighlightsOptimized();
-	
-	if (!searchText) {
-		searchResults = [];
-		updateSearchInfo();
-		document.getElementById('grepIndicator').classList.remove('active');
-		return;
-	}
-	
-	isSearching = true;
-	document.getElementById('searchInfo').textContent = '搜尋中...';
-	
-	try {
-		// 先嘗試使用後端搜尋
-		const response = await fetch('/search-in-file', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				file_path: filePath,
-				search_text: searchText,
-				use_regex: useRegex,
-				max_results: 10000
-			})
-		});
-		
-		const data = await response.json();
-		
-		if (data.success && data.used_grep) {
-			document.getElementById('grepIndicator').classList.add('active');
-			searchResults = data.results;
-			
-			if (searchResults.length > 0) {
-				updateVisibleHighlights();
-				currentSearchIndex = 0;
-				scrollToSearchResultOptimized(0);
-			}
-		} else {
-			// 前端搜尋作為備用方案
-			document.getElementById('grepIndicator').classList.remove('active');
-			performFrontendSearchOptimized(searchText, useRegex);
-		}
-	} catch (error) {
-		console.error('Search error:', error);
-		// 發生錯誤時使用前端搜尋
-		document.getElementById('grepIndicator').classList.remove('active');
-		performFrontendSearchOptimized(searchText, useRegex);
-	} finally {
-		isSearching = false;
-		updateSearchInfo();
-	}
-}
-
 function clearSearchHighlights() {
 	const content = document.getElementById('content');
 	const highlights = content.querySelectorAll('.search-highlight');
@@ -2881,17 +2316,6 @@ function updateVisibleHighlights() {
 	});
 }
 
-// 優化的清除高亮
-function clearSearchHighlightsOptimized() {
-	// 只清除標記過的行
-	const highlightedLines = document.querySelectorAll('.line[data-highlighted="true"]');
-	
-	highlightedLines.forEach(line => {
-		line.innerHTML = escapeHtml(line.textContent);
-		delete line.dataset.highlighted;
-	});
-}
-
 // 優化的滾動到結果
 function scrollToSearchResult(index) {
 	if (searchResults.length === 0 || !searchResults[index]) return;
@@ -2940,132 +2364,12 @@ function scrollToSearchResult(index) {
 	}, 50);
 }
 
-// 優化的滾動到結果
-function scrollToSearchResultOptimized(index) {
-	if (searchResults.length === 0 || !searchResults[index]) return;
-	
-	const result = searchResults[index];
-	
-	// 更新當前高亮
-	updateCurrentHighlight();
-	
-	// 延遲執行以確保 DOM 更新完成
-	setTimeout(() => {
-		// 方法1：嘗試直接滾動到高亮元素
-		const allHighlights = document.querySelectorAll('.search-highlight');
-		let targetElement = null;
-		
-		// 找到對應索引的高亮元素
-		if (index < allHighlights.length) {
-			targetElement = allHighlights[index];
-		}
-		
-		// 如果找到了高亮元素，滾動到它
-		if (targetElement) {
-			targetElement.scrollIntoView({ 
-				behavior: 'smooth', 
-				block: 'center',
-				inline: 'center'
-			});
-			
-			// 添加脈動動畫
-			targetElement.style.animation = 'none';
-			setTimeout(() => {
-				targetElement.style.animation = 'pulse 0.5s ease-in-out';
-			}, 10);
-		} else {
-			// 方法2：如果找不到高亮元素，滾動到行
-			const lineElement = document.querySelector(`.line[data-line="${result.line}"]`);
-			if (lineElement) {
-				lineElement.scrollIntoView({ 
-					behavior: 'smooth', 
-					block: 'center' 
-				});
-			}
-		}
-		
-		// 更新行號信息
-		if (result.line) {
-			currentLine = result.line;
-			updateLineInfo();
-			
-			// 高亮當前行號
-			document.querySelectorAll('.line-number').forEach(el => {
-				el.classList.remove('current-line');
-			});
-			const lineNumberElement = document.getElementById('line-' + result.line);
-			if (lineNumberElement) {
-				lineNumberElement.classList.add('current-line');
-				// 確保行號也在視圖中
-				lineNumberElement.scrollIntoView({ 
-					behavior: 'smooth', 
-					block: 'nearest' 
-				});
-			}
-		}
-	}, 100);
-}
-
-// 優化的前端搜尋（限制範圍）
-function performFrontendSearchOptimized(searchText, useRegex) {
-	searchResults = [];
-	
-	try {
-		let searchPattern;
-		if (useRegex) {
-			// Regex 模式
-			try {
-				searchPattern = new RegExp(searchText, 'gi');
-			} catch (e) {
-				document.getElementById('searchInfo').textContent = '無效的正則表達式';
-				return;
-			}
-		} else {
-			// 一般模式：轉義特殊字符
-			const escapedText = escapeRegex(searchText);
-			searchPattern = new RegExp(escapedText, 'gi');
-		}
-		
-		// 搜尋所有行
-		for (let i = 0; i < lines.length; i++) {
-			const lineText = lines[i];
-			let match;
-			
-			searchPattern.lastIndex = 0; // 重置 regex
-			while ((match = searchPattern.exec(lineText)) !== null) {
-				searchResults.push({
-					line: i + 1,
-					offset: match.index,
-					length: match[0].length,
-					text: match[0]
-				});
-				
-				// 防止無限循環
-				if (match.index === searchPattern.lastIndex) {
-					searchPattern.lastIndex++;
-				}
-			}
-		}
-		
-		if (searchResults.length > 0) {
-			updateVisibleHighlights();
-			currentSearchIndex = 0;
-			scrollToSearchResultOptimized(0);
-		}
-		
-	} catch (e) {
-		console.error('Search error:', e);
-		document.getElementById('searchInfo').textContent = '搜尋錯誤';
-	}
-}
-
 // 優化的查找下一個/上一個
 function findNext() {
 	if (searchResults.length === 0) return;
 	currentSearchIndex = (currentSearchIndex + 1) % searchResults.length;
 	// 不需要重新高亮所有結果，只需要更新當前高亮
 	updateCurrentHighlight();            
-	scrollToSearchResultOptimized(currentSearchIndex);
 	updateSearchInfo();
 }
 
@@ -3074,7 +2378,6 @@ function findPrevious() {
 	currentSearchIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
 	// 不需要重新高亮所有結果，只需要更新當前高亮
 	updateCurrentHighlight();            
-	scrollToSearchResultOptimized(currentSearchIndex);
 	updateSearchInfo();
 }
 
@@ -3282,42 +2585,172 @@ function downloadAsHTML() {
 
 // 切換模型選擇彈出卡片
 function toggleModelPopup() {
-    const popup = document.getElementById('modelPopup');
-    let backdrop = document.querySelector('.modal-backdrop');
-    
-    if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop';
-        document.body.appendChild(backdrop);
-        
-        backdrop.addEventListener('click', function() {
-            popup.classList.remove('show');
-            popup.style.display = 'none';
-            backdrop.classList.remove('show');
-        });
+    const existingModal = document.querySelector('.model-popup-modal');
+    if (existingModal) {
+        existingModal.remove();
+        document.querySelector('.modal-backdrop')?.remove();
+        return;
     }
     
-    if (popup.classList.contains('show')) {
-        popup.classList.remove('show');
-        popup.style.display = 'none';
-        backdrop.classList.remove('show');
+    const contentHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>🤖 選擇 AI 模型</h4>
+                <button class="modal-close-btn" onclick="this.closest('.model-popup-modal').remove(); document.querySelector('.modal-backdrop').remove();">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="model-popup-grid">
+                    <!-- Claude 4 系列 -->
+                    <div class="model-card" data-model="claude-4-opus-20250514" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 4 Opus</div>
+                        <div class="model-card-desc">🚀 最強大，300K tokens，複雜分析首選</div>
+                        <div class="model-card-badge new">NEW</div>
+                    </div>
+                    <div class="model-card selected" data-model="claude-4-sonnet-20250514" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 4 Sonnet</div>
+                        <div class="model-card-desc">⚡ 推薦！250K tokens，平衡效能</div>
+                        <div class="model-card-badge new">NEW</div>
+                    </div>
+                    
+                    <!-- Claude 3.5 系列 -->
+                    <div class="model-card" data-model="claude-3-5-sonnet-20241022" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 3.5 Sonnet</div>
+                        <div class="model-card-desc">快速準確，適合一般分析</div>
+                    </div>
+                    <div class="model-card" data-model="claude-3-5-haiku-20241022" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 3.5 Haiku</div>
+                        <div class="model-card-desc">輕量快速，簡單分析</div>
+                    </div>
+                    
+                    <!-- Claude 3 系列 -->
+                    <div class="model-card" data-model="claude-3-opus-20240229" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 3 Opus</div>
+                        <div class="model-card-desc">深度分析，詳細但較慢</div>
+                    </div>
+                    <div class="model-card" data-model="claude-3-haiku-20240307" onclick="selectModel(this)">
+                        <div class="model-card-name">Claude 3 Haiku</div>
+                        <div class="model-card-desc">經濟實惠，基本分析</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const modal = showModalDialog(contentHTML);
+    modal.dialog.classList.add('model-popup-modal');
+    
+    // 選中當前模型
+    const currentModelCard = modal.dialog.querySelector(`.model-card[data-model="${selectedModel}"]`);
+    if (currentModelCard) {
+        currentModelCard.classList.add('selected');
+    }
+}
+
+// 統一的彈跳視窗顯示函數
+// 統一的彈跳視窗顯示函數
+function showModalDialog(contentHTML, onResolve) {
+    // 檢查是否在全屏模式
+    const rightPanel = document.querySelector('.right-panel.fullscreen-mode');
+    const isFullscreen = !!rightPanel;
+    
+    // 創建背景遮罩
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    
+    if (isFullscreen) {
+        // 全屏模式下
+        backdrop.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 999998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        rightPanel.appendChild(backdrop);
     } else {
-        // 確保彈出框在正確的位置
-        popup.style.display = 'block';
-        popup.classList.add('show');
-        backdrop.classList.add('show');
-        
-        // 修復高度問題
-        popup.style.height = 'auto';
-        popup.style.minHeight = '200px';
-        
-        // 強制重新計算位置
-        setTimeout(() => {
-            popup.style.top = '50%';
-            popup.style.left = '50%';
-            popup.style.transform = 'translate(-50%, -50%)';
-        }, 10);
+        // 正常模式
+        backdrop.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 999998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        document.body.appendChild(backdrop);
     }
+    
+    // 創建對話框容器
+    const modalContainer = document.createElement('div');
+    
+    if (isFullscreen) {
+        modalContainer.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            pointer-events: none;
+        `;
+        rightPanel.appendChild(modalContainer);
+    } else {
+        modalContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            pointer-events: none;
+        `;
+        document.body.appendChild(modalContainer);
+    }
+    
+    // 創建對話框
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+    dialog.style.cssText = `
+        pointer-events: all;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        background: #252526;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        animation: modalSlideIn 0.3s ease;
+        position: relative;
+        z-index: 999999;
+    `;
+    
+    dialog.innerHTML = contentHTML;
+    modalContainer.appendChild(dialog);
+    
+    // 返回控制對象
+    return {
+        close: () => {
+            backdrop.remove();
+            modalContainer.remove();
+        },
+        backdrop,
+        dialog,
+        container: modalContainer
+    };
 }
 
 function handleModelPopupOutsideClick(e) {
@@ -3333,42 +2766,34 @@ function handleModelPopupOutsideClick(e) {
 
 // 選擇模型
 function selectModel(card) {
-	// 不要 stopPropagation，因為可能會阻止正常的事件流
-	
-	const model = card.dataset.model;
-	const modelName = card.querySelector('.model-card-name').textContent;
-	
-	// 更新選中狀態
-	document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
-	card.classList.add('selected');
-	
-	// 更新顯示的模型名稱 - 確保更新內聯選擇器的名稱
-	const selectedModelNameInline = document.getElementById('selectedModelNameInline');
-	if (selectedModelNameInline) {
-		selectedModelNameInline.textContent = modelName;
-	}
-	
-	// 更新全局變量
-	selectedModel = model;
-	console.log('Selected model:', selectedModel);
-	
-	// 關閉彈出框和背景
-	const popup = document.getElementById('modelPopup');
-	const backdrop = document.querySelector('.modal-backdrop');
-	
-	if (popup) {
-		popup.classList.remove('show');
-		setTimeout(() => {
-			popup.style.display = 'none';
-		}, 300);
-	}
-	
-	if (backdrop) {
-		backdrop.classList.remove('show');
-		setTimeout(() => {
-			backdrop.remove();
-		}, 300);
-	}
+    const model = card.dataset.model;
+    const modelName = card.querySelector('.model-card-name').textContent;
+    
+    // 更新選中狀態
+    document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    
+    // 更新顯示的模型名稱
+    const selectedModelNameInline = document.getElementById('selectedModelNameInline');
+    if (selectedModelNameInline) {
+        selectedModelNameInline.textContent = modelName;
+    }
+    
+    // 更新全局變量
+    selectedModel = model;
+    console.log('Selected model:', selectedModel);
+    
+    // 關閉彈窗 - 修正這裡
+    const popup = document.getElementById('modelPopup');
+    if (popup) {
+        popup.style.display = 'none';
+    }
+    
+    // 移除背景遮罩
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) {
+        backdrop.remove();
+    }
 }
 
 // 新增模型選擇按鈕樣式
@@ -3429,67 +2854,107 @@ document.addEventListener('DOMContentLoaded', function() {
 		const popup = document.getElementById('modelPopup');
 		const modelSelectInlineBtn = document.getElementById('modelSelectInlineBtn');
 
-		// 取得按鈕的位置和尺寸資訊
-		const buttonRect = modelSelectInlineBtn.getBoundingClientRect();
-
-		// 簡單的顯示/隱藏邏輯
 		if (popup.style.display === 'block') {
-			// 隱藏
 			popup.style.display = 'none';
 			const backdrop = document.querySelector('.modal-backdrop');
 			if (backdrop) backdrop.remove();
 		} else {
-			// 顯示
-			popup.style.display = 'block';
-
-			// 根據按鈕位置計算彈出視窗的 top 和 left
-			// 我們將彈出視窗放在按鈕下方，並與按鈕的左邊緣對齊
-			const popupTop = buttonRect.bottom - 150; // 距離按鈕底部 10px
-			const popupLeft = buttonRect.left - 100;       // 與按鈕左邊緣對齊
-
-			// 如果希望彈出視窗在按鈕的右側：
-			// const popupTop = buttonRect.top;
-			// const popupLeft = buttonRect.right + 10; // 距離按鈕右側 10px
-
-			popup.style.cssText = `
-				display: block !important;
-				position: fixed !important; /* 確保彈出視窗相對於視窗固定 */
-				top: ${popupTop}px !important;    /* 使用計算出的 top */
-				left: ${popupLeft}px !important;  /* 使用計算出的 left */
-				/* 移除 transform: translate(-50%, -50%)，因為我們不再需要它來置中 */
-				background: #252526 !important;
-				border: 2px solid #667eea !important;
-				border-radius: 12px !important;
-				box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
-				padding: 15px !important;
-				z-index: 2147483647 !important;
-				min-width: 500px !important;
-				min-height: 200px !important;
-				height: auto !important;
-			`;
-
-			// 創建背景
+			// 先創建背景遮罩
 			let backdrop = document.querySelector('.modal-backdrop');
 			if (!backdrop) {
 				backdrop = document.createElement('div');
 				backdrop.className = 'modal-backdrop';
-				backdrop.style.cssText = `
-					position: fixed;
-					top: 0;
-					left: 0;
-					width: 100%;
-					height: 100%;
-					background: rgba(0, 0, 0, 0.6);
-				`;
+				
+				// 檢查是否在全屏模式
+				const rightPanel = document.querySelector('.right-panel.fullscreen-mode');
+				
+				if (rightPanel) {
+					// 全屏模式下
+					backdrop.style.cssText = `
+						position: absolute;
+						top: 0;
+						left: 0;
+						width: 100%;
+						height: 100%;
+						background: rgba(0, 0, 0, 0.6);
+						z-index: 999998;  /* 比彈窗低 */
+					`;
+					rightPanel.appendChild(backdrop);
+				} else {
+					// 正常模式
+					backdrop.style.cssText = `
+						position: fixed;
+						top: 0;
+						left: 0;
+						width: 100%;
+						height: 100%;
+						background: rgba(0, 0, 0, 0.6);
+						z-index: 999998;  /* 比彈窗低 */
+					`;
+					document.body.appendChild(backdrop);
+				}
+				
 				backdrop.onclick = () => {
 					popup.style.display = 'none';
 					backdrop.remove();
 				};
-				document.body.appendChild(backdrop);
+			}
+
+			// 顯示彈窗
+			popup.style.display = 'block';
+
+			// 檢查是否在全屏模式
+			const isFullscreen = document.querySelector('.right-panel.fullscreen-mode');
+			
+			if (isFullscreen) {
+				// 全屏模式下使用相對定位
+				popup.style.cssText = `
+					display: block !important;
+					position: absolute !important;
+					top: 50% !important;
+					left: 50% !important;
+					transform: translate(-50%, -50%) !important;
+					background: #252526 !important;
+					border: 2px solid #667eea !important;
+					border-radius: 12px !important;
+					box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+					padding: 15px !important;
+					z-index: 999999 !important;  /* 確保在背景遮罩之上 */
+					min-width: 500px !important;
+					min-height: 200px !important;
+					height: auto !important;
+					max-height: 80vh !important;
+					overflow-y: auto !important;
+				`;
+				
+				// 確保彈窗在 rightPanel 內部
+				const rightPanel = document.querySelector('.right-panel');
+				if (popup.parentElement !== rightPanel) {
+					rightPanel.appendChild(popup);
+				}
+			} else {
+				// 正常模式下的定位
+				const buttonRect = modelSelectInlineBtn.getBoundingClientRect();
+				const popupTop = buttonRect.bottom - 150;
+				const popupLeft = buttonRect.left - 100;
+				
+				popup.style.cssText = `
+					display: block !important;
+					position: fixed !important;
+					top: ${popupTop}px !important;
+					left: ${popupLeft}px !important;
+					background: #252526 !important;
+					border: 2px solid #667eea !important;
+					border-radius: 12px !important;
+					box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+					padding: 15px !important;
+					z-index: 999999 !important;  /* 確保在背景遮罩之上 */
+					min-width: 500px !important;
+					min-height: 200px !important;
+					height: auto !important;
+				`;
 			}
 		}
-
-		console.log('Toggle complete - display:', popup.style.display);
 	};
 	
 	// 綁定模型卡片點擊事件
@@ -3529,84 +2994,6 @@ const AI_ANALYSIS_CONFIG = {
 	maxRetries: 3
 };
 
-// 改進的檔案分析函數
-async function analyzeCurrentFileImproved() {
-	if (isAnalyzing) {
-		console.log('已經在分析中，請稍候...');
-		return;
-	}
-	
-	if (isAnalyzing) return;
-	
-	isAnalyzing = true;
-	
-	const analyzeBtn = document.getElementById('analyzeBtn');
-	const responseDiv = document.getElementById('aiResponse');
-	const responseContent = document.getElementById('aiResponseContent');
-	
-	// 先檢查檔案大小
-	const sizeCheck = await checkFileSizeForAI();
-	
-	if (sizeCheck.strategy === 'segmented') {
-		// 顯示分段分析確認
-		const proceed = await showSegmentedAnalysisDialog(sizeCheck);
-		if (!proceed) return;
-	}
-	
-	isAnalyzing = true;
-	
-	// 更新按鈕狀態
-	analyzeBtn.classList.add('loading');
-	analyzeBtn.disabled = true;
-	analyzeBtn.innerHTML = '<span>⏳</span> 準備分析...';
-	
-	responseDiv.classList.add('active');
-	
-	// 創建進度顯示容器
-	const progressContainer = createProgressContainer(sizeCheck);
-	responseContent.appendChild(progressContainer);
-	
-	try {
-		const fileType = filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR';
-		
-		// 發送分析請求
-		const response = await fetch('/analyze-with-ai', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				file_path: filePath,
-				content: fileContent,
-				file_type: fileType,
-				model: selectedModel,
-				enable_thinking: AI_ANALYSIS_CONFIG.enableThinking
-			})
-		});
-		
-		const data = await response.json();
-		
-		if (response.ok && data.success) {
-			if (data.is_segmented) {
-				// 處理分段結果
-				await displaySegmentedAnalysis(data, progressContainer);
-			} else {
-				// 處理單次分析結果
-				displaySingleAnalysis(data);
-			}
-		} else {
-			showAnalysisError(data.error || '分析失敗');
-		}
-		
-	} catch (error) {
-		console.error('AI analysis error:', error);
-		showAnalysisError(error.message);
-	} finally {
-		resetAnalyzeButton();
-		isAnalyzing = false;
-	}
-}
-
 // 檢查檔案大小
 async function checkFileSizeForAI() {
 	try {
@@ -3626,45 +3013,56 @@ async function checkFileSizeForAI() {
 // 顯示分段分析對話框
 async function showSegmentedAnalysisDialog(sizeInfo) {
     return new Promise((resolve) => {
-        const dialog = document.createElement('div');
-        dialog.className = 'segmented-analysis-dialog';
-        dialog.innerHTML = `
-            <div class="dialog-content">
-                <h3>📊 ${getAnalysisModeTitle()}</h3>
-                <p>${getAnalysisModeDescription(sizeInfo)}</p>
-                <div class="dialog-info">
-                    <div class="info-item">
-                        <span class="info-label">檔案大小：</span>
-                        <span class="info-value">${(sizeInfo.content_length / 1024 / 1024).toFixed(1)} MB</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">預估 Token：</span>
-                        <span class="info-value">${sizeInfo.estimated_tokens.toLocaleString()}</span>
-                    </div>
-                    ${sizeInfo.suggested_segments > 1 ? `
-                    <div class="info-item">
-                        <span class="info-label">建議分段：</span>
-                        <span class="info-value">${sizeInfo.suggested_segments} 段</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">預估時間：</span>
-                        <span class="info-value">約 ${Math.ceil(sizeInfo.suggested_segments * 30 / 60)} 分鐘</span>
-                    </div>
-                    ` : ''}
+        const contentHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4>📊 ${getAnalysisModeTitle()}</h4>
+                    <button class="modal-close-btn" onclick="window.resolveDialog(false)">×</button>
                 </div>
-                <div class="dialog-buttons">
-                    <button class="btn btn-primary" onclick="resolveDialog(true)">繼續分析</button>
-                    <button class="btn btn-secondary" onclick="resolveDialog(false)">取消</button>
+                <div class="modal-body">
+                    <p>${getAnalysisModeDescription(sizeInfo)}</p>
+                    <div class="dialog-info">
+                        <div class="info-item">
+                            <span class="info-label">檔案大小：</span>
+                            <span class="info-value">${(sizeInfo.content_length / 1024 / 1024).toFixed(1)} MB</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">預估 Token：</span>
+                            <span class="info-value">${sizeInfo.estimated_tokens.toLocaleString()}</span>
+                        </div>
+                        ${sizeInfo.suggested_segments > 1 ? `
+                        <div class="info-item">
+                            <span class="info-label">建議分段：</span>
+                            <span class="info-value">${sizeInfo.suggested_segments} 段</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">預估時間：</span>
+                            <span class="info-value">約 ${Math.ceil(sizeInfo.estimated_time / 60)} 分鐘</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="window.resolveDialog(false)">取消</button>
+                    <button class="btn btn-primary" onclick="window.resolveDialog(true)">繼續分析</button>
                 </div>
             </div>
         `;
         
-        document.body.appendChild(dialog);
+        const modal = showModalDialog(contentHTML);
         
         window.resolveDialog = (proceed) => {
-            dialog.remove();
+            modal.close();
             resolve(proceed);
         };
+        
+        // 點擊背景關閉
+        modal.backdrop.addEventListener('click', (e) => {
+            if (e.target === modal.backdrop) {
+                modal.close();
+                resolve(false);
+            }
+        });
     });
 }
 
@@ -4230,39 +3628,6 @@ function extractSegmentSummary(analysisText) {
 	}
 }
 
-// 格式化分析內容
-function formatAnalysisContent(content) {
-	// 檢查 content 是否存在
-	if (!content || typeof content !== 'string') {
-		console.warn('formatAnalysisContent received invalid content:', content);
-		return '<p>無分析內容</p>';
-	}
-	
-	try {
-		return content
-			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-			.replace(/`([^`]+)`/g, '<code>$1</code>')
-			.replace(/^(\d+\.\s.*?)$/gm, '<li>$1</li>')
-			.replace(/(<li>.*?<\/li>\s*)+/g, '<ol>$&</ol>')
-			.replace(/\n\n/g, '</p><p>')
-			.replace(/^/, '<p>')
-			.replace(/$/, '</p>');
-	} catch (error) {
-		console.error('Error formatting analysis content:', error);
-		return '<p>' + escapeHtml(content) + '</p>';
-	}
-}
-
-// 在 DOMContentLoaded 時注入樣式
-document.addEventListener('DOMContentLoaded', function() {
-
-	// 替換原有的分析按鈕事件
-	const analyzeBtn = document.getElementById('analyzeBtn');
-	if (analyzeBtn) {
-		analyzeBtn.onclick = analyzeCurrentFileImproved;
-	}
-});
-
 //====================================================================================
 
 // 修正的智能分析函數
@@ -4420,19 +3785,6 @@ function createAnalysisProgress(mode) {
         </div>
     `;
     
-    return div;
-}
-
-function createErrorDisplay(message) {
-    const div = document.createElement('div');
-    div.className = 'ai-error';
-    div.innerHTML = `
-        <h3>❌ 分析失敗</h3>
-        <p>${escapeHtml(message)}</p>
-        <p style="margin-top: 10px;">
-            <button class="retry-btn" onclick="startSmartAnalysis()">🔄 重試</button>
-        </p>
-    `;
     return div;
 }
 
@@ -4738,16 +4090,82 @@ function displaySmartAnalysisResult(data, modeConfig) {
         </div>
     `;
     
-    // 根據模式顯示不同的內容
-    if (data.analysis_mode === 'quick') {
-        resultHTML += createQuickAnalysisDisplay(data, modeConfig);
-    } else if (data.analysis_mode === 'comprehensive') {
-        // 使用結構化顯示
-        resultHTML += createComprehensiveAnalysisDisplay(data, modeConfig);
-    } else if (data.is_segmented) {
-        resultHTML += createSegmentedAnalysisDisplay(data, modeConfig);
+    // 檢查是否有分段結果
+    if (data.is_segmented && data.segments && data.segments.length > 0) {
+        // 分段分析結果
+        resultHTML += `
+            <div class="segmented-analysis-result">
+                <div class="result-header">
+                    <div class="mode-indicator">
+                        <span class="mode-icon">${modeConfig.icon}</span>
+                        <span class="mode-name">${modeConfig.name}</span>
+                        ${modeConfig.badge ? `<span class="mode-badge">${modeConfig.badge}</span>` : ''}
+                    </div>
+                    <div class="result-meta">
+                        <span>模型：${getModelDisplayName(data.model)}</span>
+                        <span>分 ${data.total_segments} 段分析</span>
+                        ${data.elapsed_time ? `<span>耗時：${data.elapsed_time}</span>` : ''}
+                    </div>
+                </div>
+                
+                <!-- 綜合分析 -->
+                <div class="final-analysis-section">
+                    <h3 class="section-title">📊 綜合分析結果</h3>
+                    <div class="analysis-content">
+                        ${formatAnalysisContent(data.analysis || data.full_analysis || '')}
+                    </div>
+                </div>
+                
+                <!-- 各段落詳情 -->
+                ${data.segments.length > 0 ? `
+                    <details class="segments-details">
+                        <summary class="segments-summary">
+                            <span class="summary-icon">📋</span>
+                            查看各段落詳細分析（共 ${data.segments.length} 段）
+                        </summary>
+                        <div class="segments-container">
+                            ${data.segments.map((seg, index) => `
+                                <div class="segment-item ${seg.success ? 'success' : 'error'}">
+                                    <div class="segment-header">
+                                        <span class="segment-number">段落 ${seg.segment_number || index + 1}</span>
+                                        ${seg.success ? 
+                                            '<span class="segment-status success">✓ 完成</span>' : 
+                                            '<span class="segment-status error">✗ 失敗</span>'
+                                        }
+                                    </div>
+                                    <div class="segment-content">
+                                        ${seg.success ? 
+                                            formatAnalysisContent(seg.analysis || '') : 
+                                            `<p class="error-message">${escapeHtml(seg.error || '分析失敗')}</p>`
+                                        }
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </details>
+                ` : ''}
+            </div>
+        `;
     } else {
-        resultHTML += createStandardAnalysisDisplay(data, modeConfig);
+        // 單次分析結果
+        resultHTML += `
+            <div class="single-analysis-result">
+                <div class="result-header">
+                    <div class="mode-indicator">
+                        <span class="mode-icon">${modeConfig.icon}</span>
+                        <span class="mode-name">${modeConfig.name}</span>
+                        ${modeConfig.badge ? `<span class="mode-badge">${modeConfig.badge}</span>` : ''}
+                    </div>
+                    <div class="result-meta">
+                        <span>模型：${getModelDisplayName(data.model)}</span>
+                        ${data.elapsed_time ? `<span>耗時：${data.elapsed_time}</span>` : ''}
+                    </div>
+                </div>
+                <div class="analysis-content">
+                    ${formatAnalysisContent(data.analysis || '')}
+                </div>
+            </div>
+        `;
     }
     
     conversationItem.innerHTML = resultHTML;
@@ -4762,55 +4180,6 @@ function displaySmartAnalysisResult(data, modeConfig) {
     }, 100);
 }
 
-// 格式化快速分析結果
-function formatQuickAnalysis(analysis) {
-    if (!analysis) return '<p>無分析結果</p>';
-    
-    // 簡單的格式化
-    return analysis
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/^/, '<p>')
-        .replace(/$/, '</p>')
-        .replace(/^\d+\.\s/gm, '<br>• ');
-}
-
-// 顯示分段結果
-function displaySegmentedResults(data) {
-    let html = '<div class="segmented-results">';
-    
-    if (data.segment_results) {
-        html += '<div class="segment-summary">分析了 ' + data.total_segments + ' 個段落</div>';
-        
-        // 顯示每個段落的摘要
-        data.segment_results.forEach(seg => {
-            if (seg.success) {
-                html += `
-                    <details class="segment-detail">
-                        <summary>段落 ${seg.segment || seg.segment_number} ✓</summary>
-                        <div class="segment-content">
-                            ${formatAnalysisContent(seg.analysis)}
-                        </div>
-                    </details>
-                `;
-            }
-        });
-    }
-    
-    // 顯示綜合報告
-    if (data.comprehensive_report || data.full_analysis) {
-        html += `
-            <div class="final-report">
-                <h3>📊 綜合分析報告</h3>
-                ${formatAnalysisContent(data.comprehensive_report || data.full_analysis)}
-            </div>
-        `;
-    }
-    
-    html += '</div>';
-    return html;
-}
-
 // 格式化分析內容
 function formatAnalysisContent(content) {
     if (!content || typeof content !== 'string') {
@@ -4818,15 +4187,97 @@ function formatAnalysisContent(content) {
     }
     
     try {
-        return content
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/^#+\s(.+)$/gm, '<h3>$1</h3>')
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/^/, '<p>')
-            .replace(/$/, '</p>');
+        let formatted = content;
+        
+        // 先處理特殊字符
+        formatted = formatted.replace(/\*\*\*/g, '');  // 移除多餘的星號
+        
+        // 處理編號標題（例如：1. 標題、2. 標題）
+        formatted = formatted.replace(/^(\d+)\.\s*([^：:]+)[:：]\s*$/gm, 
+            '<h3 class="gpt-numbered-title"><span class="title-number">$1.</span> $2</h3>');
+        
+        // 處理帶圖標的標題
+        formatted = formatted.replace(/^([🎯🔍📋💡🛡️⚠️🚨📊🔧💾📚#]+)\s*(.+?)[:：]?\s*$/gm, 
+            '<h3 class="gpt-icon-title"><span class="title-icon">$1</span> $2</h3>');
+        
+        // 處理 Markdown 標題
+        formatted = formatted.replace(/^####\s+(.+)$/gm, '<h5 class="gpt-h5">$1</h5>');
+        formatted = formatted.replace(/^###\s+(.+)$/gm, '<h4 class="gpt-h4">$1</h4>');
+        formatted = formatted.replace(/^##\s+(.+)$/gm, '<h3 class="gpt-h3">$1</h3>');
+        formatted = formatted.replace(/^#\s+(.+)$/gm, '<h2 class="gpt-h2">$1</h2>');
+        
+        // 處理子編號（例如：1.1, 2.3）
+        formatted = formatted.replace(/^(\d+\.\d+)\s+(.+)$/gm, 
+            '<div class="gpt-sub-numbered"><span class="sub-number">$1</span> $2</div>');
+        
+        // 處理列表項目
+        formatted = formatted.replace(/^\s*[-•]\s+(.+)$/gm, 
+            '<div class="gpt-bullet-item"><span class="bullet">•</span> $1</div>');
+        
+        // 處理縮進的列表項目
+        formatted = formatted.replace(/^\s{2,}[-•]\s+(.+)$/gm, 
+            '<div class="gpt-sub-bullet"><span class="sub-bullet">◦</span> $1</div>');
+        
+        // 處理數字列表
+        formatted = formatted.replace(/^(\d+)\.\s+([^：:\n]+)$/gm, 
+            '<div class="gpt-numbered-item"><span class="number">$1.</span> $2</div>');
+        
+        // 處理粗體
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // 處理行內代碼
+        formatted = formatted.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+        
+        // 處理代碼塊
+        formatted = formatted.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
+            return `<pre class="code-block"><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`;
+        });
+        
+        // 處理段落和空行
+        const lines = formatted.split('\n');
+        const processedLines = [];
+        let inParagraph = false;
+        let paragraphContent = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            if (!line) {
+                // 空行，結束當前段落
+                if (paragraphContent.length > 0) {
+                    processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
+                    paragraphContent = [];
+                    inParagraph = false;
+                }
+                continue;
+            }
+            
+            // 檢查是否是已處理的特殊格式
+            if (line.match(/^<[^>]+>/)) {
+                // 先處理未完成的段落
+                if (paragraphContent.length > 0) {
+                    processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
+                    paragraphContent = [];
+                    inParagraph = false;
+                }
+                processedLines.push(line);
+            } else {
+                // 普通文本，加入段落
+                paragraphContent.push(line);
+                inParagraph = true;
+            }
+        }
+        
+        // 處理最後的段落
+        if (paragraphContent.length > 0) {
+            processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
+        }
+        
+        return `<div class="gpt-content">${processedLines.join('\n')}</div>`;
+        
     } catch (error) {
-        return '<p>' + escapeHtml(content) + '</p>';
+        console.error('格式化錯誤:', error);
+        return `<div class="gpt-content"><p>${escapeHtml(content)}</p></div>`;
     }
 }
 
@@ -4849,87 +4300,6 @@ function shouldShowSegmentDialog(mode, sizeInfo) {
     }
     
     return false;
-}
-
-// 快速分析（不分段）
-async function performQuickAnalysis(responseContent) {
-    // 顯示簡單進度
-    const progressDiv = document.createElement('div');
-    progressDiv.className = 'analysis-progress';
-    progressDiv.innerHTML = `
-        <div class="progress-header">
-            <h4>⚡ 正在執行快速分析...</h4>
-            <div class="progress-stats">
-                <span>預計 30 秒內完成</span>
-            </div>
-        </div>
-        <div class="ai-spinner"></div>
-    `;
-    responseContent.appendChild(progressDiv);
-    
-    try {
-        const response = await fetch('/smart-analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: filePath,
-                content: fileContent,
-                mode: 'quick',  // 強制快速模式
-                model: selectedModel,
-                force_single_analysis: true  // 新增：強制單次分析
-            })
-        });
-        
-        const data = await response.json();
-        
-        progressDiv.remove();
-        
-        if (data.success) {
-            displaySmartAnalysisResult(data);
-        } else {
-            throw new Error(data.error || '快速分析失敗');
-        }
-        
-    } catch (error) {
-        progressDiv.remove();
-        throw error;
-    }
-}
-
-// 執行一般分析
-async function performAnalysis(responseContent, sizeInfo) {
-    // 創建進度顯示
-    const progressDiv = createAnalysisProgress();
-    responseContent.appendChild(progressDiv);
-    
-    try {
-        const response = await fetch('/smart-analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: filePath,
-                content: fileContent,
-                mode: selectedAnalysisMode,
-                model: selectedModel,
-                enable_thinking: document.getElementById('enableDeepThinking')?.checked,
-                expected_segments: sizeInfo.suggested_segments  // 傳遞預期的段數
-            })
-        });
-        
-        const data = await response.json();
-        
-        progressDiv.remove();
-        
-        if (data.success) {
-            displaySmartAnalysisResult(data);
-        } else {
-            throw new Error(data.error || '分析失敗');
-        }
-        
-    } catch (error) {
-        progressDiv.remove();
-        throw error;
-    }
 }
 
 // 獲取分析模式標題
@@ -5090,70 +4460,63 @@ function createStructuredAnalysisDisplay(content) {
 function parseAnalysisContent(content) {
     const sections = [];
     
-    // 定義區段模式和對應的圖標
+    // 定義區段模式和對應的圖標（ChatGPT 風格）
     const sectionPatterns = [
-        { pattern: /問題摘要[:：]/i, icon: '📋', title: '問題摘要' },
-        { pattern: /根本原因[:：]/i, icon: '🎯', title: '根本原因' },
-        { pattern: /技術細節[:：]/i, icon: '🔧', title: '技術細節' },
-        { pattern: /影響評估[:：]/i, icon: '⚠️', title: '影響評估' },
-        { pattern: /解決方案[:：]/i, icon: '💡', title: '解決方案' },
-        { pattern: /立即措施[:：]/i, icon: '🚨', title: '立即措施' },
-        { pattern: /短期方案[:：]/i, icon: '📅', title: '短期方案' },
-        { pattern: /長期優化[:：]/i, icon: '🎯', title: '長期優化' },
-        { pattern: /預防措施[:：]/i, icon: '🛡️', title: '預防措施' },
-        { pattern: /關鍵發現[:：]/i, icon: '🔍', title: '關鍵發現' },
-        { pattern: /堆棧分析[:：]/i, icon: '📚', title: '堆棧分析' },
-        { pattern: /記憶體狀態[:：]/i, icon: '💾', title: '記憶體狀態' }
+        { pattern: /^🔍\s*(.+?)[:：]?$/m, icon: '🔍', title: null },
+        { pattern: /^🎯\s*(.+?)[:：]?$/m, icon: '🎯', title: null },
+        { pattern: /^📋\s*(.+?)[:：]?$/m, icon: '📋', title: null },
+        { pattern: /^💡\s*(.+?)[:：]?$/m, icon: '💡', title: null },
+        { pattern: /^⚠️\s*(.+?)[:：]?$/m, icon: '⚠️', title: null },
+        { pattern: /^🚨\s*(.+?)[:：]?$/m, icon: '🚨', title: null },
+        { pattern: /^🛡️\s*(.+?)[:：]?$/m, icon: '🛡️', title: null },
+        { pattern: /^📊\s*(.+?)[:：]?$/m, icon: '📊', title: null },
+        { pattern: /^🔧\s*(.+?)[:：]?$/m, icon: '🔧', title: null },
+        { pattern: /^💾\s*(.+?)[:：]?$/m, icon: '💾', title: null },
     ];
     
-    // 分割內容
-    const lines = content.split('\n');
-    let currentSection = null;
-    let currentContent = [];
+    // 使用更智能的分段方式
+    let currentPos = 0;
+    const contentLength = content.length;
     
-    lines.forEach(line => {
-        let foundSection = false;
+    while (currentPos < contentLength) {
+        let found = false;
+        let nearestMatch = null;
+        let nearestPos = contentLength;
         
-        // 檢查是否是新的區段
-        for (const { pattern, icon, title } of sectionPatterns) {
-            if (pattern.test(line)) {
-                // 保存前一個區段
-                if (currentSection) {
-                    sections.push({
-                        ...currentSection,
-                        content: currentContent.join('\n')
-                    });
-                }
-                
-                // 開始新區段
-                currentSection = { icon, title };
-                currentContent = [];
-                foundSection = true;
-                
-                // 提取標題後的內容
-                const contentAfterTitle = line.replace(pattern, '').trim();
-                if (contentAfterTitle) {
-                    currentContent.push(contentAfterTitle);
-                }
-                break;
+        // 尋找下一個區段
+        for (const { pattern, icon } of sectionPatterns) {
+            const match = content.slice(currentPos).match(pattern);
+            if (match && match.index < nearestPos) {
+                nearestMatch = {
+                    match: match,
+                    icon: icon,
+                    title: match[1],
+                    position: currentPos + match.index
+                };
+                nearestPos = match.index;
+                found = true;
             }
         }
         
-        // 如果不是新區段，添加到當前內容
-        if (!foundSection && currentSection) {
-            currentContent.push(line);
+        if (found && nearestMatch) {
+            // 提取這個區段的內容
+            const nextSectionStart = findNextSectionStart(content, nearestMatch.position + nearestMatch.match[0].length, sectionPatterns);
+            const sectionContent = content.slice(nearestMatch.position + nearestMatch.match[0].length, nextSectionStart).trim();
+            
+            sections.push({
+                icon: nearestMatch.icon,
+                title: nearestMatch.title,
+                content: sectionContent
+            });
+            
+            currentPos = nextSectionStart;
+        } else {
+            // 沒有找到更多區段
+            break;
         }
-    });
-    
-    // 保存最後一個區段
-    if (currentSection) {
-        sections.push({
-            ...currentSection,
-            content: currentContent.join('\n')
-        });
     }
     
-    // 如果沒有識別到任何區段，創建一個默認區段
+    // 如果沒有找到任何區段，將整個內容作為一個區段
     if (sections.length === 0) {
         sections.push({
             icon: '📄',
@@ -5165,30 +4528,85 @@ function parseAnalysisContent(content) {
     return sections;
 }
 
+function findNextSectionStart(content, fromIndex, patterns) {
+    let nearestPos = content.length;
+    
+    for (const { pattern } of patterns) {
+        const match = content.slice(fromIndex).match(pattern);
+        if (match && fromIndex + match.index < nearestPos) {
+            nearestPos = fromIndex + match.index;
+        }
+    }
+    
+    return nearestPos;
+}
+
 // 格式化區段內容
 function formatSectionContent(content) {
     if (!content) return '';
     
-    // 將列表項轉換為 HTML
-    let formatted = content
-        .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
-        .replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\s*)+/g, '<ul class="section-list">$&</ul>')
+    // 處理代碼塊
+    content = content.replace(/```([\s\S]*?)```/g, '<pre class="code-block"><code>$1</code></pre>');
+    
+    // 處理編號列表 (1. 2. 3. 等)
+    content = content.replace(/^(\d+)\.\s+(.+)$/gm, (match, num, text) => {
+        return `<li class="numbered-item" data-number="${num}">${text}</li>`;
+    });
+    
+    // 處理無序列表
+    content = content.replace(/^\s*[-•]\s+(.+)$/gm, '<li class="bullet-item">$1</li>');
+    
+    // 將連續的列表項包裝起來
+    content = content.replace(/(<li class="numbered-item"[^>]*>.*?<\/li>\s*)+/g, 
+        '<ol class="formatted-list numbered">$&</ol>');
+    content = content.replace(/(<li class="bullet-item">.*?<\/li>\s*)+/g, 
+        '<ul class="formatted-list bullet">$&</ul>');
+    
+    // 處理粗體和代碼
+    content = content
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
+        .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    
+    // 處理子標題 (##, ###)
+    content = content.replace(/^###\s+(.+)$/gm, '<h4 class="sub-heading">$1</h4>');
+    content = content.replace(/^##\s+(.+)$/gm, '<h3 class="sub-heading">$1</h3>');
     
     // 處理段落
-    const paragraphs = formatted.split('\n\n');
-    formatted = paragraphs
-        .map(p => p.trim())
-        .filter(p => p)
-        .map(p => {
-            if (p.startsWith('<ul') || p.startsWith('<ol')) {
-                return p;
+    const lines = content.split('\n');
+    let formatted = '';
+    let inParagraph = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        if (!line) {
+            if (inParagraph) {
+                formatted += '</p>';
+                inParagraph = false;
             }
-            return `<p>${p}</p>`;
-        })
-        .join('\n');
+            continue;
+        }
+        
+        // 如果是 HTML 標籤開頭，直接添加
+        if (line.startsWith('<')) {
+            if (inParagraph) {
+                formatted += '</p>';
+                inParagraph = false;
+            }
+            formatted += line + '\n';
+        } else {
+            // 否則作為段落處理
+            if (!inParagraph) {
+                formatted += '<p class="formatted-paragraph">';
+                inParagraph = true;
+            }
+            formatted += line + ' ';
+        }
+    }
+    
+    if (inParagraph) {
+        formatted += '</p>';
+    }
     
     return formatted;
 }

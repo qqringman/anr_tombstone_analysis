@@ -202,119 +202,185 @@ class AndroidLogAnalyzer:
         return '\n'.join(memory_maps[:500])  # 限制長度
     
     def generate_smart_prompts(self, sections: Dict[str, str], log_type: LogType, 
-                              analysis_mode: str = 'comprehensive') -> List[Dict[str, str]]:
+                          analysis_mode: str = 'comprehensive') -> List[Dict[str, str]]:
         """生成智能分析提示詞"""
         prompts = []
         
-        if analysis_mode == 'quick':
-            # 快速分析：只分析最關鍵的部分
-            if log_type == LogType.ANR:
-                prompt = self._generate_anr_quick_prompt(sections)
-            else:
-                prompt = self._generate_tombstone_quick_prompt(sections)
-            prompts.append(prompt)
-            
-        elif analysis_mode == 'comprehensive':
-            # 全面分析：分段深入分析
-            if log_type == LogType.ANR:
-                prompts.extend(self._generate_anr_comprehensive_prompts(sections))
-            else:
-                prompts.extend(self._generate_tombstone_comprehensive_prompts(sections))
-                
-        elif analysis_mode == 'max_tokens':
-            # 最大 token 分析：在 token 限制內盡可能分析
-            prompt = self._generate_max_token_prompt(sections, log_type)
+        if analysis_mode == 'auto':
+            # 智能模式：平衡且實用
+            prompt = {
+                'system': f"""你是 Android {log_type.value} 分析專家。請提供智能、實用的分析。
+
+    重點關注：
+    1. 快速定位問題根源
+    2. 提供可執行的解決方案
+    3. 預測潛在風險
+
+    格式要求：
+    - 使用簡潔的要點
+    - 突出關鍵信息
+    - 提供優先級建議""",
+                'user': f"""
+    分析此 {log_type.value} 日誌並提供：
+
+    1. **問題診斷**（最重要的3個發現）
+    2. **根本原因**（1-2句話說明）
+    3. **立即行動**（按優先級排序）
+    4. **風險評估**（如果不處理會怎樣）
+
+    重點查找：
+    - 發生問題的 Process 名稱
+    - Main thread 的 backtrace
+    - 卡住或崩潰的具體原因
+
+    日誌內容：
+    {self._combine_sections_smart(sections)}
+    """
+            }
             prompts.append(prompt)
         
         return prompts
     
     def _generate_anr_quick_prompt(self, sections: Dict[str, str]) -> Dict[str, str]:
         """生成 ANR 快速分析提示詞"""
-        critical_info = f"""
-ANR 日誌快速分析：
+        # 收集所有非空的部分
+        content_parts = []
+        
+        if sections.get('header') and sections['header'].strip():
+            content_parts.append(f"=== ANR 標題信息 ===\n{sections['header']}")
+        
+        if sections.get('main_thread') and sections['main_thread'].strip():
+            content_parts.append(f"=== 主線程狀態 ===\n{sections['main_thread'][:1000]}")
+        
+        if sections.get('cpu_info') and sections['cpu_info'].strip():
+            content_parts.append(f"=== CPU 使用情況 ===\n{sections['cpu_info'][:500]}")
+        
+        if sections.get('deadlocks') and sections['deadlocks'].strip():
+            content_parts.append(f"=== 死鎖檢測 ===\n{sections['deadlocks'][:1000]}")
+        
+        # 如果沒有任何內容，返回一個基本的提示
+        if not content_parts:
+            critical_info = "無法提取關鍵信息，請基於您的專業知識提供一般性的 ANR 分析指導。"
+        else:
+            critical_info = '\n\n'.join(content_parts)
+        
+        # 確保 critical_info 不為空
+        if not critical_info.strip():
+            critical_info = "ANR 日誌內容為空或無法解析。"
+        
+        user_content = f"""ANR 日誌快速分析：
 
-{sections.get('header', '')}
+    {critical_info}
 
-主線程狀態：
-{sections.get('main_thread', '')[:1000]}
+    請快速分析：
+    1. ANR 的直接原因
+    2. 是否存在死鎖
+    3. 主線程被什麼阻塞
+    4. 立即可採取的修復措施
 
-CPU 使用情況：
-{sections.get('cpu_info', '')[:500]}
-
-死鎖檢測：
-{sections.get('deadlocks', '')[:1000]}
-
-請快速分析：
-1. ANR 的直接原因
-2. 是否存在死鎖
-3. 主線程被什麼阻塞
-4. 立即可採取的修復措施
-"""
+    如果能識別到具體的 Process 和 backtrace，請指出。"""
         
         return {
             'system': "你是 Android ANR 專家。請提供簡潔準確的分析。",
-            'user': critical_info
+            'user': user_content
         }
     
     def _generate_tombstone_quick_prompt(self, sections: Dict[str, str]) -> Dict[str, str]:
         """生成 Tombstone 快速分析提示詞"""
-        critical_info = f"""
-Tombstone 崩潰分析：
+        # 收集所有非空的部分
+        content_parts = []
+        
+        if sections.get('signal_info') and sections['signal_info'].strip():
+            content_parts.append(f"=== 信號信息 ===\n{sections['signal_info']}")
+        
+        if sections.get('abort_message') and sections['abort_message'].strip():
+            content_parts.append(f"=== 中止消息 ===\n{sections['abort_message']}")
+        
+        if sections.get('backtrace') and sections['backtrace'].strip():
+            content_parts.append(f"=== 關鍵堆棧 ===\n{sections['backtrace'][:1500]}")
+        
+        # 如果沒有任何內容，返回一個基本的提示
+        if not content_parts:
+            critical_info = "無法提取關鍵信息，請基於您的專業知識提供一般性的崩潰分析指導。"
+        else:
+            critical_info = '\n\n'.join(content_parts)
+        
+        # 確保 critical_info 不為空
+        if not critical_info.strip():
+            critical_info = "Tombstone 日誌內容為空或無法解析。"
+        
+        user_content = f"""Tombstone 崩潰分析：
 
-{sections.get('signal_info', '')}
-{sections.get('abort_message', '')}
+    {critical_info}
 
-關鍵堆棧：
-{sections.get('backtrace', '')[:1500]}
+    請快速分析：
+    1. 崩潰類型和原因
+    2. 崩潰發生在哪個函數
+    3. 是否是空指針/內存問題
+    4. 修復建議
 
-請快速分析：
-1. 崩潰類型和原因
-2. 崩潰發生在哪個函數
-3. 是否是空指針/內存問題
-4. 修復建議
-"""
+    如果能識別到具體的 Process 和 backtrace，請指出。"""
         
         return {
             'system': "你是 Android 崩潰分析專家。請提供精確的崩潰原因分析。",
-            'user': critical_info
+            'user': user_content
         }
     
     def _generate_anr_comprehensive_prompts(self, sections: Dict[str, str]) -> List[Dict[str, str]]:
         """生成 ANR 全面分析提示詞組"""
         prompts = []
         
-        # 第一部分：線程狀態分析
+        # 深度分析專用提示
         prompts.append({
-            'system': "分析 Android ANR 的線程狀態和鎖定情況。",
+            'system': """你是 Android ANR 深度分析專家。請提供極其詳細的技術分析。
+    使用以下格式：
+
+    ## 執行摘要
+    [2-3段的問題概述]
+
+    ## 技術分析
+
+    ### 1. 問題識別
+    [詳細列出所有發現的問題]
+
+    ### 2. 根本原因分析
+    [深入分析每個問題的根源]
+    - 指出發生 ANR 的 Process
+    - 列出該 Process main thread 的完整 backtrace
+    - 分析 main thread 卡住的具體原因
+
+    ### 3. 影響評估
+    [評估問題的嚴重性和影響範圍]
+
+    ### 4. 技術細節
+    [堆棧分析、內存狀態、線程狀態等]
+
+    ## 解決方案
+
+    ### 立即措施
+    1. [具體步驟1]
+    2. [具體步驟2]
+
+    ### 短期改進
+    - [1-2週內的改進計劃]
+
+    ### 長期優化
+    - [架構級別的改進建議]
+
+    ## 預防措施
+    [如何避免類似問題]
+    """,
             'user': f"""
-分析以下線程信息，找出死鎖或阻塞原因：
+    分析以下 ANR 日誌：
 
-{sections.get('main_thread', '')}
+    {sections.get('header', '')}
+    {sections.get('main_thread', '')}
+    {sections.get('key_threads', '')}
+    {sections.get('deadlocks', '')}
+    {sections.get('cpu_info', '')}
 
-關鍵線程：
-{sections.get('key_threads', '')}
-
-請識別：
-1. 哪些線程被阻塞
-2. 鎖的持有和等待關係
-3. 是否存在死鎖循環
-"""
-        })
-        
-        # 第二部分：系統資源分析
-        prompts.append({
-            'system': "分析 ANR 時的系統資源使用情況。",
-            'user': f"""
-分析系統資源：
-
-{sections.get('cpu_info', '')}
-{sections.get('memory_info', '')}
-
-請分析：
-1. CPU 使用是否異常
-2. 內存壓力情況
-3. 是否有資源耗盡
-"""
+    請提供深度技術分析。
+    """
         })
         
         return prompts
@@ -335,9 +401,12 @@ Tombstone 崩潰分析：
 {sections.get('registers', '')[:1000]}
 
 請分析：
-1. 崩潰信號的含義
-2. 崩潰地址的意義
-3. 可能的原因（空指針/越界/其他）
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 崩潰信號的含義
+5. 崩潰地址的意義
+6. 可能的原因（空指針/越界/其他）
 """
         })
         
@@ -352,9 +421,12 @@ Tombstone 崩潰分析：
 {sections.get('memory_map', '')}
 
 請分析：
-1. 崩潰發生在哪個函數
-2. 調用鏈路
-3. 是否涉及系統庫或應用代碼
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 崩潰發生在哪個函數
+5. 調用鏈路
+6. 是否涉及系統庫或應用代碼
 """
         })
         
@@ -403,12 +475,15 @@ Tombstone 崩潰分析：
             'system': f"你是 Android {log_type.value} 分析專家。請提供全面深入的分析。",
             'user': f"""
 請分析以下 {log_type.value} 日誌，提供：
-1. 問題摘要（2-3句話）
-2. 根本原因分析（詳細）
-3. 影響範圍
-4. 證據鏈（引用日誌內容）
-5. 修復方案（短期和長期）
-6. 預防措施
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 問題摘要（2-3句話）
+5. 根本原因分析（詳細）
+6. 影響範圍
+7. 證據鏈（引用日誌內容）
+8. 修復方案（短期和長期）
+9. 預防措施
 
 日誌內容：
 {combined_content}

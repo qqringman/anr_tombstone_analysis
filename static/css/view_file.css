@@ -3338,4 +3338,554 @@ a.btn {
     display: none;
 }
 
+/* ========================================================================= */
+
+/* ChatGPT 風格美化 */
+.gpt-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', sans-serif;
+    line-height: 1.75;
+    color: #e0e0e0;
+    padding: 8px 0;
+}
+
+/* 主標題樣式 */
+.gpt-h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 28px 0 16px 0;
+    color: #ffffff;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.gpt-h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 24px 0 12px 0;
+    color: #ffffff;
+}
+
+.gpt-h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 20px 0 10px 0;
+    color: #d4d4d4;
+}
+
+/* 編號標題 */
+.gpt-numbered-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 24px 0 16px 0;
+    color: #ffffff;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.gpt-numbered-title .title-number {
+    color: #667eea;
+    flex-shrink: 0;
+}
+
+/* 圖標標題 */
+.gpt-icon-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 24px 0 16px 0;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gpt-icon-title .title-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+/* 段落 */
+.gpt-paragraph {
+    margin: 14px 0;
+    color: #d4d4d4;
+    line-height: 1.75;
+}
+
+/* 編號列表 */
+.gpt-numbered-item {
+    display: flex;
+    margin: 10px 0;
+    gap: 12px;
+}
+
+.gpt-numbered-item .number {
+    color: #667eea;
+    font-weight: 600;
+    flex-shrink: 0;
+    min-width: 24px;
+}
+
+/* 子編號 */
+.gpt-sub-numbered {
+    display: flex;
+    margin: 8px 0 8px 24px;
+    gap: 12px;
+    font-size: 15px;
+}
+
+.gpt-sub-numbered .sub-number {
+    color: #8b92f8;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+/* 項目符號列表 */
+.gpt-bullet-item {
+    display: flex;
+    margin: 8px 0;
+    gap: 8px;
+}
+
+.gpt-bullet-item .bullet {
+    color: #969696;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* 子項目 */
+.gpt-sub-bullet {
+    display: flex;
+    margin: 6px 0 6px 24px;
+    gap: 8px;
+    font-size: 15px;
+}
+
+.gpt-sub-bullet .sub-bullet {
+    color: #696969;
+    flex-shrink: 0;
+}
+
+/* 代碼 */
+.inline-code {
+    background: rgba(45, 45, 48, 0.8);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+    color: #ce9178;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+}
+
+.code-block code {
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 強調文字 */
+.gpt-content strong {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* 分析結果容器美化 */
+.ai-analysis-content {
+    padding: 12px 0;
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+    .gpt-numbered-title,
+    .gpt-icon-title {
+        font-size: 16px;
+    }
+    
+    .gpt-paragraph {
+        font-size: 14px;
+    }
+}
+
+/* ============================================================ */
+
+/* 分段分析結果樣式 */
+.segmented-analysis-result {
+    padding: 16px 0;
+}
+
+.final-analysis-section {
+    margin-bottom: 24px;
+}
+
+.final-analysis-section .section-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 段落詳情 */
+.segments-details {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.segments-summary {
+    padding: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #d4d4d4;
+    background: rgba(255, 255, 255, 0.03);
+    transition: background 0.2s;
+}
+
+.segments-summary:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.segments-summary .summary-icon {
+    font-size: 18px;
+}
+
+.segments-container {
+    padding: 16px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.segment-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.segment-item:last-child {
+    margin-bottom: 0;
+}
+
+.segment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.segment-number {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.segment-status {
+    font-size: 14px;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.segment-status.success {
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.segment-status.error {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.segment-content {
+    padding: 16px;
+}
+
+.segment-item.error .segment-content {
+    color: #ff9800;
+}
+
+/* 滾動條美化 */
+.segments-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.segments-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.segments-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.segments-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+
+/* 統一的彈跳視窗樣式（跟匯出對話一樣） */
+.modal-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    z-index: 9998 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    backdrop-filter: blur(4px);
+}
+
+.modal-dialog {
+    background: #252526 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    overflow: hidden;
+}
+
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.modal-header h4 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #969696;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-body p {
+    margin: 0 0 16px 0;
+    color: #d4d4d4;
+    line-height: 1.6;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid #3e3e42;
+}
+
+/* 按鈕樣式 */
+.modal-footer .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    outline: none;
+}
+
+.modal-footer .btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.modal-footer .btn-primary:hover {
+    background: #5a67d8;
+    transform: translateY(-1px);
+}
+
+.modal-footer .btn-secondary {
+    background: #3e3e42;
+    color: #d4d4d4;
+}
+
+.modal-footer .btn-secondary:hover {
+    background: #4e4e52;
+}
+
+/* 對話框資訊樣式 */
+.dialog-info {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+.info-label {
+    color: #969696;
+}
+
+.info-value {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* 動畫效果 */
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 模型選擇網格 */
+.model-popup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.model-card {
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.model-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(102, 126, 234, 0.5);
+}
+
+.model-card.selected {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: #667eea;
+}
+
+.model-card-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.model-card-desc {
+    font-size: 13px;
+    color: #969696;
+    line-height: 1.5;
+}
+
+.model-card-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.model-card-badge.new {
+    background: #4caf50;
+    color: white;
+}
+
+/* 確保在全屏模式下也能正常顯示 */
+.fullscreen-mode .modal-backdrop,
+.fullscreen-mode .modal-dialog {
+    z-index: 2147483647 !important;
+}
+
+/* 響應式設計 */
+@media (max-width: 600px) {
+    .modal-dialog {
+        max-width: 95% !important;
+        margin: 10px !important;
+    }
+    
+    .model-popup-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 確保模型彈窗在最上層 */
+.model-popup,
+#modelPopup {
+    z-index: 999999 !important;
+}
+
+.modal-backdrop {
+    z-index: 999998 !important;
+}
+
+/* 全屏模式下的特殊處理 */
+.right-panel.fullscreen-mode .modal-backdrop {
+    position: absolute !important;
+    z-index: 999998 !important;
+}
+
+.right-panel.fullscreen-mode .model-popup,
+.right-panel.fullscreen-mode #modelPopup {
+    position: absolute !important;
+    z-index: 999999 !important;
+}
+
 

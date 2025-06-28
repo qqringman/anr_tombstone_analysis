@@ -600,7 +600,11 @@ def build_segment_prompt_fast(segment, segment_num, total_segments, file_type, q
 請提供：
 1. 主要問題（1-2句）
 2. 關鍵證據（1-2個）
-3. 是否需要其他段落資訊"""
+3. 是否需要其他段落資訊
+4. 指出發生 ANR/Tombstone 的 Process
+5. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+6. 找出 ANR/Tombstone 卡住可能的原因
+"""
     
     return {
         'system': system_prompt,
@@ -627,43 +631,81 @@ def analyze_single_request(file_path, content, file_type, selected_model,
             truncated = True
             print(f"Content truncated from {original_length} to {len(content)} chars")
         
-        # 根據文件類型和問題類型構建提示詞
-        if is_custom_question:
-            system_prompt = f"""你是一位 Android 系統專家，擅長分析 Android 日誌和解決系統問題。
-用戶提供了一個檔案的內容，並基於這個檔案提出了問題。
+        # 構建基礎系統提示詞
+        base_system_prompt = """你是一位 Android 系統專家，擅長分析 Android 日誌和解決系統問題。
 
 分析時請遵循以下原則：
-1. 仔細閱讀提供的檔案內容
-2. 根據檔案內容準確回答用戶的問題
+1. 仔細閱讀提供的內容
+2. 根據內容準確分析問題
 3. 提供具體、可操作的建議
-4. 如果檔案中沒有足夠的信息來回答問題，請明確指出
-5. 引用檔案中的具體內容來支持你的分析
+4. 使用結構化的格式呈現結果
 
-請用繁體中文回答，並使用結構化的格式。"""
+請用繁體中文回答。"""
+        
+        # 根據文件類型和問題類型構建提示詞
+        if is_custom_question:
+            # 自定義問題模式
+            system_prompt = base_system_prompt + f"""
+
+用戶提供了一個檔案的內容，並基於這個檔案提出了問題。
+請根據檔案內容準確回答用戶的問題。
+如果檔案中沒有足夠的信息來回答問題，請明確指出。"""
+            
+            # 用戶消息
+            user_message = f"""使用者問題：{original_question}
+
+檔案內容：
+{content}"""
+            
         elif file_type == 'ANR':
-            system_prompt = f"""你是一位 Android 系統專家，擅長分析 ANR (Application Not Responding) 日誌。
-請分析這個 ANR 日誌並提供：
+            # ANR 分析模式
+            system_prompt = base_system_prompt + f"""
+
+你現在要分析一個 ANR (Application Not Responding) 日誌。
+
+請提供以下分析：
 1. 問題摘要：簡潔說明發生了什麼
 2. 根本原因：識別導致 ANR 的主要原因
-3. 影響的進程：哪個應用或服務受到影響
-4. 關鍵堆棧信息：最重要的堆棧追蹤部分
+3. 技術分析：
+   - 識別發生 ANR 的 Process 名稱
+   - 如果可能，列出該 Process main thread 的 backtrace
+   - 分析 main thread 卡住的具體原因
+4. 受影響的組件：哪個應用或服務受到影響
 5. 建議解決方案：如何修復這個問題
+6. 預防措施：如何避免未來發生類似問題"""
+            
+            user_message = content
+            
+        elif file_type == 'Tombstone':
+            # Tombstone 分析模式
+            system_prompt = base_system_prompt + f"""
 
-請用繁體中文回答，並使用結構化的格式。"""
-        else:
-            system_prompt = f"""你是一位 Android 系統專家，擅長分析 Tombstone 崩潰日誌。
-請分析這個 Tombstone 日誌並提供：
+你現在要分析一個 Tombstone 崩潰日誌。
+
+請提供以下分析：
 1. 崩潰摘要：簡潔說明發生了什麼類型的崩潰
 2. 崩潰原因：信號類型和觸發原因
-3. 影響的進程：哪個應用或服務崩潰了
-4. 關鍵堆棧信息：定位問題的關鍵堆棧幀
+3. 技術分析：
+   - 識別發生崩潰的 Process 名稱
+   - 如果可能，列出崩潰時 main thread 的 backtrace
+   - 分析崩潰的具體原因（如空指針、記憶體錯誤等）
+4. 崩潰位置：定位問題的關鍵堆棧幀
 5. 可能的修復方向：如何避免這類崩潰
+6. 相關資訊：其他可能有用的調試信息"""
+            
+            user_message = content
+            
+        else:
+            # 其他類型或通用分析
+            system_prompt = base_system_prompt + """
 
-請用繁體中文回答，並使用結構化的格式。"""
+請分析提供的日誌內容，識別問題並提供解決建議。"""
+            
+            user_message = content
         
         # 如果內容被截取，在提示中說明
         if truncated:
-            system_prompt += f"\n\n注意：由於檔案過大，只提供了前 {len(content)} 個字符（原始大小：{original_length} 字符）。"
+            system_prompt += f"\n\n注意：由於檔案過大，只提供了前 {len(content)} 個字符（原始大小：{original_length} 字符）。分析結果可能不完整。"
         
         # 調用 Claude API
         message_params = {
@@ -674,7 +716,7 @@ def analyze_single_request(file_path, content, file_type, selected_model,
             "messages": [
                 {
                     "role": "user",
-                    "content": content
+                    "content": user_message
                 }
             ]
         }
@@ -701,18 +743,36 @@ def analyze_single_request(file_path, content, file_type, selected_model,
             'original_length': original_length,
             'analyzed_length': len(content) if truncated else original_length,
             'model': selected_model,
-            'thinking': thinking_text
+            'thinking': thinking_text,
+            'file_type': file_type,
+            'is_custom_question': is_custom_question
         })
         
     except anthropic.APIError as e:
         error_message = str(e)
+        
+        # 處理特定的 API 錯誤
+        if e.status_code == 429:
+            error_message = "API 速率限制，請稍後再試"
+        elif e.status_code == 401:
+            error_message = "API 認證失敗，請檢查 API key"
+        elif e.status_code == 400:
+            error_message = "請求格式錯誤"
+        
         return jsonify({
             'error': f'Claude API 錯誤: {error_message}',
-            'details': '請檢查 API key 是否有效'
+            'details': '請檢查 API key 是否有效',
+            'status_code': e.status_code
         }), 500
+        
     except Exception as e:
+        print(f"Unexpected error in analyze_single_request: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         return jsonify({
-            'error': f'分析錯誤: {str(e)}'
+            'error': f'分析錯誤: {str(e)}',
+            'type': type(e).__name__
         }), 500
         
 def build_segment_prompt(segment, segment_num, total_segments, file_type, question, previous_context):
@@ -730,18 +790,24 @@ def build_segment_prompt(segment, segment_num, total_segments, file_type, questi
         base_system += """
         
 請特別注意：
-1. 這個段落中的堆疊追蹤信息
-2. 線程狀態和鎖定情況
-3. 主線程是否被阻塞
-4. 任何死鎖或資源爭用的跡象"""
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 這個段落中的堆疊追蹤信息
+5. 線程狀態和鎖定情況
+6. 主線程是否被阻塞
+7. 任何死鎖或資源爭用的跡象"""
     elif file_type == 'Tombstone':
         base_system += """
         
 請特別注意：
-1. 崩潰的信號類型和地址
-2. 堆疊追蹤的關鍵函數
-3. 寄存器狀態
-4. 可能的記憶體問題"""
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 崩潰的信號類型和地址
+5. 堆疊追蹤的關鍵函數
+6. 寄存器狀態
+7. 可能的記憶體問題"""
     
     # 用戶提示
     user_prompt = f"""=== 檔案段落 {segment_num}/{total_segments} ===
@@ -753,9 +819,12 @@ def build_segment_prompt(segment, segment_num, total_segments, file_type, questi
 問題：{question}
 
 請分析這個段落，並注意：
-1. 如果這不是第一段，請考慮之前的發現
-2. 如果還有後續段落，請指出需要在後續段落中尋找的信息
-3. 提供這個段落的關鍵發現摘要"""
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 如果這不是第一段，請考慮之前的發現
+5. 如果還有後續段落，請指出需要在後續段落中尋找的信息
+6. 提供這個段落的關鍵發現摘要"""
     
     return {
         'system': base_system,
@@ -994,9 +1063,12 @@ def build_segment_prompt_optimized(segment, segment_num, total_segments, file_ty
 問題：{question}
 
 請提供：
-1. 關鍵發現
-2. 問題線索
-3. 需要後續段落確認的事項"""
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 關鍵發現
+5. 問題線索
+6. 需要後續段落確認的事項"""
     
     return {
         'system': base_system,
@@ -1118,20 +1190,23 @@ def synthesize_segments_v2(segments, original_question, model, client):
 {'='*50}
 
 請提供：
-1. **問題總覽**：用 2-3 句話概括整個問題
-2. **根本原因分析**：詳細說明導致問題的根本原因（至少 500 字）
-3. **技術細節**：
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. **問題總覽**：用 2-3 句話概括整個問題
+5. **根本原因分析**：詳細說明導致問題的根本原因（至少 500 字）
+6. **技術細節**：
    - 涉及的進程和線程
    - 關鍵的堆棧信息
    - 內存/資源使用情況
    - 時間線分析
-4. **影響評估**：這個問題的嚴重程度和潛在影響
-5. **解決方案**：
+7. **影響評估**：這個問題的嚴重程度和潛在影響
+8. **解決方案**：
    - 立即措施（緊急修復）
    - 短期方案（1-2 週內）
    - 長期優化（架構改進）
-6. **預防措施**：如何避免類似問題再次發生
-7. **需要進一步調查的事項**
+9. **預防措施**：如何避免類似問題再次發生
+10. **需要進一步調查的事項**
 
 請確保回應至少 4000 字，提供詳細和有價值的分析。"""
     
@@ -1414,12 +1489,28 @@ def smart_analyze():
         force_single_analysis = data.get('force_single_analysis', False)
         skip_size_check = data.get('skip_size_check', False)
         
+        # 添加內容檢查
+        if not content:
+            return jsonify({
+                'error': '檔案內容為空',
+                'success': False,
+                'analysis_mode': analysis_mode
+            }), 400
+        
         print(f"Smart analyze - mode: {analysis_mode}, file size: {len(content)}")
         print(f"Force single: {force_single_analysis}, Skip size check: {skip_size_check}")
+        print(f"Content preview: {content[:200]}...")  # 打印內容預覽
         
         # 創建分析器
         analyzer = AndroidLogAnalyzer()
-        log_type = analyzer.detect_log_type(content)
+        
+        # 檢測日誌類型
+        try:
+            log_type = analyzer.detect_log_type(content)
+            print(f"檢測到的日誌類型: {log_type}")
+        except Exception as e:
+            print(f"檢測日誌類型失敗: {str(e)}")
+            log_type = LogType.UNKNOWN
         
         # 記錄開始時間
         start_time = time.time()
@@ -1451,6 +1542,14 @@ def smart_analyze():
         if not result:
             raise Exception("分析未返回結果")
         
+        # 如果結果中有錯誤，返回錯誤響應
+        if result.get('error'):
+            return jsonify({
+                'error': result['error'],
+                'success': False,
+                'analysis_mode': analysis_mode
+            }), 500
+        
         # 計算耗時
         elapsed_time = round(time.time() - start_time, 2)
         
@@ -1474,8 +1573,30 @@ def smart_analyze():
 def perform_quick_analysis(analyzer, content, log_type):
     """執行快速分析"""
     try:
-        # 提取關鍵部分（最多 50KB）
-        key_sections = analyzer.extract_key_sections(content, log_type)
+        print(f"開始快速分析 - 日誌類型: {log_type}, 內容長度: {len(content)}")
+        
+        # 檢查內容是否為空
+        if not content or not content.strip():
+            print("錯誤：檔案內容為空")
+            return {
+                'analysis': '無法分析：檔案內容為空',
+                'log_type': log_type.value if log_type else 'Unknown',
+                'model': 'claude-3-5-haiku-20241022',
+                'is_quick': True,
+                'is_segmented': False,
+                'error': '檔案內容為空'
+            }
+        
+        # 先準備一個基本的分析內容（前 50KB）
+        fallback_content = content[:50000] if len(content) > 50000 else content
+        
+        # 嘗試提取關鍵部分
+        try:
+            key_sections = analyzer.extract_key_sections(content, log_type)
+            print(f"提取到的關鍵部分: {list(key_sections.keys())}")
+        except Exception as e:
+            print(f"提取關鍵部分失敗: {str(e)}")
+            key_sections = {}
         
         # 構建精簡內容
         condensed_content = []
@@ -1487,49 +1608,118 @@ def perform_quick_analysis(analyzer, content, log_type):
         else:
             priority_keys = ['signal_info', 'abort_message', 'backtrace', 'registers']
         
+        # 提取內容
+        has_extracted_content = False
         for key in priority_keys:
-            if key in key_sections and key_sections[key]:
-                section_content = key_sections[key]
+            if key in key_sections and key_sections[key] and key_sections[key].strip():
+                section_content = key_sections[key].strip()
                 if total_chars + len(section_content) < max_chars:
                     condensed_content.append(f"=== {key.upper()} ===\n{section_content}")
                     total_chars += len(section_content)
+                    has_extracted_content = True
+                    print(f"添加了 {key} 部分，長度: {len(section_content)}")
         
-        final_content = '\n\n'.join(condensed_content)
+        # 決定最終內容
+        if has_extracted_content and condensed_content:
+            final_content = '\n\n'.join(condensed_content)
+            print(f"使用提取的內容，總長度: {len(final_content)}")
+        else:
+            # 使用備用內容
+            print("無法提取關鍵部分，使用原始內容")
+            final_content = fallback_content
+            
+            # 如果還是太短，添加一些基本信息
+            if len(final_content) < 100:
+                final_content = f"日誌類型: {log_type.value if log_type else 'Unknown'}\n\n{final_content}"
         
-        # 生成提示
-        prompts = analyzer.generate_smart_prompts(key_sections, log_type, 'quick')
-        prompt = prompts[0] if prompts else {
-            'system': f"你是 Android {log_type.value} 專家。請快速分析並提供關鍵發現。",
-            'user': final_content
-        }
+        # 最終檢查，確保有內容
+        if not final_content or not final_content.strip():
+            print("警告：最終內容為空，使用最小內容")
+            final_content = f"無法提取有效內容。原始檔案長度：{len(content)} 字符"
         
-        # 調用 API
+        print(f"最終內容長度: {len(final_content)}")
+        
+        # 生成分析提示
+        try:
+            prompts = analyzer.generate_smart_prompts(key_sections, log_type, 'quick')
+            if prompts and len(prompts) > 0:
+                prompt = prompts[0]
+            else:
+                prompt = None
+        except Exception as e:
+            print(f"生成提示失敗: {str(e)}")
+            prompt = None
+        
+        # 確保有有效的 prompt
+        if not prompt or not prompt.get('user') or not prompt['user'].strip():
+            print("使用預設 prompt")
+            prompt = {
+                'system': f"你是 Android {log_type.value if log_type else '日誌'} 分析專家。請快速分析並提供關鍵發現。",
+                'user': f"""請分析以下 {log_type.value if log_type else '日誌'} 內容：
+
+{final_content}
+
+請提供：
+1. 主要問題是什麼
+2. 可能的原因
+3. 建議的解決方案"""
+            }
+        else:
+            # 如果 prompt 的 user 部分是空的，補充內容
+            if not prompt['user'].strip():
+                prompt['user'] = final_content
+        
+        # 最後一次檢查
+        if not prompt['user'] or not prompt['user'].strip():
+            raise ValueError("無法生成有效的分析內容")
+        
+        # 調用 Claude API
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-        model = 'claude-3-5-haiku-20241022'
         
-        message = client.messages.create(
-            model=model,
-            max_tokens=2000,
-            temperature=0,
-            system=prompt['system'],
-            messages=[{"role": "user", "content": prompt['user']}]
-        )
+        print(f"準備發送 API 請求:")
+        print(f"- System prompt 長度: {len(prompt.get('system', ''))}")
+        print(f"- User content 長度: {len(prompt.get('user', ''))}")
+        print(f"- User content 前 100 字符: {prompt['user'][:100]}...")
         
-        analysis_text = message.content[0].text if message.content else "無分析結果"
-        
-        return {
-            'analysis': analysis_text,
-            'log_type': log_type.value,
-            'model': model,
-            'is_quick': True,
-            'is_segmented': False,
-            'analyzed_size': total_chars,
-            'original_size': len(content)
-        }
+        try:
+            message = client.messages.create(
+                model='claude-3-5-haiku-20241022',
+                max_tokens=2000,
+                temperature=0,
+                system=prompt['system'],
+                messages=[{"role": "user", "content": prompt['user']}]
+            )
+            
+            analysis_text = message.content[0].text if message.content else "無分析結果"
+            
+            return {
+                'analysis': analysis_text,
+                'log_type': log_type.value if log_type else 'Unknown',
+                'model': 'claude-3-5-haiku-20241022',
+                'is_quick': True,
+                'is_segmented': False,
+                'analyzed_size': len(final_content),
+                'original_size': len(content)
+            }
+            
+        except anthropic.APIError as api_error:
+            print(f"API 錯誤: {str(api_error)}")
+            print(f"API 錯誤詳情: {api_error.response.text if hasattr(api_error, 'response') else 'No response'}")
+            raise
         
     except Exception as e:
         print(f"Quick analysis error: {str(e)}")
-        raise
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            'analysis': f'快速分析失敗: {str(e)}',
+            'log_type': log_type.value if log_type else 'Unknown',
+            'model': 'claude-3-5-haiku-20241022',
+            'is_quick': True,
+            'is_segmented': False,
+            'error': str(e)
+        }
 
 def perform_comprehensive_analysis(analyzer, content, log_type, enable_thinking):
     """執行深度分析"""
@@ -1585,7 +1775,25 @@ def perform_max_tokens_analysis(analyzer, content, log_type):
         
         # 生成提示
         prompts = analyzer.generate_smart_prompts(key_sections, log_type, 'max_tokens')
-        prompt = prompts[0]
+        
+        # 檢查 prompts 是否為空
+        if not prompts or len(prompts) == 0:
+            # 使用預設提示
+            prompt = {
+                'system': f"你是 Android {log_type.value} 分析專家。請提供全面深入的分析。",
+                'user': f"""請分析以下 {log_type.value} 日誌，提供最大化的分析內容：
+
+{content[:int(model_config['max_tokens'] * 2.5 * 0.8)]}
+
+請提供：
+1. 問題摘要（2-3句話）
+2. 根本原因分析（詳細）
+3. 影響範圍
+4. 修復方案（短期和長期）
+5. 預防措施"""
+            }
+        else:
+            prompt = prompts[0]
         
         client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
         
@@ -1607,7 +1815,15 @@ def perform_max_tokens_analysis(analyzer, content, log_type):
         
     except Exception as e:
         print(f"Max tokens analysis error: {str(e)}")
-        raise
+        import traceback
+        traceback.print_exc()
+        return {
+            'analysis': f'最大化分析失敗: {str(e)}',
+            'log_type': log_type.value,
+            'model': model if 'model' in locals() else 'claude-4-sonnet-20250514',
+            'is_segmented': False,
+            'error': str(e)
+        }
 
 
 def perform_auto_analysis(analyzer, content, log_type, enable_thinking):
@@ -2327,9 +2543,12 @@ async def quick_analysis_direct(content, file_path, model):
             temperature=0,
             system="""你是 Android 專家。快速分析提供的關鍵日誌部分。
 請在 30 秒內提供簡潔的分析，包含：
-1. 問題是什麼？（1句話）
-2. 為什麼發生？（1-2句話）
-3. 如何修復？（2-3個要點）
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 問題是什麼？（1句話）
+5. 為什麼發生？（1-2句話）
+6. 如何修復？（2-3個要點）
 
 使用簡潔明瞭的語言，直接給出結論。""",
             messages=[{"role": "user", "content": final_content}]
@@ -2898,9 +3117,12 @@ def generate_anr_segment_prompt(segment: Dict, index: int, total: int) -> Dict[s
 {segment['content'][:50000]}  # 限制長度
 
 請提供：
-1. 這個段落的關鍵發現
-2. 與 ANR 原因的關聯
-3. 需要在其他段落確認的信息
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 這個段落的關鍵發現
+5. 與 ANR 原因的關聯
+6. 需要在其他段落確認的信息
 """
     }
 
@@ -2927,9 +3149,12 @@ def generate_tombstone_segment_prompt(segment: Dict, index: int, total: int) -> 
 {segment['content'][:50000]}
 
 請分析：
-1. 這個段落揭示的崩潰信息
-2. 與崩潰根本原因的關係
-3. 可能的修復方向
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 這個段落揭示的崩潰信息
+5. 與崩潰根本原因的關係
+6. 可能的修復方向
 """
     }
 
@@ -3029,18 +3254,24 @@ def generate_smart_final_report(segment_results: List[Dict], log_type: LogType,
 ANR 分析完成。共分析 {len(successful_segments)}/{len(segment_results)} 個段落。
 
 主要發現：
-- 檢測到的 ANR 類型和嚴重程度
-- 受影響的主要組件
-- 系統資源使用情況
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 檢測到的 ANR 類型和嚴重程度
+5. 受影響的主要組件
+6. 系統資源使用情況
 """
     elif log_type == LogType.TOMBSTONE:
         report['executive_summary'] = f"""
 Tombstone 崩潰分析完成。共分析 {len(successful_segments)}/{len(segment_results)} 個段落。
 
 崩潰概要：
-- 崩潰信號和類型
-- 崩潰位置和調用鏈
-- 內存狀態分析
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 崩潰信號和類型
+5. 崩潰位置和調用鏈
+6. 內存狀態分析
 """
     
     # 整合所有段落的發現
@@ -3268,10 +3499,16 @@ async def quick_analysis_strategy(content, file_path, model):
         
         # 使用簡潔的提示詞
         system_prompt = """你是 Android 系統專家。快速分析日誌，只提供最關鍵的發現。
-限制回答在 500 字以內，包含：
-1. 主要問題（1-2句）
-2. 根本原因（1-2句）
-3. 立即可行的解決方案（2-3點）"""
+限制回答在 2500 字以內，包含：
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 主要問題（1-2句）
+5. 根本原因（1-2句）
+6. 立即可行的解決方案（2-3點）
+7. 指出發生 ANR/Tombstone 的 Process
+8. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+9. 找出 ANR/Tombstone 卡住可能的原因"""
         
         message = client.messages.create(
             model=model,
@@ -3313,11 +3550,14 @@ async def comprehensive_analysis_strategy(content, file_path, model, enable_thin
                 # 深度分析每個段落
                 prompt = f"""
 這是第 {i+1}/{len(segments)} 段。請進行深入分析：
-1. 識別所有潛在問題和異常
-2. 分析根本原因和影響
-3. 提供詳細的技術解釋
-4. 建議短期和長期解決方案
-5. 標注需要進一步調查的線索
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
+4. 識別所有潛在問題和異常
+5. 分析根本原因和影響
+6. 提供詳細的技術解釋
+7. 建議短期和長期解決方案
+8. 標注需要進一步調查的線索
 """
                 
                 message = client.messages.create(
@@ -3511,6 +3751,9 @@ async def deep_single_analysis(content, model, enable_thinking):
 
 ## 2. 根本原因分析
 [深入分析每個問題的根源]
+1. 指出發生 ANR/Tombstone 的 Process
+2. 列出 ANR/Tombstone Process main thread 卡住 的 backtrace
+3. 找出 ANR/Tombstone 卡住可能的原因
 
 ## 3. 影響評估
 [評估問題的嚴重性和影響範圍]
