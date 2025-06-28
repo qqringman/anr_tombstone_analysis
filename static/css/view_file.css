@@ -3889,3 +3889,56 @@ a.btn {
 }
 
 
+/* AI 回應區域 */
+.ai-response {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    height: 100%;
+    position: relative;
+}
+
+.ai-response-content {
+    color: #d4d4d4;
+    line-height: 1.8;
+    font-size: 14px;
+    max-height: none;
+    overflow-y: visible;  /* 確保內容可以顯示 */
+}
+
+/* 確保對話項目內的內容可以滾動 */
+.conversation-item {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #3e3e42;
+    max-width: 100%;
+}
+
+.ai-analysis-content {
+    color: #d4d4d4;
+    line-height: 1.8;
+    font-size: 14px;
+    word-wrap: break-word;  /* 長文字換行 */
+    overflow-wrap: break-word;  /* 確保長文字會換行 */
+    white-space: pre-wrap;  /* 保留空白但允許換行 */
+    max-width: 100%;
+}
+
+/* 程式碼區塊樣式 */
+.ai-analysis-content pre,
+.ai-analysis-content code {
+    max-width: 100%;
+    overflow-x: auto;  /* 程式碼區塊允許橫向滾動 */
+    white-space: pre;  /* 程式碼保持原始格式 */
+}
+
+/* 確保 pre 標籤有滾動條 */
+.code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+    max-width: 100%;
+}

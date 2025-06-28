@@ -45,7 +45,7 @@ AI_CONFIG = {
 
 MODEL_LIMITS = {
     # Claude 4 系列（最新）
-    'claude-4-opus-20250514': {
+    'claude-opus-4-20250514': {
         'max_tokens': 300000,  # 增加到 300K tokens
         'max_output_tokens': 16384,  # 16K 輸出
         'chars_per_token': 2.5,
@@ -53,7 +53,7 @@ MODEL_LIMITS = {
         'name': 'Claude 4 Opus',
         'description': '最強大的模型，適合複雜分析'
     },
-    'claude-4-sonnet-20250514': {
+    'claude-sonnet-4-20250514': {
         'max_tokens': 250000,  # 250K tokens
         'max_output_tokens': 12288,  # 12K 輸出
         'chars_per_token': 2.5,
@@ -100,7 +100,7 @@ MODEL_LIMITS = {
 }
 
 # 更新默認模型為 Claude 4 Sonnet
-DEFAULT_MODEL = 'claude-4-sonnet-20250514'
+DEFAULT_MODEL = 'claude-sonnet-4-20250514'
 
 # 創建全局速率限制器
 rate_limiter = TokenRateLimiter(AI_CONFIG['RATE_LIMIT_TOKENS_PER_MINUTE'])
@@ -114,10 +114,10 @@ def select_optimal_model(content_size, analysis_type, user_preference=None):
     # 根據內容大小選擇
     if content_size > 500000:  # 超過 500KB
         # 大檔案使用 Claude 4 Opus
-        return 'claude-4-opus-20250514'
+        return 'claude-opus-4-20250514'
     elif content_size > 200000:  # 200KB - 500KB
         # 中等檔案使用 Claude 4 Sonnet
-        return 'claude-4-sonnet-20250514'
+        return 'claude-sonnet-4-20250514'
     elif analysis_type == 'quick':
         # 快速分析使用 Haiku
         return 'claude-3-5-haiku-20241022'
@@ -194,7 +194,7 @@ def check_file_size_for_ai():
             })
         
         # 其他模式的邏輯
-        model_limits = MODEL_LIMITS.get('claude-4-sonnet-20250514')
+        model_limits = MODEL_LIMITS.get('claude-sonnet-4-20250514')
         max_tokens = int(model_limits['max_tokens'] * 0.8)
         
         # 根據模式調整分段策略
@@ -1725,7 +1725,7 @@ def perform_comprehensive_analysis(analyzer, content, log_type, enable_thinking)
     """執行深度分析"""
     try:
         # 選擇模型
-        model = 'claude-4-opus-20250514'
+        model = 'claude-opus-4-20250514'
         model_config = MODEL_LIMITS.get(model, MODEL_LIMITS[DEFAULT_MODEL])
         
         # 檢查是否需要分段
@@ -1767,7 +1767,7 @@ def perform_comprehensive_analysis(analyzer, content, log_type, enable_thinking)
 def perform_max_tokens_analysis(analyzer, content, log_type):
     """執行最大化分析"""
     try:
-        model = 'claude-4-sonnet-20250514'
+        model = 'claude-sonnet-4-20250514'
         model_config = MODEL_LIMITS.get(model, MODEL_LIMITS[DEFAULT_MODEL])
         
         # 提取關鍵部分
@@ -1820,7 +1820,7 @@ def perform_max_tokens_analysis(analyzer, content, log_type):
         return {
             'analysis': f'最大化分析失敗: {str(e)}',
             'log_type': log_type.value,
-            'model': model if 'model' in locals() else 'claude-4-sonnet-20250514',
+            'model': model if 'model' in locals() else 'claude-sonnet-4-20250514',
             'is_segmented': False,
             'error': str(e)
         }
@@ -1868,7 +1868,7 @@ def perform_auto_analysis(analyzer, content, log_type, enable_thinking):
             }
         else:
             # 大檔案：分段分析
-            model = 'claude-4-sonnet-20250514'
+            model = 'claude-sonnet-4-20250514'
             return perform_segmented_analysis(analyzer, content, log_type, model, 'auto')
             
     except Exception as e:
@@ -2884,7 +2884,7 @@ async def max_token_analysis(analyzer, sections, log_type, model):
     
     try:
         # 使用模型的最大輸出能力
-        model_config = MODEL_LIMITS.get(model, MODEL_LIMITS['claude-4-sonnet-20250514'])
+        model_config = MODEL_LIMITS.get(model, MODEL_LIMITS['claude-sonnet-4-20250514'])
         
         message = await asyncio.to_thread(
             client.messages.create,
@@ -3086,7 +3086,7 @@ def create_tombstone_segments(content: str) -> List[Dict]:
     
     # 如果沒有找到標準結構，使用通用分段
     if not segments:
-        return create_intelligent_segments_v2(content, 'claude-4-sonnet-20250514')
+        return create_intelligent_segments_v2(content, 'claude-sonnet-4-20250514')
     
     # 按位置排序
     segments.sort(key=lambda x: x.get('start', 0))

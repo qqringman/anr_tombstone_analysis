@@ -27,7 +27,7 @@ const MIN_SEARCH_LENGTH = 2; // 最少輸入 2 個字元才搜尋
 
 // AI Panel State
 let isAIPanelOpen = false;
-let selectedModel = 'claude-4-sonnet-20250514';
+let selectedModel = 'claude-sonnet-4-20250514';
 let conversationHistory = [];
 let isAnalyzing = false;  // 防止重複請求
 let useSmartAnalysis = true;  // 啟用智能分析
@@ -987,151 +987,170 @@ function createTokenUsageBar(estimatedTokens, label = 'Token 使用量') {
 
 // Ask custom question
 async function askCustomQuestion() {
-	// 防止重複點擊
-	if (isAskingQuestion) {
-		console.log('正在處理中，請稍候...');
-		return;
-	}
-	
-	const customQuestionElement = document.getElementById('customQuestion');
-	const responseDiv = document.getElementById('aiResponse');
-	const responseContent = document.getElementById('aiResponseContent');
-	const askBtn = document.getElementById('askBtnInline');
-	
-	if (!askBtn || !customQuestionElement || !responseDiv || !responseContent) {
-		console.error('找不到必要的元素');
-		return;
-	}
-	
-	const customQuestion = customQuestionElement.value.trim();
-	
-	if (!customQuestion) {
-		alert('請輸入您的問題');
-		return;
-	}
-	
-	// 設置發送狀態
-	isAskingQuestion = true;
-	
-	// 保存問題內容（因為要清空輸入框）
-	const questionToSend = customQuestion;
-	
-	// 立即清空輸入框
-	customQuestionElement.value = '';
-	
-	// 禁用輸入框和按鈕，防止重複提交
-	customQuestionElement.disabled = true;
-	askBtn.disabled = true;
-	//askBtn.innerHTML = '➤ 發送中...';
-	
-	responseDiv.classList.add('active');
-	
-	// 創建新的 loading 元素
-	const loadingDiv = document.createElement('div');
-	loadingDiv.className = 'ai-loading';
-	loadingDiv.innerHTML = `
-		<div class="ai-spinner"></div>
-		<div>正在使用 ${getModelDisplayName(selectedModel)} 處理您的問題...</div>
-	`;
-	responseContent.appendChild(loadingDiv);
-	
-	// 滾動到 loading 元素
-	setTimeout(() => {
-		loadingDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-	}, 100);
-	
-	try {
-		// 構建包含檔案內容的上下文
-		const fileInfo = `檔案名稱: ${fileName}\n檔案路徑: ${filePath}\n`;
-		const fileContext = `=== 當前檔案內容 ===\n${fileContent}\n=== 檔案內容結束 ===\n\n`;
-		
-		// 組合問題和檔案上下文（使用保存的問題內容）
-		const fullContent = `${fileInfo}${fileContext}使用者問題：${questionToSend}`;
-		
-		// 發送自訂問題請求
-		const response = await fetch('/analyze-with-ai', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				file_path: filePath,
-				content: fullContent,
-				file_type: 'custom_with_context',
-				model: selectedModel,
-				is_custom_question: true,
-				original_question: questionToSend  // 使用保存的問題內容
-			})
-		});
-		
-		// 移除 loading
-		if (loadingDiv && loadingDiv.parentNode) {
-			loadingDiv.remove();
-		}
-		
-		const data = await response.json();
-		
-		if (response.ok && data.success) {
+    // 防止重複點擊
+    if (isAskingQuestion) {
+        console.log('正在處理中，請稍候...');
+        return;
+    }
+    
+    const customQuestionElement = document.getElementById('customQuestion');
+    const responseDiv = document.getElementById('aiResponse');
+    const responseContent = document.getElementById('aiResponseContent');
+    const askBtn = document.getElementById('askBtnInline');
+    
+    if (!askBtn || !customQuestionElement || !responseDiv || !responseContent) {
+        console.error('找不到必要的元素');
+        return;
+    }
+    
+    const customQuestion = customQuestionElement.value.trim();
+    
+    if (!customQuestion) {
+        alert('請輸入您的問題');
+        return;
+    }
+    
+    // 設置發送狀態
+    isAskingQuestion = true;
+    
+    // 保存問題內容（因為要清空輸入框）
+    const questionToSend = customQuestion;
+    
+    // 立即清空輸入框
+    customQuestionElement.value = '';
+    
+    // 禁用輸入框和按鈕，防止重複提交
+    customQuestionElement.disabled = true;
+    askBtn.disabled = true;
+    //askBtn.innerHTML = '➤ 發送中...';
+    
+    responseDiv.classList.add('active');
+    
+    // 創建新的 loading 元素
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'ai-loading';
+    loadingDiv.innerHTML = `
+        <div class="ai-spinner"></div>
+        <div>正在使用 ${getModelDisplayName(selectedModel)} 處理您的問題...</div>
+    `;
+    responseContent.appendChild(loadingDiv);
+    
+    // 滾動到 loading 元素
+    setTimeout(() => {
+        loadingDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 100);
+    
+    try {
+        // 構建包含檔案內容的上下文
+        const fileInfo = `檔案名稱: ${fileName}\n檔案路徑: ${filePath}\n`;
+        
+        // 限制檔案內容長度（避免超過 token 限制）
+        const maxContentLength = 100000; // 約 100KB
+        let truncatedContent = fileContent;
+        let truncated = false;
+        
+        if (fileContent.length > maxContentLength) {
+            truncatedContent = fileContent.substring(0, maxContentLength);
+            truncated = true;
+        }
+        
+        const fileContext = `=== 當前檔案內容 ===\n${truncatedContent}\n=== 檔案內容結束 ===\n\n`;
+        
+        // 組合問題和檔案上下文
+        const fullContent = `${fileInfo}${fileContext}使用者問題：${questionToSend}`;
+        
+        // 發送自訂問題請求 - 確保不觸發分段分析
+        const response = await fetch('/analyze-with-ai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_path: filePath,
+                content: fullContent,
+                file_type: 'custom_with_context',
+                model: selectedModel,
+                is_custom_question: true,
+                original_question: questionToSend,
+                // 明確指定不要分段
+                force_single_request: true,
+                skip_segmentation: true,
+                max_segments: 1
+            })
+        });
+        
+        // 移除 loading
+        if (loadingDiv && loadingDiv.parentNode) {
+            loadingDiv.remove();
+        }
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
 			// 確保所有必要的資料都存在
 			const analysisText = data.analysis || '無分析結果';
-			const truncatedFlag = data.truncated || false;
+			const truncatedFlag = data.truncated || truncated;
 			const modelUsed = data.model || selectedModel;
 			const questionText = questionToSend || '無問題內容';
 			const thinkingContent = data.thinking || null;
-			
+			const analyzedLength = data.analyzed_length || (truncated ? truncatedContent.length : fileContent.length);
+			const originalLength = data.original_length || fileContent.length;
+
 			// 顯示分析結果
 			displayAIAnalysisWithContext(
 				analysisText,
 				truncatedFlag,
 				modelUsed,
 				questionText,
-				thinkingContent
-			);
-		} else {
-			// 顯示錯誤
-			const errorDiv = document.createElement('div');
-			errorDiv.className = 'ai-error';
-			errorDiv.innerHTML = `
-				<h3>❌ 分析失敗</h3>
-				<p>${escapeHtml(data.error || '無法完成 AI 分析')}</p>
-				${data.details ? `<p><small>${escapeHtml(data.details)}</small></p>` : ''}
-			`;
-			responseContent.appendChild(errorDiv);
-			conversationHistory.push(errorDiv);
-		}
-		
-	} catch (error) {
-		console.error('AI analysis error:', error);
-		
-		// 移除 loading
-		if (loadingDiv && loadingDiv.parentNode) {
-			loadingDiv.remove();
-		}
-		
-		const errorDiv = document.createElement('div');
-		errorDiv.className = 'ai-error';
-		errorDiv.innerHTML = `
-			<h3>❌ 請求錯誤</h3>
-			<p>無法連接到 AI 分析服務：${error.message}</p>
-			<p style="margin-top: 10px;">
-				<button class="retry-btn" onclick="retryQuestion('${escapeHtml(questionToSend)}')">🔄 重試</button>
-			</p>
-		`;
-		responseContent.appendChild(errorDiv);
-		
-		conversationHistory.push(errorDiv);
-	} finally {
-		// 確保最後重置狀態
-		isAskingQuestion = false;
-		customQuestionElement.disabled = false;
-		askBtn.disabled = !customQuestionElement.value.trim();
-		askBtn.innerHTML = `
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M22 2L11 13"></path>
-				<path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
-			</svg>
-		`;
-	}
+				thinkingContent,
+				analyzedLength,  // 傳遞實際分析的長度
+				originalLength   // 傳遞原始長度
+			);	
+        } else {
+            // 顯示錯誤
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'ai-error';
+            errorDiv.innerHTML = `
+                <h3>❌ 分析失敗</h3>
+                <p>${escapeHtml(data.error || '無法完成 AI 分析')}</p>
+                ${data.details ? `<p><small>${escapeHtml(data.details)}</small></p>` : ''}
+            `;
+            responseContent.appendChild(errorDiv);
+            conversationHistory.push(errorDiv);
+        }
+        
+    } catch (error) {
+        console.error('AI analysis error:', error);
+        
+        // 移除 loading
+        if (loadingDiv && loadingDiv.parentNode) {
+            loadingDiv.remove();
+        }
+        
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'ai-error';
+        errorDiv.innerHTML = `
+            <h3>❌ 請求錯誤</h3>
+            <p>無法連接到 AI 分析服務：${error.message}</p>
+            <p style="margin-top: 10px;">
+                <button class="retry-btn" onclick="retryQuestion('${escapeHtml(questionToSend)}')">🔄 重試</button>
+            </p>
+        `;
+        responseContent.appendChild(errorDiv);
+        
+        conversationHistory.push(errorDiv);
+    } finally {
+        // 確保最後重置狀態
+        isAskingQuestion = false;
+        customQuestionElement.disabled = false;
+        askBtn.disabled = !customQuestionElement.value.trim();
+        askBtn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13"></path>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+            </svg>
+        `;
+    }
 }
 
 // 添加重試函數
@@ -1272,7 +1291,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 新增專門處理帶上下文的 AI 回應顯示函數
-function displayAIAnalysisWithContext(analysis, truncated, model, originalQuestion, thinking = null) {
+function displayAIAnalysisWithContext(analysis, truncated, model, originalQuestion, thinking = null, analyzedLength = 0, originalLength = 0) {
 	const responseContent = document.getElementById('aiResponseContent');
 	
 	// 檢查並確保 analysis 有值
@@ -1351,13 +1370,13 @@ function displayAIAnalysisWithContext(analysis, truncated, model, originalQuesti
 	
 	// 如果內容被截取，在回應頂部顯示明顯警告
 	if (truncated) {
-		// 這裡需要定義 truncatedLength 和 originalLength 變數
-		const truncatedLength = analysis ? analysis.length : 0;
-		const originalLength = fileContent ? fileContent.length : 0;
+		// 使用傳入的參數或計算預設值
+		const truncatedLengthKB = analyzedLength > 0 ? (analyzedLength/1024).toFixed(1) : '100.0';
+		const originalLengthKB = originalLength > 0 ? (originalLength/1024).toFixed(1) : (fileContent.length/1024).toFixed(1);
 		
 		conversationHTML += `
 			<div style="background: #ff9800; color: white; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-				<strong>⚠️ 注意：</strong>由於檔案過大，AI 只分析了前 ${(truncatedLength/1024).toFixed(1)}KB 的內容（原始檔案大小：${(originalLength/1024).toFixed(1)}KB）。
+				<strong>⚠️ 注意：</strong>由於檔案過大，AI 只分析了前 ${truncatedLengthKB}KB 的內容（原始檔案大小：${originalLengthKB}KB）。
 				如需完整分析，請考慮分段詢問或使用更小的檔案。
 			</div>
 		`;
@@ -1463,8 +1482,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // Get model display name
 function getModelDisplayName(modelId) {
     const names = {
-        'claude-4-opus-20250514': 'Claude 4 Opus',
-        'claude-4-sonnet-20250514': 'Claude 4 Sonnet',
+        'claude-opus-4-20250514': 'Claude 4 Opus',
+        'claude-sonnet-4-20250514': 'Claude 4 Sonnet',
         'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
         'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
         'claude-3-opus-20240229': 'Claude 3 Opus',
@@ -2601,12 +2620,12 @@ function toggleModelPopup() {
             <div class="modal-body">
                 <div class="model-popup-grid">
                     <!-- Claude 4 系列 -->
-                    <div class="model-card" data-model="claude-4-opus-20250514" onclick="selectModel(this)">
+                    <div class="model-card" data-model="claude-opus-4-20250514" onclick="selectModel(this)">
                         <div class="model-card-name">Claude 4 Opus</div>
                         <div class="model-card-desc">🚀 最強大，300K tokens，複雜分析首選</div>
                         <div class="model-card-badge new">NEW</div>
                     </div>
-                    <div class="model-card selected" data-model="claude-4-sonnet-20250514" onclick="selectModel(this)">
+                    <div class="model-card selected" data-model="claude-sonnet-4-20250514" onclick="selectModel(this)">
                         <div class="model-card-name">Claude 4 Sonnet</div>
                         <div class="model-card-desc">⚡ 推薦！250K tokens，平衡效能</div>
                         <div class="model-card-badge new">NEW</div>
