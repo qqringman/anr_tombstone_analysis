@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ file_path }} - Android Log Viewer</title>
 	<link href="{{ url_for('static', filename='css/view_file.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/rateLimit.css') }}" rel="stylesheet">
 </head>
 <body>
     <div class="header">
@@ -99,6 +100,13 @@
                             <button class="quick-question-item" onclick="useQuickQuestion('這個崩潰發生的時間點和頻率如何？是否有模式？')">
                                 ⏰ 分析發生模式
                             </button>
+                            <button class="quick-question-item" onclick="useQuickQuestion('這個崩潰的根本原因是什麼？請提供至少3000字的詳細分析，包含堆棧追蹤解讀、記憶體狀態、可能的觸發條件等。')">
+                                🔍 詳細分析崩潰原因
+                            </button>
+
+                            <button class="quick-question-item" onclick="useQuickQuestion('請提供完整的修復方案，包含：1.立即修復步驟(含程式碼) 2.預防措施 3.測試建議 4.相關文檔連結。請確保回答至少3000字。')">
+                                🛠️ 完整修復方案
+                            </button>                            
                         </div>
                     </div>
                     <button class="export-chat-btn" onclick="exportAIChat()" title="匯出對話">
@@ -150,13 +158,16 @@
                         </div>
                     </div>
                     
+                    <!-- 速率限制狀態顯示區域 -->
+                    <div id="rateLimitStatusContainer"></div>
+
                     <!-- 分析按鈕 -->
                     <button class="analyze-current-btn" id="analyzeBtn" onclick="startSmartAnalysis()">
                         <span id="analyzeIcon">🔍</span> 
                         <span id="analyzeText">開始智能分析</span>
                     </button>
                 </div>
-                
+
                 <!-- AI Response -->
                 <div class="ai-response" id="aiResponse">
                     <div class="ai-response-content" id="aiResponseContent">
@@ -351,5 +362,6 @@
 		window.escaped_file_path = {{ escaped_file_path | safe }};
 	</script>
     <script src="{{ url_for('static', filename='js/view_file.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/rateLimit.js') }}"></script>
 </body>
 </html>

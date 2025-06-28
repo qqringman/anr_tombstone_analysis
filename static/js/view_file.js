@@ -185,36 +185,47 @@ function scrollToAITop() {
 }        
 // Toggle AI Panel
 function toggleAIPanel(e) {
-
-    if (e) { // Check if e is defined (i.e., if called from an event listener)
+    if (e) {
         e.stopPropagation(); 
     }
-	
-	const rightPanel = document.getElementById('rightPanel');
-	const resizeHandle = document.getElementById('resizeHandle');
-	const aiBtn = document.getElementById('aiToggleBtn');
-	
-	isAIPanelOpen = !isAIPanelOpen;
-	
-	if (isAIPanelOpen) {
-		rightPanel.classList.add('active');
-		resizeHandle.classList.add('active');
-		aiBtn.classList.add('active');
-		
-		// 檢查是否需要設置 token 計數
-		setTimeout(() => {
-			// 只有在不存在時才設置
-			if (!document.getElementById('realtimeTokenCount')) {
-				setupRealtimeTokenCount();
-			}
-		}, 300);
-	} else {
-		rightPanel.classList.remove('active');
-		resizeHandle.classList.remove('active');
-		aiBtn.classList.remove('active');
-		if (isAIFullscreen)
-			toggleAIFullscreen();
-	}
+    
+    const rightPanel = document.getElementById('rightPanel');
+    const resizeHandle = document.getElementById('resizeHandle');
+    const aiBtn = document.getElementById('aiToggleBtn');
+    
+    isAIPanelOpen = !isAIPanelOpen;
+    
+    if (isAIPanelOpen) {
+        rightPanel.classList.add('active');
+        resizeHandle.classList.add('active');
+        aiBtn.classList.add('active');
+        
+        // 檢查是否需要設置 token 計數
+        setTimeout(() => {
+            // 只有在不存在時才設置
+            if (!document.getElementById('realtimeTokenCount')) {
+                setupRealtimeTokenCount();
+            }
+
+			// 確保迷你指示器存在
+            createMiniRateLimitIndicator();
+
+            //初始化速率限制狀態顯示
+            initializeRateLimitStatus();
+        }, 300);
+    } else {
+        rightPanel.classList.remove('active');
+        resizeHandle.classList.remove('active');
+        aiBtn.classList.remove('active');
+        if (isAIFullscreen)
+            toggleAIFullscreen();
+            
+        // 清除自動刷新
+        if (window.rateLimitRefreshInterval) {
+            clearInterval(window.rateLimitRefreshInterval);
+            window.rateLimitRefreshInterval = null;
+        }
+    }
 }
 
 // 重置分析按鈕狀態
@@ -410,17 +421,17 @@ function createAIInfoModal() {
 
 // 確保快速問題功能正常運作
 function useQuickQuestion(question) {
-	const customQuestionElement = document.getElementById('customQuestion');
-	if (customQuestionElement) {
-		customQuestionElement.value = question;
-		// 關閉下拉選單
-		const menu = document.getElementById('quickQuestionsMenu');
-		if (menu) {
-			menu.classList.remove('show');
-		}
-		// 自動觸發 AI 分析
-		askCustomQuestion();
-	}
+    const customQuestionElement = document.getElementById('customQuestion');
+    if (customQuestionElement) {
+        customQuestionElement.value = question;
+        // 關閉下拉選單
+        const menu = document.getElementById('quickQuestionsMenu');
+        if (menu) {
+            menu.classList.remove('show');
+        }
+        // 自動觸發 AI 分析
+        askCustomQuestion();  // 這裡會走「使用者自訂」流程
+    }
 }
 
 // 匯出對話功能
@@ -1058,7 +1069,10 @@ async function askCustomQuestion() {
         
         // 組合問題和檔案上下文
         const fullContent = `${fileInfo}${fileContext}使用者問題：${questionToSend}`;
-        
+
+		// 在開始前更新一次
+        await updateRateLimitDisplay();
+
         // 發送自訂問題請求 - 確保不觸發分段分析
         const response = await fetch('/analyze-with-ai', {
             method: 'POST',
@@ -1078,7 +1092,10 @@ async function askCustomQuestion() {
                 max_segments: 1
             })
         });
-        
+
+        // 立即更新速率限制顯示
+        setTimeout(updateRateLimitDisplay, 500);
+
         // 移除 loading
         if (loadingDiv && loadingDiv.parentNode) {
             loadingDiv.remove();
@@ -1105,7 +1122,10 @@ async function askCustomQuestion() {
 				thinkingContent,
 				analyzedLength,  // 傳遞實際分析的長度
 				originalLength   // 傳遞原始長度
-			);	
+			);
+
+            // 更新速率限制狀態
+            setTimeout(refreshRateLimitStatus, 1000);			
         } else {
             // 顯示錯誤
             const errorDiv = document.createElement('div');
@@ -1139,6 +1159,15 @@ async function askCustomQuestion() {
         responseContent.appendChild(errorDiv);
         
         conversationHistory.push(errorDiv);
+
+        // 錯誤時也更新
+        setTimeout(updateRateLimitDisplay, 500);
+				
+        // 如果是速率限制錯誤，也更新狀態
+        if (error.message.includes('429') || error.message.includes('速率限制')) {
+            setTimeout(refreshRateLimitStatus, 1000);
+        }
+
     } finally {
         // 確保最後重置狀態
         isAskingQuestion = false;
@@ -3698,12 +3727,20 @@ async function startSmartAnalysis() {
             if (response.ok && data.success) {
                 const normalizedData = normalizeAnalysisData(data, mode);
                 displaySmartAnalysisResult(normalizedData, modeConfig);
+
+				//更新速率限制狀態
+            	setTimeout(refreshRateLimitStatus, 1000);
             } else {
                 throw new Error(data.error || '分析失敗');
             }
+			
         } catch (error) {
             console.error('Quick analysis error:', error);
             showAnalysisError(error.message);
+			// 如果是速率限制錯誤，也更新狀態
+			if (error.message.includes('429') || error.message.includes('速率限制')) {
+				setTimeout(refreshRateLimitStatus, 1000);
+			}			
         } finally {
             resetAnalyzeButton();
         }
@@ -3723,7 +3760,10 @@ async function startSmartAnalysis() {
                 return;
             }
         }
-        
+
+        // 在開始前更新一次
+        await updateRateLimitDisplay();
+
         // 執行分析
         const response = await fetch('/smart-analyze', {
             method: 'POST',
@@ -3738,17 +3778,33 @@ async function startSmartAnalysis() {
         });
         
         const data = await response.json();
-        
+
+		// 不管成功或失敗，都更新速率限制顯示
+        setTimeout(updateRateLimitDisplay, 500);
+
         if (response.ok && data.success) {
             const normalizedData = normalizeAnalysisData(data, mode);
             displaySmartAnalysisResult(normalizedData, modeConfig);
+            
+            // 新增：更新速率限制狀態
+            setTimeout(refreshRateLimitStatus, 1000);
         } else {
             throw new Error(data.error || '分析失敗');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        showAnalysisError(error.message);
+        
+        // 錯誤時也更新（可能是速率限制錯誤）
+        setTimeout(updateRateLimitDisplay, 500);
+        
+        // 處理速率限制錯誤
+        if (error.status === 429 || error.message.includes('429')) {
+            const retryAfter = error.headers?.get('retry-after') || 60;
+            await handleRateLimitError(error, retryAfter);
+        } else {
+            showAnalysisError(error.message);
+        }
     } finally {
         resetAnalyzeButton();
     }
@@ -4400,15 +4456,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化分析模式
     initializeAnalysisModes();
 
-	// 確保分析按鈕綁定正確的函數
+    // 1. 分析按鈕 - 處理 4 種模式
     const analyzeBtn = document.getElementById('analyzeBtn');
     if (analyzeBtn) {
-        // 移除可能的舊事件
-        analyzeBtn.onclick = null;
-        // 綁定新事件
         analyzeBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            startSmartAnalysis();
+            startSmartAnalysis();  // 會根據 selectedAnalysisMode 執行
+        });
+    }
+    
+    // 2. 自定義問題發送按鈕
+    const askBtn = document.getElementById('askBtnInline');
+    if (askBtn) {
+        askBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            askCustomQuestion();  // 處理使用者輸入
+        });
+    }
+    
+    // 3. Enter 鍵發送
+    const customQuestion = document.getElementById('customQuestion');
+    if (customQuestion) {
+        customQuestion.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey && !isAskingQuestion) {
+                e.preventDefault();
+                askCustomQuestion();
+            }
         });
     }
 });
@@ -4629,3 +4702,172 @@ function formatSectionContent(content) {
     
     return formatted;
 }
+
+// 顯示當前速率限制使用情況
+function displayRateLimitStatus(usage) {
+    // 創建或更新速率限制狀態顯示
+    let statusContainer = document.getElementById('rateLimitStatusContainer');
+    
+    if (!statusContainer) {
+        // 創建容器
+        statusContainer = document.createElement('div');
+        statusContainer.id = 'rateLimitStatusContainer';
+        statusContainer.className = 'rate-limit-status-container';
+        
+        // 插入到 AI 面板中
+        const aiResponse = document.getElementById('aiResponse');
+        if (aiResponse) {
+            aiResponse.parentNode.insertBefore(statusContainer, aiResponse);
+        }
+    }
+    
+    // 計算使用百分比
+    const rpmPercent = (usage.requests / usage.rpm_limit * 100).toFixed(1);
+    const itpmPercent = (usage.input_tokens / usage.itpm_limit * 100).toFixed(1);
+    const otpmPercent = (usage.output_tokens / usage.otpm_limit * 100).toFixed(1);
+    
+    // 決定顏色
+    function getBarColor(percent) {
+        if (percent > 80) return '#ff5252';  // 紅色
+        if (percent > 60) return '#ff9800';  // 橙色
+        return '#4caf50';  // 綠色
+    }
+    
+    statusContainer.innerHTML = `
+        <div class="rate-limit-status">
+            <div class="rate-limit-header">
+                <h4>📊 API 使用狀況</h4>
+                <button class="refresh-btn" onclick="refreshRateLimitStatus()" title="重新整理">
+                    🔄
+                </button>
+            </div>
+            
+            <div class="rate-limit-bars">
+                <!-- 請求數 (RPM) -->
+                <div class="rate-bar">
+                    <div class="rate-bar-header">
+                        <label>請求數 (RPM)</label>
+                        <span class="rate-value">${usage.requests} / ${usage.rpm_limit}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" 
+                             style="width: ${rpmPercent}%; background-color: ${getBarColor(rpmPercent)}">
+                            <span class="progress-text">${rpmPercent}%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 輸入 Tokens (ITPM) -->
+                <div class="rate-bar">
+                    <div class="rate-bar-header">
+                        <label>輸入 Tokens (ITPM)</label>
+                        <span class="rate-value">${usage.input_tokens.toLocaleString()} / ${usage.itpm_limit.toLocaleString()}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" 
+                             style="width: ${itpmPercent}%; background-color: ${getBarColor(itpmPercent)}">
+                            <span class="progress-text">${itpmPercent}%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 輸出 Tokens (OTPM) -->
+                <div class="rate-bar">
+                    <div class="rate-bar-header">
+                        <label>輸出 Tokens (OTPM)</label>
+                        <span class="rate-value">${usage.output_tokens.toLocaleString()} / ${usage.otpm_limit.toLocaleString()}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" 
+                             style="width: ${otpmPercent}%; background-color: ${getBarColor(otpmPercent)}">
+                            <span class="progress-text">${otpmPercent}%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="rate-limit-footer">
+                <small>重置時間：每分鐘自動重置</small>
+                ${(rpmPercent > 80 || itpmPercent > 80 || otpmPercent > 80) ? 
+                    '<div class="rate-warning">⚠️ 接近速率限制，請減少請求頻率</div>' : ''
+                }
+            </div>
+        </div>
+    `;
+}
+
+// 處理速率限制錯誤
+async function handleRateLimitError(error, retryAfter) {
+    const modal = showModalDialog(`
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>⚠️ 速率限制</h4>
+            </div>
+            <div class="modal-body">
+                <p>已達到 API 速率限制，需要等待 ${retryAfter} 秒後才能繼續。</p>
+                <div class="countdown" id="rateLimitCountdown">${retryAfter}</div>
+            </div>
+        </div>
+    `);
+    
+    // 倒計時
+    let remaining = retryAfter;
+    const interval = setInterval(() => {
+        remaining--;
+        document.getElementById('rateLimitCountdown').textContent = remaining;
+        
+        if (remaining <= 0) {
+            clearInterval(interval);
+            modal.close();
+        }
+    }, 1000);
+    
+    // 等待倒計時結束
+    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+}
+
+// 重新整理速率限制狀態
+async function refreshRateLimitStatus() {
+    try {
+        const response = await fetch('/get-rate-limit-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: selectedModel })
+        });
+        
+        if (response.ok) {
+            const usage = await response.json();
+            
+            // 更新主要狀態顯示
+            displayRateLimitStatus(usage);
+            
+            // 同時更新迷你指示器
+            updateMiniRateLimitIndicator(usage);
+        }
+    } catch (error) {
+        console.error('Failed to refresh rate limit status:', error);
+    }
+}
+
+// 在分析前儲存動作，以便重試
+function saveLastAnalysisAction(action) {
+    window.lastAnalysisAction = action;
+}
+
+// 修改 startSmartAnalysis 以儲存動作
+const originalStartSmartAnalysis = startSmartAnalysis;
+startSmartAnalysis = async function() {
+    saveLastAnalysisAction(() => originalStartSmartAnalysis());
+    return originalStartSmartAnalysis();
+};
+
+// 修改 askCustomQuestion 以儲存動作
+const originalAskCustomQuestion = askCustomQuestion;
+askCustomQuestion = async function() {
+    const question = document.getElementById('customQuestion').value;
+    saveLastAnalysisAction(() => {
+        document.getElementById('customQuestion').value = question;
+        originalAskCustomQuestion();
+    });
+    return originalAskCustomQuestion();
+};
