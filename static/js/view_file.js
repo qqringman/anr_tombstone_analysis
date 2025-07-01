@@ -66,15 +66,6 @@ const ANALYSIS_MODES = {
         badgeClass: '',
         buttonText: '深度分析 (2-5分鐘)',
         buttonColor: 'linear-gradient(135deg, #4ec9b0, #45d3b8)'
-    },
-    'max_tokens': {
-        name: '最大分析',
-        description: '在 token 限制內最大化分析',
-        icon: '📊',
-        badge: '平衡',
-        badgeClass: '',
-        buttonText: '最大化分析',
-        buttonColor: 'linear-gradient(135deg, #ff6b6b, #ff8787)'
     }
 };
 
@@ -199,20 +190,6 @@ function toggleAIPanel(e) {
         rightPanel.classList.add('active');
         resizeHandle.classList.add('active');
         aiBtn.classList.add('active');
-        
-        // 檢查是否需要設置 token 計數
-        setTimeout(() => {
-            // 只有在不存在時才設置
-            if (!document.getElementById('realtimeTokenCount')) {
-                setupRealtimeTokenCount();
-            }
-
-			// 確保迷你指示器存在
-            createMiniRateLimitIndicator();
-
-            //初始化速率限制狀態顯示
-            initializeRateLimitStatus();
-        }, 300);
     } else {
         rightPanel.classList.remove('active');
         resizeHandle.classList.remove('active');
@@ -220,11 +197,6 @@ function toggleAIPanel(e) {
         if (isAIFullscreen)
             toggleAIFullscreen();
             
-        // 清除自動刷新
-        if (window.rateLimitRefreshInterval) {
-            clearInterval(window.rateLimitRefreshInterval);
-            window.rateLimitRefreshInterval = null;
-        }
     }
 }
 
@@ -1065,9 +1037,6 @@ async function askCustomQuestion() {
         // 組合問題和檔案上下文
         const fullContent = `${fileInfo}${fileContext}使用者問題：${questionToSend}`;
 
-		// 在開始前更新一次
-        await updateRateLimitDisplay();
-
         // 發送自訂問題請求 - 確保不觸發分段分析
         const response = await fetch('/analyze-with-ai', {
             method: 'POST',
@@ -1087,9 +1056,6 @@ async function askCustomQuestion() {
                 max_segments: 1
             })
         });
-
-        // 立即更新速率限制顯示
-        setTimeout(updateRateLimitDisplay, 500);
 
         // 移除 loading
         if (loadingDiv && loadingDiv.parentNode) {
@@ -1118,9 +1084,7 @@ async function askCustomQuestion() {
 				analyzedLength,  // 傳遞實際分析的長度
 				originalLength   // 傳遞原始長度
 			);
-
-            // 更新速率限制狀態
-            setTimeout(refreshRateLimitStatus, 1000);			
+			
         } else {
             // 顯示錯誤
             const errorDiv = document.createElement('div');
@@ -1155,13 +1119,6 @@ async function askCustomQuestion() {
         
         conversationHistory.push(errorDiv);
 
-        // 錯誤時也更新
-        setTimeout(updateRateLimitDisplay, 500);
-
-        // 如果是速率限制錯誤，也更新狀態
-        if (error.message.includes('429') || error.message.includes('速率限制')) {
-            setTimeout(refreshRateLimitStatus, 1000);
-        }
 
     } finally {
         // 確保最後重置狀態
@@ -1219,31 +1176,6 @@ function updateProgressBar(container, data) {
 	
 	if (progressMessage && data.message) {
 		progressMessage.textContent = data.message;
-	}
-}
-
-// 顯示速率限制警告
-function showRateLimitWarning(container, data) {
-	const warningDiv = container.querySelector('#rateLimitWarning');
-	const messageSpan = container.querySelector('#rateLimitMessage');
-	
-	if (warningDiv) {
-		warningDiv.style.display = 'flex';
-		if (messageSpan) {
-			messageSpan.textContent = data.message;
-		}
-		
-		// 倒計時顯示
-		let remainingTime = Math.ceil(data.wait_time);
-		const countdown = setInterval(() => {
-			remainingTime--;
-			if (remainingTime <= 0) {
-				clearInterval(countdown);
-				warningDiv.style.display = 'none';
-			} else {
-				messageSpan.textContent = `等待速率限制重置 (${remainingTime}秒)...`;
-			}
-		}, 1000);
 	}
 }
 
@@ -3151,9 +3083,6 @@ function createProgressContainer(sizeInfo) {
 			</div>
 			<div class="progress-text" id="progressText">0%</div>
 		</div>
-		<div id="rateLimitWarning" class="rate-limit-warning" style="display: none;">
-			<span>⏳</span> <span id="rateLimitMessage">等待速率限制重置...</span>
-		</div>
 		<div class="segment-results" id="segmentResults"></div>
 	`;
 	
@@ -3254,12 +3183,9 @@ async function displaySegmentedAnalysis(data, progressContainer) {
 		const errorSummary = document.createElement('div');
 		errorSummary.className = 'error-summary';
 		
-		const hasRateLimitErrors = data.errors.some(err => err.error.includes('速率限制'));
-		
 		errorSummary.innerHTML = `
 			<div class="ai-warning">
 				⚠️ 有 ${data.errors.length} 個段落分析失敗
-				${hasRateLimitErrors ? '<br><small>部分失敗是由於 API 速率限制（每分鐘 40,000 tokens）</small>' : ''}
 				<details>
 					<summary>查看詳情</summary>
 					<ul>
@@ -3268,15 +3194,6 @@ async function displaySegmentedAnalysis(data, progressContainer) {
 							${err.retry_count ? ` (重試 ${err.retry_count} 次)` : ''}</li>`
 						).join('')}
 					</ul>
-					${hasRateLimitErrors ? `
-						<div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-							<strong>速率限制說明：</strong><br>
-							• 您的組織每分鐘限制 40,000 個輸入 tokens<br>
-							• 大檔案可能需要分多次請求<br>
-							• 系統會自動等待並重試<br>
-							• 考慮縮小檔案或聯繫 Anthropic 提高限制
-						</div>
-					` : ''}
 				</details>
 			</div>
 		`;
@@ -3298,60 +3215,7 @@ async function displaySegmentedAnalysis(data, progressContainer) {
 	}, 1000);
 }
 
-// 添加速率限制相關樣式
-const rateLimitStyles = `
-<style>
-.rate-limit-warning {
-	background: #ff9800;
-	color: white;
-	padding: 10px 15px;
-	border-radius: 6px;
-	margin: 15px 0;
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	font-size: 14px;
-}
-
-.rate-limit-warning span:first-child {
-	font-size: 20px;
-	animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-	0% { opacity: 0.6; }
-	50% { opacity: 1; }
-	100% { opacity: 0.6; }
-}
-
-.retry-badge {
-	background: #ff5722;
-	color: white;
-	padding: 2px 6px;
-	border-radius: 10px;
-	font-size: 11px;
-	margin-left: 8px;
-	cursor: help;
-}
-
-#tokenUsage {
-	font-weight: 600;
-	padding: 2px 8px;
-	background: rgba(255, 152, 0, 0.2);
-	border-radius: 4px;
-}
-</style>`;
-
 // 注入樣式
-document.addEventListener('DOMContentLoaded', function() {
-	const styleElement = document.createElement('div');
-	styleElement.innerHTML = rateLimitStyles;
-	const style = styleElement.querySelector('style');
-	if (style) {
-		document.head.appendChild(style);
-	}
-});
-
 function showAnalysisError(errorMessage) {
     const responseContent = document.getElementById('aiResponseContent');
     if (!responseContent) return;
@@ -3734,20 +3598,13 @@ async function startSmartAnalysis() {
             if (response.ok && data.success) {
                 const normalizedData = normalizeAnalysisData(data, mode);
                 displaySmartAnalysisResult(normalizedData, modeConfig);
-
-				//更新速率限制狀態
-            	setTimeout(refreshRateLimitStatus, 1000);
             } else {
                 throw new Error(data.error || '分析失敗');
             }
 			
         } catch (error) {
             console.error('Quick analysis error:', error);
-            showAnalysisError(error.message);
-			// 如果是速率限制錯誤，也更新狀態
-			if (error.message.includes('429') || error.message.includes('速率限制')) {
-				setTimeout(refreshRateLimitStatus, 1000);
-			}			
+            showAnalysisError(error.message);			
         } finally {
             resetAnalyzeButton();
         }
@@ -3768,9 +3625,6 @@ async function startSmartAnalysis() {
             }
         }
 
-        // 在開始前更新一次
-        await updateRateLimitDisplay();
-
         // 執行分析
         const response = await fetch('/smart-analyze', {
             method: 'POST',
@@ -3786,32 +3640,15 @@ async function startSmartAnalysis() {
         
         const data = await response.json();
 
-		// 不管成功或失敗，都更新速率限制顯示
-        setTimeout(updateRateLimitDisplay, 500);
-
         if (response.ok && data.success) {
             const normalizedData = normalizeAnalysisData(data, mode);
             displaySmartAnalysisResult(normalizedData, modeConfig);
-            
-            // 新增：更新速率限制狀態
-            setTimeout(refreshRateLimitStatus, 1000);
         } else {
             throw new Error(data.error || '分析失敗');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        
-        // 錯誤時也更新（可能是速率限制錯誤）
-        setTimeout(updateRateLimitDisplay, 500);
-        
-        // 處理速率限制錯誤
-        if (error.status === 429 || error.message.includes('429')) {
-            const retryAfter = error.headers?.get('retry-after') || 60;
-            await handleRateLimitError(error, retryAfter);
-        } else {
-            showAnalysisError(error.message);
-        }
     } finally {
         resetAnalyzeButton();
     }
@@ -4710,152 +4547,6 @@ function formatSectionContent(content) {
     }
     
     return formatted;
-}
-
-// 顯示當前速率限制使用情況
-function displayRateLimitStatus(usage) {
-    // 創建或更新速率限制狀態顯示
-    let statusContainer = document.getElementById('rateLimitStatusContainer');
-    
-    if (!statusContainer) {
-        // 創建容器
-        statusContainer = document.createElement('div');
-        statusContainer.id = 'rateLimitStatusContainer';
-        statusContainer.className = 'rate-limit-status-container';
-        
-        // 插入到 AI 面板中
-        const aiResponse = document.getElementById('aiResponse');
-        if (aiResponse) {
-            aiResponse.parentNode.insertBefore(statusContainer, aiResponse);
-        }
-    }
-    
-    // 計算使用百分比
-    const rpmPercent = (usage.requests / usage.rpm_limit * 100).toFixed(1);
-    const itpmPercent = (usage.input_tokens / usage.itpm_limit * 100).toFixed(1);
-    const otpmPercent = (usage.output_tokens / usage.otpm_limit * 100).toFixed(1);
-    
-    // 決定顏色
-    function getBarColor(percent) {
-        if (percent > 80) return '#ff5252';  // 紅色
-        if (percent > 60) return '#ff9800';  // 橙色
-        return '#4caf50';  // 綠色
-    }
-    
-    statusContainer.innerHTML = `
-        <div class="rate-limit-status">
-            <div class="rate-limit-header">
-                <h4>📊 API 使用狀況</h4>
-                <button class="refresh-btn" onclick="refreshRateLimitStatus()" title="重新整理">
-                    🔄
-                </button>
-            </div>
-            
-            <div class="rate-limit-bars">
-                <!-- 請求數 (RPM) -->
-                <div class="rate-bar">
-                    <div class="rate-bar-header">
-                        <label>請求數 (RPM)</label>
-                        <span class="rate-value">${usage.requests} / ${usage.rpm_limit}</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" 
-                             style="width: ${rpmPercent}%; background-color: ${getBarColor(rpmPercent)}">
-                            <span class="progress-text">${rpmPercent}%</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 輸入 Tokens (ITPM) -->
-                <div class="rate-bar">
-                    <div class="rate-bar-header">
-                        <label>輸入 Tokens (ITPM)</label>
-                        <span class="rate-value">${usage.input_tokens.toLocaleString()} / ${usage.itpm_limit.toLocaleString()}</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" 
-                             style="width: ${itpmPercent}%; background-color: ${getBarColor(itpmPercent)}">
-                            <span class="progress-text">${itpmPercent}%</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 輸出 Tokens (OTPM) -->
-                <div class="rate-bar">
-                    <div class="rate-bar-header">
-                        <label>輸出 Tokens (OTPM)</label>
-                        <span class="rate-value">${usage.output_tokens.toLocaleString()} / ${usage.otpm_limit.toLocaleString()}</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" 
-                             style="width: ${otpmPercent}%; background-color: ${getBarColor(otpmPercent)}">
-                            <span class="progress-text">${otpmPercent}%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="rate-limit-footer">
-                <small>重置時間：每分鐘自動重置</small>
-                ${(rpmPercent > 80 || itpmPercent > 80 || otpmPercent > 80) ? 
-                    '<div class="rate-warning">⚠️ 接近速率限制，請減少請求頻率</div>' : ''
-                }
-            </div>
-        </div>
-    `;
-}
-
-// 處理速率限制錯誤
-async function handleRateLimitError(error, retryAfter) {
-    const modal = showModalDialog(`
-        <div class="modal-content">
-            <div class="modal-header">
-                <h4>⚠️ 速率限制</h4>
-            </div>
-            <div class="modal-body">
-                <p>已達到 API 速率限制，需要等待 ${retryAfter} 秒後才能繼續。</p>
-                <div class="countdown" id="rateLimitCountdown">${retryAfter}</div>
-            </div>
-        </div>
-    `);
-    
-    // 倒計時
-    let remaining = retryAfter;
-    const interval = setInterval(() => {
-        remaining--;
-        document.getElementById('rateLimitCountdown').textContent = remaining;
-        
-        if (remaining <= 0) {
-            clearInterval(interval);
-            modal.close();
-        }
-    }, 1000);
-    
-    // 等待倒計時結束
-    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-}
-
-// 重新整理速率限制狀態
-async function refreshRateLimitStatus() {
-    try {
-        const response = await fetch('/get-rate-limit-status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: selectedModel })
-        });
-        
-        if (response.ok) {
-            const usage = await response.json();
-            
-            // 更新主要狀態顯示
-            displayRateLimitStatus(usage);
-            
-            // 同時更新迷你指示器
-            updateMiniRateLimitIndicator(usage);
-        }
-    } catch (error) {
-        console.error('Failed to refresh rate limit status:', error);
-    }
 }
 
 // 在分析前儲存動作，以便重試

@@ -21,14 +21,11 @@ import uuid
 import asyncio
 import queue
 from config.config import AI_CONFIG, MODEL_LIMITS, CLAUDE_API_KEY, DEFAULT_MODEL
-from rate_limiter import TokenRateLimiter, LimitedCache
-from android_log_analyzer import LogType, AnalysisResult, AndroidLogAnalyzer, MultiModelRateLimiter
+from android_log_analyzer import LogType, AnalysisResult, AndroidLogAnalyzer
+from routes.ai_analyzer import AIAnalyzer, AnalysisRequest
 
 # 創建一個藍圖實例
 ai_bp = Blueprint('ai', __name__)
-
-# 創建全局速率限制器
-rate_limiter = TokenRateLimiter(AI_CONFIG['RATE_LIMIT_TOKENS_PER_MINUTE'])
 
 # 新增智能模型選擇功能
 def select_optimal_model(content_size, analysis_type, user_preference=None):
@@ -326,15 +323,7 @@ async def analyze_in_segments_fast(file_path, content, file_type, selected_model
     async def process_segment(segment_data, segment_num):
         """處理單個段落"""
         try:
-            # 檢查速率限制
-            wait_time = rate_limiter.get_wait_time(segment_data['estimated_tokens'])
-            if wait_time > 0:
-                print(f"段落 {segment_num} 需要等待 {wait_time:.1f} 秒")
-                await asyncio.sleep(wait_time)
-            
-            # 記錄 token 使用
-            rate_limiter.use_tokens(segment_data['estimated_tokens'])
-            
+           
             # 構建精簡的提示
             prompt = build_segment_prompt_fast(
                 segment_data, segment_num, total_segments,  # 使用 total_segments
@@ -800,27 +789,6 @@ def analyze_in_segments_smart(file_path, content, file_type, selected_model,
         
         print(f"段落 {segment_num} 預估 tokens: {estimated_tokens}")
         
-        # 檢查速率限制
-        wait_time = rate_limiter.get_wait_time(estimated_tokens)
-        if wait_time > 0:
-            print(f"需要等待 {wait_time:.1f} 秒以避免速率限制")
-            response_data['rate_limit_info']['wait_times'].append({
-                'segment': segment_num,
-                'wait_time': wait_time
-            })
-            
-            # 如果等待時間太長，考慮縮減內容
-            if wait_time > 30:
-                print(f"等待時間過長，嘗試縮減段落 {segment_num} 的內容")
-                # 縮減內容到 75%
-                max_chars = int(len(segment_content) * 0.75)
-                segment_content = segment_content[:max_chars] + "\n\n[內容已縮減以符合速率限制]"
-                estimated_tokens = estimate_tokens_conservative(segment_content)
-                wait_time = rate_limiter.get_wait_time(estimated_tokens)
-            
-            # 等待
-            if wait_time > 0:
-                time.sleep(wait_time)
         
         # 構建段落提示
         segment_prompt = build_segment_prompt_optimized(
@@ -836,7 +804,6 @@ def analyze_in_segments_smart(file_path, content, file_type, selected_model,
         while retry_count < AI_CONFIG['MAX_RETRIES'] and not success:
             try:
                 # 記錄 token 使用
-                rate_limiter.use_tokens(estimated_tokens)
                 total_tokens_used += estimated_tokens
                 
                 # 調用 API
@@ -1421,9 +1388,7 @@ def analyze_segment_with_retry(segment, client, file_type, question,
     
     while retry_count < max_retries:
         try:
-            # 記錄 token 使用
-            rate_limiter.use_tokens(segment['estimated_tokens'])
-            
+
             # 構建提示
             prompt = build_segment_prompt_v2(
                 segment, file_type, question, accumulated_context, model
@@ -1606,93 +1571,45 @@ def estimate_tokens_advanced(text, model='claude-3-5-sonnet-20241022'):
 
 @ai_bp.route('/smart-analyze', methods=['POST'])
 async def smart_analyze():
-    """智能分析 Android 日誌，根據模式自動選擇策略"""
+    """智能分析 Android 日誌"""
     try:
         data = request.json
-        content = data.get('content', '')
-        file_path = data.get('file_path', '')
-        analysis_mode = data.get('mode', 'auto')
-        file_type = data.get('file_type', 'ANR')
-        enable_thinking = data.get('enable_thinking', True)
-        force_single_analysis = data.get('force_single_analysis', False)
-        skip_size_check = data.get('skip_size_check', False)
         
-        if not content:
+        # 創建分析請求
+        analysis_request = AnalysisRequest(
+            file_path=data.get('file_path', ''),
+            content=data.get('content', ''),
+            file_type=data.get('file_type', 'ANR'),
+            mode=data.get('mode', 'auto'),
+            original_question=data.get('original_question'),
+            enable_thinking=data.get('enable_thinking', True)
+        )
+        
+        # 執行分析
+        analyzer = AIAnalyzer()
+        result = analyzer.analyze(analysis_request)
+        
+        # 返回結果
+        if result.success:
             return jsonify({
-                'error': '檔案內容為空',
-                'success': False,
-                'analysis_mode': analysis_mode
-            }), 400
-        
-        print(f"Smart analyze - mode: {analysis_mode}, file size: {len(content)}")
-        
-        # 創建分析器
-        analyzer = AndroidLogAnalyzer()
-        
-        # 檢測日誌類型
-        try:
-            log_type = analyzer.detect_log_type(content)
-            print(f"檢測到的日誌類型: {log_type}")
-        except Exception as e:
-            print(f"檢測日誌類型失敗: {str(e)}")
-            log_type = LogType.UNKNOWN
-        
-        # 記錄開始時間
-        start_time = time.time()
-        
-        # 根據模式執行不同的分析
-        result = None
-        
-        if analysis_mode == 'quick':
-            # 快速分析
-            print("執行快速分析模式")
-            result = await perform_quick_analysis_async(analyzer, content, log_type)
-            
-        elif analysis_mode == 'comprehensive':
-            # 深度分析
-            print("執行深度分析模式")
-            result = await perform_comprehensive_analysis_async(analyzer, content, log_type, enable_thinking)
-            
-        elif analysis_mode == 'max_tokens':
-            # 最大化分析
-            print("執行最大化分析模式")
-            result = await perform_max_tokens_analysis_async(analyzer, content, log_type)
-            
-        else:  # auto
-            # 智能模式
-            print("執行智能分析模式")
-            result = await perform_auto_analysis_async(analyzer, content, log_type, enable_thinking)
-        
-        # 確保有結果
-        if not result:
-            raise Exception("分析未返回結果")
-        
-        # 如果結果中有錯誤，返回錯誤響應
-        if result.get('error'):
+                'success': True,
+                'analysis': result.analysis,
+                'model': result.model,
+                'mode': result.mode,
+                'elapsed_time': f"{result.elapsed_time:.2f}秒",
+                'is_segmented': result.is_segmented,
+                'segments': result.segments
+            })
+        else:
             return jsonify({
-                'error': result['error'],
                 'success': False,
-                'analysis_mode': analysis_mode
+                'error': result.error
             }), 500
-        
-        # 計算耗時
-        elapsed_time = round(time.time() - start_time, 2)
-        
-        # 添加通用信息
-        result['elapsed_time'] = f"{elapsed_time}秒"
-        result['analysis_mode'] = analysis_mode
-        result['success'] = True
-        
-        return jsonify(result)
-        
+            
     except Exception as e:
-        print(f"Smart analysis error: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({
-            'error': f'分析錯誤: {str(e)}',
             'success': False,
-            'analysis_mode': analysis_mode if 'analysis_mode' in locals() else 'unknown'
+            'error': str(e)
         }), 500
 
 async def perform_comprehensive_analysis_async(analyzer, content, log_type, enable_thinking):
@@ -2168,14 +2085,6 @@ def perform_segmented_analysis(analyzer, content, log_type, model, mode):
                 segment_content = segment.get('content', '')
                 segment_tokens = estimate_tokens_accurate(segment_content)
                 
-                # 檢查速率限制
-                wait_time = rate_limiter.get_wait_time(segment_tokens)
-                if wait_time > 0:
-                    print(f"段落 {i+1} 需要等待 {wait_time:.1f} 秒")
-                    time.sleep(wait_time)
-                
-                rate_limiter.use_tokens(segment_tokens)
-                
                 # 生成提示
                 prompt = {
                     'system': f"分析第 {i+1}/{len(segments)} 段 {log_type.value} 日誌。",
@@ -2323,15 +2232,7 @@ async def analyze_in_segments_smart_v2(analyzer, content, log_type, model, mode,
                 # 速率限制檢查
                 segment_content = segment.get('content', '')
                 segment_tokens = estimate_tokens_accurate(segment_content)
-                wait_time = rate_limiter.get_wait_time(segment_tokens)
-                
-                if wait_time > 0:
-                    print(f"段落 {i+1} 需要等待 {wait_time:.1f} 秒")
-                    await asyncio.sleep(wait_time)
-                
-                # 記錄 token 使用
-                rate_limiter.use_tokens(segment_tokens)
-                
+
                 # 生成段落提示
                 if log_type == LogType.ANR:
                     prompt = generate_anr_segment_prompt(segment, i, len(segments))
@@ -2863,15 +2764,7 @@ async def segmented_analysis_improved(analyzer, content, log_type, model, mode, 
             try:
                 # 速率限制檢查
                 segment_tokens = estimate_tokens_accurate(segment.get('content', ''))
-                wait_time = rate_limiter.get_wait_time(segment_tokens)
-                
-                if wait_time > 0:
-                    print(f"段落 {i+1} 需要等待 {wait_time:.1f} 秒")
-                    await asyncio.sleep(wait_time)
-                
-                # 記錄 token 使用
-                rate_limiter.use_tokens(segment_tokens)
-                
+
                 # 生成段落提示
                 if log_type == LogType.ANR:
                     prompt = generate_anr_segment_prompt(segment, i, len(segments))
@@ -3103,11 +2996,7 @@ async def comprehensive_analysis(analyzer, sections, log_type, model):
     # 分段分析
     for i, prompt in enumerate(prompts):
         try:
-            # 檢查速率限制
-            wait_time = rate_limiter.get_wait_time(10000)  # 估算 tokens
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
-            
+
             message = await asyncio.to_thread(
                 client.messages.create,
                 model=model,
@@ -3122,9 +3011,6 @@ async def comprehensive_analysis(analyzer, sections, log_type, model):
                 'part': i + 1,
                 'analysis': analysis
             })
-            
-            # 記錄 token 使用
-            rate_limiter.use_tokens(10000)
             
         except Exception as e:
             all_analyses.append({
@@ -3212,10 +3098,6 @@ async def segmented_smart_analysis(analyzer, content, log_type, model):
             
             # 速率限制檢查
             estimated_tokens = estimate_tokens_accurate(prompt['user'])
-            wait_time = rate_limiter.get_wait_time(estimated_tokens)
-            
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
             
             # 調用 API
             message = await asyncio.to_thread(
@@ -3226,8 +3108,6 @@ async def segmented_smart_analysis(analyzer, content, log_type, model):
                 system=prompt['system'],
                 messages=[{"role": "user", "content": prompt['user']}]
             )
-            
-            rate_limiter.use_tokens(estimated_tokens)
             
             return {
                 'segment': index + 1,
@@ -4080,115 +3960,6 @@ async def optimized_large_file_analysis(content, file_path, model, enable_thinki
 
 # ==========================================================================================
 
-# 創建全局速率限制器
-multi_model_limiter = MultiModelRateLimiter()
-
-async def analyze_with_rate_limit(client, model, system_prompt, user_message, max_output_tokens):
-    """帶速率限制的 API 調用"""
-    # 估算輸入 tokens
-    input_tokens = estimate_tokens_accurate(system_prompt + user_message)
-    
-    # 檢查是否需要等待
-    max_retries = 5
-    retry_count = 0
-    
-    while retry_count < max_retries:
-        # 檢查速率限制
-        wait_time = multi_model_limiter.check_and_wait(model, input_tokens, max_output_tokens)
-        
-        if wait_time > 0:
-            print(f"速率限制：需要等待 {wait_time:.1f} 秒")
-            await asyncio.sleep(wait_time)
-        
-        try:
-            # 調用 API
-            response = await asyncio.to_thread(
-                client.messages.create,
-                model=model,
-                max_tokens=max_output_tokens,
-                temperature=0,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}]
-            )
-            
-            # 記錄實際使用的 tokens
-            actual_input_tokens = response.usage.input_tokens if hasattr(response, 'usage') else input_tokens
-            actual_output_tokens = response.usage.output_tokens if hasattr(response, 'usage') else len(response.content[0].text) // 4
-            
-            multi_model_limiter.record_usage(model, actual_input_tokens, actual_output_tokens)
-            
-            return response
-            
-        except anthropic.APIError as e:
-            if e.status_code == 429:
-                # 速率限制錯誤
-                retry_after = e.response.headers.get('retry-after', 60)
-                print(f"收到 429 錯誤，等待 {retry_after} 秒後重試")
-                await asyncio.sleep(float(retry_after))
-                retry_count += 1
-            else:
-                raise
-    
-    raise Exception("超過最大重試次數")
-
-# 更新分析函數以考慮速率限制
-def create_intelligent_segments_with_rate_limit(content, model):
-    """根據速率限制創建智能分段"""
-    model_config = MODEL_LIMITS.get(model, MODEL_LIMITS[DEFAULT_MODEL])
-    rate_limits = model_config.get('rate_limits', {})
-    
-    # 每個段落的最大輸入 tokens
-    # 考慮到 ITPM 限制和並行處理
-    max_itpm = rate_limits.get('itpm', 40000)
-    max_otpm = rate_limits.get('otpm', 16000)
-    
-    # 如果要在 1 分鐘內處理多個段落，需要分配 token 配額
-    # 假設最多並行 2 個請求
-    parallel_requests = 2
-    
-    # 每個段落的 token 配額
-    tokens_per_segment = min(
-        max_itpm // parallel_requests,  # 輸入限制
-        max_otpm  # 輸出限制（單個請求）
-    )
-    
-    # 保留空間給系統提示和輸出
-    reserved_tokens = 5000  # 系統提示 + 輸出空間
-    max_content_tokens = tokens_per_segment - reserved_tokens
-    max_chars_per_segment = int(max_content_tokens * model_config['chars_per_token'])
-    
-    # 確保段落不會太小
-    min_chars_per_segment = 10000
-    max_chars_per_segment = max(max_chars_per_segment, min_chars_per_segment)
-    
-    # 創建段落
-    segments = []
-    current_pos = 0
-    
-    while current_pos < len(content):
-        segment_end = min(current_pos + max_chars_per_segment, len(content))
-        
-        # 尋找自然斷點
-        if segment_end < len(content):
-            # 搜尋自然分段點
-            natural_breaks = ['\n\n', '\n----- pid', '\n*** ***', '\n']
-            for break_pattern in natural_breaks:
-                pos = content.rfind(break_pattern, current_pos + min_chars_per_segment, segment_end)
-                if pos > current_pos:
-                    segment_end = pos
-                    break
-        
-        segments.append({
-            'content': content[current_pos:segment_end],
-            'start': current_pos,
-            'end': segment_end,
-            'estimated_tokens': estimate_tokens_accurate(content[current_pos:segment_end])
-        })
-        
-        current_pos = segment_end
-    
-    return segments
-
 def create_condensed_content(key_sections, max_size=50000):
     """從關鍵部分創建精簡的內容"""
     condensed_parts = []
@@ -4462,20 +4233,5 @@ async def perform_quick_analysis_async(analyzer, content, log_type):
     
 # ==========================================================================================
 
-@ai_bp.route('/get-rate-limit-status', methods=['POST'])
-def get_rate_limit_status():
-    """獲取當前速率限制使用狀況"""
-    try:
-        data = request.json
-        model = data.get('model', DEFAULT_MODEL)
-        
-        # 獲取該模型的速率限制器
-        limiter = multi_model_limiter.get_limiter(model)
-        usage = limiter.get_current_usage()
-        
-        return jsonify(usage)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    
+
 # ==========================================================================================    

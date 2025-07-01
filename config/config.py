@@ -10,8 +10,6 @@ AI_CONFIG = {
     'OVERLAP_SIZE': 2000,  # 減少重疊大小
     'CONTEXT_WINDOW': 5000,  # 減少上下文窗口
     'MAX_THINKING_LENGTH': 50000,
-    'RATE_LIMIT_TOKENS_PER_MINUTE': 40000,
-    'RATE_LIMIT_TOKENS_PER_SEGMENT': 25000,  # 新增：每段最多 25K tokens
     'RETRY_DELAY': 30,  # 減少重試延遲
     'MAX_RETRIES': 3,
     'PARALLEL_SEGMENTS': 2,  # 新增：並行處理段數
@@ -24,11 +22,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,  # 200K context window
         'max_output_tokens': 16000,  # 根據 OTPM 限制設置
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,      # 每分鐘請求數
-            'itpm': 40000,    # 每分鐘輸入 tokens
-            'otpm': 16000     # 每分鐘輸出 tokens
-        },
         'name': 'Claude 4 Opus',
         'description': '最強大的模型，適合複雜分析'
     },
@@ -36,11 +29,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,
         'max_output_tokens': 16000,
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,
-            'itpm': 40000,
-            'otpm': 16000
-        },
         'name': 'Claude 4 Sonnet',
         'description': '平衡效能與成本，推薦使用'
     },
@@ -50,11 +38,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,
         'max_output_tokens': 8192,  # 實際限制可能更低，根據 OTPM
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,
-            'itpm': 80000,    # 帶星號，可能變動
-            'otpm': 16000
-        },
         'name': 'Claude 3.5 Sonnet',
         'description': '快速準確，適合大部分場景'
     },
@@ -62,11 +45,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,
         'max_output_tokens': 8192,
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,
-            'itpm': 100000,   # 帶星號，可能變動
-            'otpm': 20000
-        },
         'name': 'Claude 3.5 Haiku',
         'description': '輕量快速，簡單分析'
     },
@@ -76,11 +54,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,
         'max_output_tokens': 4096,
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,
-            'itpm': 40000,    # 帶星號，可能變動
-            'otpm': 8000
-        },
         'name': 'Claude 3 Opus',
         'description': '深度分析，較慢但詳細'
     },
@@ -88,11 +61,6 @@ MODEL_LIMITS = {
         'max_tokens': 200000,
         'max_output_tokens': 4096,
         'chars_per_token': 2.5,
-        'rate_limits': {
-            'rpm': 1000,
-            'itpm': 100000,   # 帶星號，可能變動
-            'otpm': 20000
-        },
         'name': 'Claude 3 Haiku',
         'description': '經濟實惠，基本分析'
     }

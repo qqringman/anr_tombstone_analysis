@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ file_path }} - Android Log Viewer</title>
 	<link href="{{ url_for('static', filename='css/view_file.css') }}" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/rateLimit.css') }}" rel="stylesheet">
 </head>
 <body>
     <div class="header">
@@ -142,10 +141,6 @@
                                     <span class="mode-icon">🔍</span>
                                     <span>深度</span>
                                 </button>
-                                <button class="mode-btn" data-mode="max_tokens" onclick="selectAnalysisMode('max_tokens', false)">
-                                    <span class="mode-icon">📊</span>
-                                    <span>最大</span>
-                                </button>
                             </div>
                             <!-- 深度思考選項移到這裡 -->
                             <label class="thinking-toggle">
@@ -158,9 +153,6 @@
                         </div>
                     </div>
                     
-                    <!-- 速率限制狀態顯示區域 -->
-                    <div id="rateLimitStatusContainer"></div>
-
                     <!-- 分析按鈕 -->
                     <button class="analyze-current-btn" id="analyzeBtn" onclick="startSmartAnalysis()">
                         <span id="analyzeIcon">🔍</span> 
@@ -362,6 +354,5 @@
 		window.escaped_file_path = {{ escaped_file_path | safe }};
 	</script>
     <script src="{{ url_for('static', filename='js/view_file.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/rateLimit.js') }}"></script>
 </body>
 </html>

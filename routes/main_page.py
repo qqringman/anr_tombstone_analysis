@@ -20,14 +20,13 @@ from collections import OrderedDict
 import uuid
 import asyncio
 import queue
-from rate_limiter import LimitedCache, AndroidLogAnalyzer
+from android_log_analyzer import AndroidLogAnalyzer
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
 
 # Global storage for analysis results
 analyzer = AndroidLogAnalyzer()
-analysis_cache = LimitedCache(max_size=100, max_age_hours=24)
 analysis_lock = threading.Lock()
 
 # HTML template with beautiful charts
@@ -3498,12 +3497,7 @@ def analyze():
         
 @main_page_bp.route('/export/<format>/<analysis_id>')
 def export(format, analysis_id):
-    # 使用 LimitedCache 的 get 方法
-    data = analysis_cache.get(analysis_id)
 
-    if data is None:
-        return jsonify({'error': 'Analysis not found or expired'}), 404
-    
     if format == 'json':
         # Create JSON file
         output = io.BytesIO()
