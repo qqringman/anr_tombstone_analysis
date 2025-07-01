@@ -20,7 +20,7 @@ from collections import OrderedDict
 import uuid
 import asyncio
 import queue
-from android_log_analyzer import AndroidLogAnalyzer
+from routes.ai_analyzer import AndroidLogAnalyzer
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
@@ -3470,10 +3470,7 @@ def analyze():
         
         # 執行分析 - 這裡是關鍵，確保 results 被定義
         results = analyzer.analyze_logs(path)
-        
-        # 使用新的 cache
-        analysis_cache.set(analysis_id, results)
-        
+               
         # Return results
         return jsonify({
             'analysis_id': analysis_id,

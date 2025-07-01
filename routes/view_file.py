@@ -20,9 +20,11 @@ from collections import OrderedDict
 import uuid
 import asyncio
 import queue
+from routes.ai_analyzer import AndroidLogAnalyzer
 
 # 創建一個藍圖實例
 view_file_bp = Blueprint('view_file_bp', __name__)
+analyzer = AndroidLogAnalyzer()
 
 @view_file_bp.route('/search-in-file', methods=['POST'])
 def search_in_file():
