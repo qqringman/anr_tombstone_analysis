@@ -1,0 +1,465 @@
+/* AI 分析器樣式 - ChatGPT 風格 */
+
+/* 模式選擇按鈕 */
+.ai-mode-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #2d2d30;
+    border-radius: 8px;
+}
+
+.ai-mode-btn {
+    flex: 1;
+    padding: 15px;
+    background: #1e1e1e;
+    border: 2px solid #3e3e42;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.ai-mode-btn:hover {
+    border-color: #007acc;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3);
+}
+
+.ai-mode-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    color: white;
+}
+
+.ai-mode-btn.active::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+    );
+    transform: rotate(45deg);
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+.mode-icon {
+    font-size: 24px;
+}
+
+.mode-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.mode-desc {
+    font-size: 12px;
+    color: #969696;
+    text-align: center;
+}
+
+/* Provider 選擇器 */
+.provider-select {
+    background: #2d2d30;
+    border: 1px solid #3e3e42;
+    color: #d4d4d4;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.provider-select:hover {
+    border-color: #007acc;
+}
+
+/* 停止按鈕 */
+.analyze-stop-btn {
+    background: #d73a49;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 10px;
+}
+
+.analyze-stop-btn:hover {
+    background: #cb2431;
+    transform: translateY(-1px);
+}
+
+/* 分析中的按鈕狀態 */
+.analyze-current-btn.analyzing {
+    background: #969696;
+    cursor: not-allowed;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+/* AI 對話項目 - ChatGPT 風格 */
+.ai-conversation-item {
+    margin-bottom: 20px;
+    background: #2d2d30;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ai-conversation-header {
+    background: linear-gradient(135deg, #3e3e42 0%, #2d2d30 100%);
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.conversation-meta {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 13px;
+    color: #969696;
+}
+
+.mode-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: rgba(102, 126, 234, 0.2);
+    border-radius: 15px;
+    color: #a8b5f0;
+}
+
+.model-info {
+    color: #d4d4d4;
+}
+
+.timestamp {
+    font-size: 12px;
+}
+
+.conversation-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.copy-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #d4d4d4;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.copy-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+/* AI 思考動畫 */
+.ai-thinking {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    color: #969696;
+    font-style: italic;
+}
+
+.thinking-dots {
+    display: flex;
+    gap: 3px;
+}
+
+.thinking-dots span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #667eea;
+    border-radius: 50%;
+    animation: thinking 1.4s infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes thinking {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    30% {
+        transform: translateY(-10px);
+        opacity: 1;
+    }
+}
+
+/* AI 回應內容 - ChatGPT 風格 */
+.ai-conversation-content {
+    padding: 20px;
+}
+
+.ai-response-text {
+    color: #e0e0e0;
+    line-height: 1.7;
+    font-size: 15px;
+}
+
+/* 標題樣式 */
+.ai-h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 20px 0 15px 0;
+    color: #ffffff;
+}
+
+.ai-h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 18px 0 12px 0;
+    color: #ffffff;
+}
+
+.ai-h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 15px 0 10px 0;
+    color: #4ec9b0;
+}
+
+/* 段落 */
+.ai-paragraph {
+    margin: 12px 0;
+    line-height: 1.8;
+}
+
+/* 列表 */
+.ai-ordered-list,
+.ai-unordered-list {
+    margin: 15px 0;
+    padding-left: 30px;
+}
+
+.ai-ordered-item,
+.ai-unordered-item {
+    margin: 8px 0;
+    line-height: 1.7;
+}
+
+/* 行內代碼 */
+.ai-inline-code {
+    background: #1e1e1e;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    color: #ce9178;
+    border: 1px solid #3e3e42;
+}
+
+/* 代碼塊 */
+.ai-code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 15px 0;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+}
+
+.ai-code-block code {
+    color: #d4d4d4;
+    line-height: 1.6;
+}
+
+/* 使用資訊 */
+.ai-usage-info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #1e1e1e;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #969696;
+    border: 1px solid #3e3e42;
+}
+
+.token-count {
+    display: flex;
+    gap: 5px;
+}
+
+.input-tokens {
+    color: #4ec9b0;
+}
+
+.output-tokens {
+    color: #f48771;
+}
+
+.cost-info {
+    color: #ffd700;
+    font-weight: 600;
+}
+
+/* 錯誤訊息 */
+.ai-error {
+    background: #f44336;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.error-icon {
+    font-size: 20px;
+}
+
+/* 模型定價資訊 */
+.model-pricing {
+    font-size: 11px;
+    color: #ffd700;
+    margin-top: 5px;
+}
+
+/* 回應動畫 */
+.ai-response-text > * {
+    animation: fadeInUp 0.3s ease;
+    animation-fill-mode: both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 延遲動畫 */
+.ai-response-text > *:nth-child(1) { animation-delay: 0.1s; }
+.ai-response-text > *:nth-child(2) { animation-delay: 0.2s; }
+.ai-response-text > *:nth-child(3) { animation-delay: 0.3s; }
+.ai-response-text > *:nth-child(4) { animation-delay: 0.4s; }
+.ai-response-text > *:nth-child(5) { animation-delay: 0.5s; }
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .ai-mode-selector {
+        flex-direction: column;
+    }
+    
+    .ai-mode-btn {
+        width: 100%;
+    }
+    
+    .ai-conversation-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+}
+
+/* 深色主題優化 */
+@media (prefers-color-scheme: dark) {
+    .ai-inline-code {
+        background: #0d1117;
+        border-color: #30363d;
+    }
+    
+    .ai-code-block {
+        background: #0d1117;
+        border-color: #30363d;
+    }
+}
+
+/* 信息和警告訊息 */
+.ai-info-message,
+.ai-warning-message {
+    padding: 10px 15px;
+    margin: 10px 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.ai-info-message {
+    background: rgba(78, 201, 176, 0.1);
+    border: 1px solid rgba(78, 201, 176, 0.3);
+    color: #4ec9b0;
+}
+
+.ai-warning-message {
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    color: #ff9800;
+}
+
+.info-icon,
+.warning-icon {
+    font-size: 16px;
+}
