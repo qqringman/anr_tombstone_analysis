@@ -257,7 +257,22 @@ class AIAnalyzer {
             
             while (true) {
                 const { value, done } = await reader.read();
-                if (done) break;
+                if (done) {
+                    // 流結束時，確保觸發 complete 如果沒有收到
+                    if (this.isAnalyzing && this.currentResponseArea) {
+                        // 給一個短暫延遲確保最後的數據被處理
+                        setTimeout(() => {
+                            if (this.isAnalyzing) {
+                                // 如果還在分析中，手動觸發完成
+                                this.handleComplete({
+                                    usage: { input: 0, output: 0 },
+                                    cost: 0
+                                }, this.currentResponseArea);
+                            }
+                        }, 500);
+                    }
+                    break;
+                }
                 
                 if (!this.isAnalyzing) {
                     reader.cancel();
@@ -282,9 +297,6 @@ class AIAnalyzer {
         } catch (error) {
             console.error('分析錯誤:', error);
             this.handleError(error.message, responseArea);
-        } finally {
-            // 確保移除 loading 並完成狀態
-            this.finalizeAnalysis();
         }
     }
     
@@ -444,14 +456,30 @@ class AIAnalyzer {
     }
     
     handleComplete(data, responseArea) {
-        // 最終格式化
+        // 停止任何進行中的更新
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+            this.updateTimer = null;
+        }
+        
+        // 做最後一次完整格式化（但不要清空）
         const contentDiv = responseArea.querySelector('.ai-response-text');
-        this.displayFormattedContent(contentDiv);
+        const contentArea = contentDiv.querySelector('.content-area');
+        
+        if (contentArea && this.accumulatedContent) {
+            // 最終格式化
+            const formatted = this.formatContentChatGPTStyle(this.accumulatedContent);
+            contentArea.innerHTML = formatted;
+        }
         
         // 更新統計信息
-        responseArea.querySelector('.input-tokens').textContent = data.usage.input;
-        responseArea.querySelector('.output-tokens').textContent = data.usage.output;
-        responseArea.querySelector('.total-cost').textContent = data.cost.toFixed(4);
+        const usageDiv = responseArea.querySelector('.ai-usage-info');
+        if (data.usage) {
+            responseArea.querySelector('.input-tokens').textContent = data.usage.input.toLocaleString();
+            responseArea.querySelector('.output-tokens').textContent = data.usage.output.toLocaleString();
+            responseArea.querySelector('.total-cost').textContent = data.cost.toFixed(4);
+            usageDiv.style.display = 'flex';
+        }
         
         // 添加到消息歷史
         this.messages.push({
@@ -464,25 +492,86 @@ class AIAnalyzer {
             cost: data.cost
         });
         
-        this.finalizeAnalysis();
+        // 標記分析完成但不清理內容
+        this.completeAnalysis();
     }
-    
+
+    completeAnalysis() {
+        // 只重置狀態，不清理內容
+        this.isAnalyzing = false;
+        this.updateUIState('idle');
+        
+        // 確保移除 loading
+        if (this.currentResponseArea) {
+            const thinkingDiv = this.currentResponseArea.querySelector('.ai-thinking');
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+            
+            // 添加完成標記
+            this.currentResponseArea.classList.add('analysis-complete');
+        }
+        
+        // 重置追蹤變數但不清空內容
+        this.currentResponseArea = null;
+        // 不要清空 accumulatedContent，以便後續可能的使用
+        this.infoMessages.clear();
+    }
+
+    forceStopAnalysis() {
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+            this.updateTimer = null;
+        }
+        
+        this.isAnalyzing = false;
+        this.updateUIState('idle');
+        
+        if (this.currentResponseArea) {
+            const thinkingDiv = this.currentResponseArea.querySelector('.ai-thinking');
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+        }
+        
+        // 強制停止時才清理所有內容
+        this.currentResponseArea = null;
+        this.accumulatedContent = '';
+        this.infoMessages.clear();
+    }
+
     handleError(error, responseArea) {
         const contentDiv = responseArea.querySelector('.ai-response-text');
         const thinkingDiv = responseArea.querySelector('.ai-thinking');
         
         // 移除 loading
-        thinkingDiv.style.display = 'none';
+        if (thinkingDiv) {
+            thinkingDiv.style.display = 'none';
+        }
         
-        // 清空任何部分內容
-        contentDiv.innerHTML = `
-            <div class="ai-error">
+        // 顯示錯誤但保留之前的內容（如果有）
+        const messageArea = contentDiv.querySelector('.message-area');
+        const contentArea = contentDiv.querySelector('.content-area');
+        
+        if (!messageArea || !contentArea) {
+            contentDiv.innerHTML = `
+                <div class="ai-error">
+                    <span class="error-icon">❌</span>
+                    <span class="error-message">錯誤: ${error}</span>
+                </div>
+            `;
+        } else {
+            // 在現有內容後添加錯誤信息
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'ai-error';
+            errorDiv.innerHTML = `
                 <span class="error-icon">❌</span>
                 <span class="error-message">錯誤: ${error}</span>
-            </div>
-        `;
+            `;
+            contentArea.appendChild(errorDiv);
+        }
         
-        this.finalizeAnalysis();
+        this.completeAnalysis();
     }
 
     finalizeAnalysis() {
@@ -527,28 +616,27 @@ class AIAnalyzer {
 	}
 
     async stopAnalysis() {
-		if (!this.isAnalyzing) return;
-		
-		console.log('正在停止分析...');
-		
-		// 立即更新 UI
-		this.isAnalyzing = false;
-		this.updateUIState('idle');
-		
-		// 發送停止請求到後端
-		try {
-			const response = await fetch(`/api/ai/stop/${this.sessionId}`, { 
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
-			});
-			
-			if (response.ok) {
-				console.log('分析已成功停止');
-			}
-		} catch (error) {
-			console.error('停止分析時發生錯誤:', error);
-		}
-	}
+        if (!this.isAnalyzing) return;
+        
+        console.log('正在停止分析...');
+        
+        // 使用強制停止
+        this.forceStopAnalysis();
+        
+        // 發送停止請求到後端
+        try {
+            const response = await fetch(`/api/ai/stop/${this.sessionId}`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (response.ok) {
+                console.log('分析已成功停止');
+            }
+        } catch (error) {
+            console.error('停止分析時發生錯誤:', error);
+        }
+    }
     
     updateUIState(state) {
         const analyzeBtn = document.getElementById('analyzeBtn');

@@ -587,3 +587,26 @@
         transform: translateY(0);
     }
 }
+
+/* 分析完成的樣式 */
+.ai-conversation-item.analysis-complete {
+    border-left: 3px solid #4ec9b0;
+}
+
+/* 確保內容區域不會被意外隱藏 */
+.message-area,
+.content-area {
+    min-height: 20px;
+}
+
+/* 完成後的內容應該完全可見 */
+.analysis-complete .chatgpt-content {
+    opacity: 1 !important;
+    display: block !important;
+}
+
+/* 使用量信息在完成後應該保持可見 */
+.analysis-complete .ai-usage-info {
+    display: flex !important;
+    opacity: 1 !important;
+}

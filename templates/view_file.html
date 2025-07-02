@@ -126,34 +126,6 @@
             <div class="ai-chat-area" id="aiChatArea">
                 <!-- 智能分析模式選擇 -->
                 <div class="analyze-file-section">
-                    <div class="analysis-mode-selector-compact">
-                        <div class="mode-selector-row">
-                            <label class="mode-label">分析模式：</label>
-                            <div class="mode-buttons">
-                                <button class="mode-btn active" data-mode="auto" onclick="selectAnalysisMode('auto', false)">
-                                    <span class="mode-icon">🤖</span>
-                                    <span>智能</span>
-                                </button>
-                                <button class="mode-btn" data-mode="quick" onclick="selectAnalysisMode('quick', false)">
-                                    <span class="mode-icon">⚡</span>
-                                    <span>快速</span>
-                                </button>
-                                <button class="mode-btn" data-mode="comprehensive" onclick="selectAnalysisMode('comprehensive', false)">
-                                    <span class="mode-icon">🔍</span>
-                                    <span>深度</span>
-                                </button>
-                            </div>
-                            <!-- 深度思考選項移到這裡 -->
-                            <label class="thinking-toggle">
-                                <input type="checkbox" id="enableDeepThinking" checked>
-                                <span title="顯示 AI 的思考過程">🧠</span>
-                            </label>                        
-                        </div>
-                        <div class="mode-description" id="modeDescription">
-                            自動選擇最佳分析策略，平衡速度與深度
-                        </div>
-                    </div>
-                    
                     <!-- 分析按鈕 -->
                     <button class="analyze-current-btn" id="analyzeBtn" onclick="startSmartAnalysis()">
                         <span id="analyzeIcon">🔍</span> 
