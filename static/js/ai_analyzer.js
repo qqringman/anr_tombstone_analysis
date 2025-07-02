@@ -428,40 +428,87 @@ class AIAnalyzer {
     }
     
     formatMarkdown(text) {
-        // 基本的 Markdown 格式化
-        let formatted = text;
-        
-        // 標題
-        formatted = formatted.replace(/^### (.+)$/gm, '<h3 class="ai-h3">$1</h3>');
-        formatted = formatted.replace(/^## (.+)$/gm, '<h2 class="ai-h2">$1</h2>');
-        formatted = formatted.replace(/^# (.+)$/gm, '<h1 class="ai-h1">$1</h1>');
-        
-        // 粗體和斜體
-        formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        formatted = formatted.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        
-        // 代碼
-        formatted = formatted.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
-        
-        // 代碼塊
-        formatted = formatted.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-            return `<pre class="ai-code-block"><code class="language-${lang}">${this.escapeHtml(code)}</code></pre>`;
-        });
-        
-        // 列表
-        formatted = formatted.replace(/^\d+\. (.+)$/gm, '<li class="ai-ordered-item">$1</li>');
-        formatted = formatted.replace(/^- (.+)$/gm, '<li class="ai-unordered-item">$1</li>');
-        
-        // 將連續的列表項包裝
-        formatted = formatted.replace(/(<li class="ai-ordered-item">.*<\/li>\s*)+/g, '<ol class="ai-ordered-list">$&</ol>');
-        formatted = formatted.replace(/(<li class="ai-unordered-item">.*<\/li>\s*)+/g, '<ul class="ai-unordered-list">$&</ul>');
-        
-        // 段落
-        formatted = formatted.replace(/\n\n/g, '</p><p class="ai-paragraph">');
-        formatted = '<p class="ai-paragraph">' + formatted + '</p>';
-        
-        return formatted;
+        console.log(text)
+        const lines = text.split('\n');
+        let html = '';
+        let inCodeBlock = false;
+        let codeLang = '';
+        let listType = null; // 'ol' 或 'ul'
+
+        for (let line of lines) {
+            // 1. CODE BLOCK 開關
+            if (inCodeBlock) {
+            if (line.trim().startsWith('```')) {
+                html += '</code></pre>';
+                inCodeBlock = false;
+            } else {
+                html += this.escapeHtml(line) + '\n';
+            }
+            continue;
+            }
+            if (line.trim().startsWith('```')) {
+            codeLang = line.trim().slice(3).trim();
+            html += `<pre class="ai-code-block"><code class="language-${codeLang}">`;
+            inCodeBlock = true;
+            continue;
+            }
+
+            // 2. HEADING
+            const hdMatch = line.match(/^(#{1,3})\s+(.*)$/);
+            if (hdMatch) {
+            const lvl = hdMatch[1].length;
+            html += `<h${lvl} class="ai-h${lvl}">${hdMatch[2]}</h${lvl}>`;
+            continue;
+            }
+
+            // 3. 有序列表
+            const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+            if (olMatch) {
+            if (listType !== 'ol') {
+                if (listType === 'ul') html += '</ul>';
+                html += '<ol class="ai-ordered-list">';
+                listType = 'ol';
+            }
+            html += `<li class="ai-ordered-item">${olMatch[2]}</li>`;
+            continue;
+            }
+
+            // 4. 無序列表
+            const ulMatch = line.match(/^- (.*)$/);
+            if (ulMatch) {
+            if (listType !== 'ul') {
+                if (listType === 'ol') html += '</ol>';
+                html += '<ul class="ai-unordered-list">';
+                listType = 'ul';
+            }
+            html += `<li class="ai-unordered-item">${ulMatch[1]}</li>`;
+            continue;
+            }
+
+            // 遇到空行，結束當前列表
+            if (line.trim() === '') {
+            if (listType === 'ol') html += '</ol>';
+            if (listType === 'ul') html += '</ul>';
+            listType = null;
+            continue;
+            }
+
+            // 5. 段落＋行內格式
+            let inline = line
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
+            html += `<p class="ai-paragraph">${inline}</p>`;
+        }
+
+        // 收尾：還沒關的 codeblock 或 list
+        if (inCodeBlock) html += '</code></pre>';
+        if (listType === 'ol') html += '</ol>';
+        if (listType === 'ul') html += '</ul>';
+        console.log(html    )
+        return html;
     }
+
     
     escapeHtml(text) {
         const div = document.createElement('div');
