@@ -37,7 +37,8 @@ body {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
-	transition: flex 0.3s ease;
+	transition: none; /* 移除過渡效果以避免拖曳時的延遲 */
+	min-width: 300px;
 }
 
 /* ===== 右側 AI 面板 ===== */
@@ -51,6 +52,8 @@ body {
 	transition: width 0.3s ease;
 	height: 100%;
 	position: relative;
+	min-width: 0;
+	max-width: 70%;
 }
 
 .right-panel.active {
@@ -60,14 +63,15 @@ body {
 
 /* ===== 調整大小手柄 ===== */
 .resize-handle {
-	position: absolute;
 	width: 5px;
 	height: 100%;
 	background: transparent;
 	cursor: col-resize;
 	z-index: 100;
-	left: 60%;
 	display: none;
+	flex-shrink: 0;
+	position: relative;
+	transition: background 0.2s;
 }
 
 .resize-handle.active {
@@ -76,6 +80,21 @@ body {
 
 .resize-handle:hover {
 	background: #007acc;
+}
+
+/* 拖曳時的視覺效果 */
+.resize-handle.dragging {
+	background: #007acc;
+	opacity: 0.8;
+}
+
+/* 防止拖曳時的文字選擇 */
+.main-container.resizing {
+	user-select: none;
+}
+
+.main-container.resizing * {
+	cursor: col-resize !important;
 }
 
 /* ===== AI 面板頭部 ===== */
