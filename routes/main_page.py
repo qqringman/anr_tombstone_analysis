@@ -20,7 +20,7 @@ from collections import OrderedDict
 import uuid
 import asyncio
 import queue
-from routes.ai_analyzer import AndroidLogAnalyzer
+from routes.grep_analyzer import AndroidLogAnalyzer
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
@@ -655,12 +655,12 @@ HTML_TEMPLATE = r'''
     }
 
     .section-toggle .toggle-icon::before {
-        content: "+";
+        content: "x";
         display: block;
     }
 
     .section-container.collapsed .section-toggle .toggle-icon::before {
-        content: "×";
+        content: "+";
     }
 
     .logs-table .section-toggle {
@@ -1439,7 +1439,7 @@ HTML_TEMPLATE = r'''
         let summaryPage = 1;
         let logsPage = 1;
         let filesPage = 1;
-        const itemsPerPage = 50;
+        const itemsPerPage = 10;
         
         // Filtered data
         let filteredSummary = [];

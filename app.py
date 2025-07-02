@@ -21,7 +21,7 @@ import asyncio
 import queue
 
 # 從新的檔案中導入藍圖
-from routes.ai import ai_bp
+from routes.ai_analyzer import ai_analyzer_bp
 from routes.view_file import view_file_bp
 from routes.main_page import main_page_bp
 
@@ -31,7 +31,7 @@ progress_queues = {}
 app = Flask(__name__)
 
 # 註冊藍圖
-app.register_blueprint(ai_bp)
+app.register_blueprint(ai_analyzer_bp)
 app.register_blueprint(view_file_bp)
 app.register_blueprint(main_page_bp)
 
