@@ -463,3 +463,127 @@
 .warning-icon {
     font-size: 16px;
 }
+
+/* ChatGPT 風格內容 */
+.chatgpt-style-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.75;
+    color: #d4d4d4;
+}
+
+/* 標題樣式 */
+.gpt-h1, .gpt-h2, .gpt-h3, .gpt-h4 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.gpt-h1 { font-size: 28px; }
+.gpt-h2 { font-size: 24px; }
+.gpt-h3 { font-size: 20px; }
+.gpt-h4 { font-size: 18px; }
+
+/* 段落 */
+.gpt-paragraph {
+    margin-bottom: 16px;
+    line-height: 1.75;
+}
+
+.gpt-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* 列表 */
+.gpt-numbered-list,
+.gpt-bullet-list {
+    margin: 16px 0;
+    padding-left: 24px;
+}
+
+.gpt-list-item {
+    margin-bottom: 8px;
+    line-height: 1.75;
+}
+
+/* 行內代碼 */
+.gpt-inline-code {
+    background: rgba(45, 45, 48, 0.8);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+    color: #ce9178;
+}
+
+/* 代碼塊 */
+.gpt-code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+}
+
+.gpt-code-block code {
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 確保 loading 正確隱藏 */
+.ai-thinking {
+    transition: opacity 0.3s ease;
+}
+
+.ai-thinking[style*="display: none"] {
+    opacity: 0 !important;
+}
+
+/* 防止閃爍的內容區域 */
+.message-area {
+    margin-bottom: 16px;
+}
+
+.content-area {
+    position: relative;
+}
+
+/* 平滑過渡 */
+.chatgpt-content {
+    opacity: 1;
+    transition: opacity 0.1s ease;
+}
+
+/* 訊息樣式優化 */
+.ai-info-message,
+.ai-warning-message {
+    margin-bottom: 8px;
+    animation: slideIn 0.3s ease;
+}
+
+.ai-info-message:last-child,
+.ai-warning-message:last-child {
+    margin-bottom: 16px;
+}
+
+/* 防止重複的圖標 */
+.info-icon,
+.warning-icon {
+    display: inline-block;
+    margin-right: 8px;
+}
+
+/* 內容更新時的平滑效果 */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

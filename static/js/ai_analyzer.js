@@ -8,6 +8,10 @@ class AIAnalyzer {
         this.eventSource = null;
         this.currentMode = 'smart';
         this.messages = [];
+        this.markdownParser = null;
+        this.currentResponseArea = null;  // 追蹤當前的回應區域
+        this.accumulatedContent = '';     // 累積完整內容
+        this.infoMessages = new Set();  // 追蹤已顯示的信息消息        
         this.initializeUI();
     }
     
@@ -201,93 +205,88 @@ class AIAnalyzer {
 	}
     
     async startAnalysis() {
-		if (this.isAnalyzing) return;
-		
-		// 使用當前檢視的檔案內容（從 view_file.js 中的全域變數）
-		const fileContent = window.fileContent || window.escaped_content;
-		const fileName = window.fileName || window.escaped_filename;
-		const filePath = window.filePath || window.escaped_file_path;
-		
-		if (!fileContent) {
-			alert('沒有檔案內容可分析');
-			return;
-		}
-		
-		// 顯示檔案資訊
-		console.log('準備分析檔案:', fileName);
-		console.log('檔案大小:', fileContent.length, '字元');
-		
-		this.isAnalyzing = true;
-		this.updateUIState('analyzing');
-		
-		// 創建新的回應區域
-		const responseArea = this.createResponseArea();
-		
-		try {
-			// 準備請求資料
-			const requestData = {
-				session_id: this.sessionId,
-				provider: this.currentProvider,
-				model: this.currentModel,
-				mode: this.currentMode,
-				file_path: filePath,
-				file_name: fileName,
-				content: fileContent,  // 使用完整的檔案內容
-				stream: true,
-				// 包含之前的對話上下文
-				context: this.messages.slice(-5).map(msg => ({
-					role: msg.role,
-					content: msg.content.substring(0, 500)  // 限制長度
-				}))
-			};
-			
-			// 發送分析請求（使用 fetch + SSE）
-			const response = await fetch('/api/ai/analyze', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(requestData)
-			});
-			
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-			
-			// 讀取流式回應
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done) break;
-				
-				// 檢查是否被中斷
-				if (!this.isAnalyzing) {
-					reader.cancel();
-					break;
-				}
-				
-				const chunk = decoder.decode(value, { stream: true });
-				const lines = chunk.split('\n');
-				
-				for (const line of lines) {
-					if (line.startsWith('data: ')) {
-						try {
-							const data = JSON.parse(line.slice(6));
-							this.handleStreamData(data, responseArea);
-						} catch (e) {
-							console.error('解析 SSE 資料錯誤:', e);
-						}
-					}
-				}
-			}
-			
-		} catch (error) {
-			console.error('分析錯誤:', error);
-			this.handleError(error.message, responseArea);
-		} finally {
-			this.stopAnalysis();
-		}
-	}
+        if (this.isAnalyzing) return;
+        
+        const fileContent = window.fileContent || window.escaped_content;
+        const fileName = window.fileName || window.escaped_filename;
+        const filePath = window.filePath || window.escaped_file_path;
+        
+        if (!fileContent) {
+            alert('沒有檔案內容可分析');
+            return;
+        }
+        
+        this.isAnalyzing = true;
+        this.updateUIState('analyzing');
+        
+        // 重置累積內容
+        this.accumulatedContent = '';
+        
+        // 創建新的回應區域
+        const responseArea = this.createResponseArea();
+        this.currentResponseArea = responseArea;
+        
+        try {
+            const requestData = {
+                session_id: this.sessionId,
+                provider: this.currentProvider,
+                model: this.currentModel,
+                mode: this.currentMode,
+                file_path: filePath,
+                file_name: fileName,
+                content: fileContent,
+                stream: true,
+                context: this.messages.slice(-5).map(msg => ({
+                    role: msg.role,
+                    content: msg.content.substring(0, 500)
+                }))
+            };
+            
+            const response = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                
+                if (!this.isAnalyzing) {
+                    reader.cancel();
+                    break;
+                }
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            this.handleStreamData(data, responseArea);
+                        } catch (e) {
+                            console.error('解析 SSE 資料錯誤:', e);
+                        }
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('分析錯誤:', error);
+            this.handleError(error.message, responseArea);
+        } finally {
+            // 確保移除 loading 並完成狀態
+            this.finalizeAnalysis();
+        }
+    }
     
     createResponseArea() {
         const responseContent = document.getElementById('aiResponseContent');
@@ -344,71 +343,6 @@ class AIAnalyzer {
         
         return conversationItem;
     }
-    
-    handleStreamData(data, responseArea) {
-		const contentDiv = responseArea.querySelector('.ai-response-text');
-		const thinkingDiv = responseArea.querySelector('.ai-thinking');
-		const usageDiv = responseArea.querySelector('.ai-usage-info');
-		
-		switch (data.type) {
-			case 'start':
-				// 隱藏思考動畫，開始顯示內容
-				thinkingDiv.style.display = 'none';
-				break;
-				
-			case 'info':
-				// 顯示信息訊息
-				if (data.message) {
-					const infoDiv = document.createElement('div');
-					infoDiv.className = 'ai-info-message';
-					infoDiv.innerHTML = `<span class="info-icon">ℹ️</span> ${data.message}`;
-					contentDiv.appendChild(infoDiv);
-				}
-				break;
-				
-			case 'warning':
-				// 顯示警告訊息
-				if (data.message) {
-					const warningDiv = document.createElement('div');
-					warningDiv.className = 'ai-warning-message';
-					warningDiv.innerHTML = `<span class="warning-icon">⚠️</span> ${data.message}`;
-					contentDiv.appendChild(warningDiv);
-				}
-				break;
-				
-			case 'content':
-				// 追加內容並格式化
-				this.appendFormattedContent(contentDiv, data.content);
-				break;
-				
-			case 'tokens':
-				// 更新 token 統計
-				if (data.input) {
-					responseArea.querySelector('.input-tokens').textContent = data.input.toLocaleString();
-				}
-				if (data.output) {
-					responseArea.querySelector('.output-tokens').textContent = data.output.toLocaleString();
-				}
-				usageDiv.style.display = 'flex';
-				break;
-				
-			case 'complete':
-				// 分析完成
-				this.handleComplete(data, responseArea);
-				break;
-				
-			case 'error':
-				// 顯示錯誤
-				this.handleError(data.error, responseArea);
-				break;
-				
-			case 'stopped':
-				// 分析被停止
-				this.appendFormattedContent(contentDiv, '\n\n[分析已停止]');
-				this.stopAnalysis();
-				break;
-		}
-	}
     
     appendFormattedContent(container, content) {
         // 將新內容添加到臨時元素中進行格式化
@@ -508,24 +442,21 @@ class AIAnalyzer {
         console.log(html    )
         return html;
     }
-
-    
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
     
     handleComplete(data, responseArea) {
-        // 更新最終統計
+        // 最終格式化
+        const contentDiv = responseArea.querySelector('.ai-response-text');
+        this.displayFormattedContent(contentDiv);
+        
+        // 更新統計信息
         responseArea.querySelector('.input-tokens').textContent = data.usage.input;
         responseArea.querySelector('.output-tokens').textContent = data.usage.output;
         responseArea.querySelector('.total-cost').textContent = data.cost.toFixed(4);
         
-        // 添加到訊息歷史
+        // 添加到消息歷史
         this.messages.push({
             role: 'assistant',
-            content: responseArea.querySelector('.ai-response-text').innerText,
+            content: this.accumulatedContent,
             timestamp: new Date(),
             mode: this.currentMode,
             model: this.currentModel,
@@ -533,22 +464,51 @@ class AIAnalyzer {
             cost: data.cost
         });
         
-        // 重置狀態
-        this.stopAnalysis();
+        this.finalizeAnalysis();
     }
     
     handleError(error, responseArea) {
         const contentDiv = responseArea.querySelector('.ai-response-text');
         const thinkingDiv = responseArea.querySelector('.ai-thinking');
         
+        // 移除 loading
         thinkingDiv.style.display = 'none';
+        
+        // 清空任何部分內容
         contentDiv.innerHTML = `
             <div class="ai-error">
                 <span class="error-icon">❌</span>
                 <span class="error-message">錯誤: ${error}</span>
             </div>
         `;
+        
+        this.finalizeAnalysis();
     }
+
+    finalizeAnalysis() {
+        // 清理定時器
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+            this.updateTimer = null;
+        }
+        
+        // 重置狀態
+        this.isAnalyzing = false;
+        this.updateUIState('idle');
+        
+        // 確保移除 loading
+        if (this.currentResponseArea) {
+            const thinkingDiv = this.currentResponseArea.querySelector('.ai-thinking');
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+        }
+        
+        // 清理
+        this.currentResponseArea = null;
+        this.accumulatedContent = '';
+        this.infoMessages.clear();
+    }  
 
 	// 添加方法來追蹤對話上下文
 	addToContext(role, content) {
@@ -716,6 +676,396 @@ class AIAnalyzer {
         
         html += '</body></html>';
         return html;
+    }
+
+    handleStreamData(data, responseArea) {
+        const contentDiv = responseArea.querySelector('.ai-response-text');
+        const thinkingDiv = responseArea.querySelector('.ai-thinking');
+        const usageDiv = responseArea.querySelector('.ai-usage-info');
+        
+        switch (data.type) {
+            case 'start':
+                thinkingDiv.style.display = 'none';
+                this.accumulatedContent = '';
+                this.infoMessages.clear();  // 清除追蹤
+                // 清空內容區但保留結構
+                contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
+                break;
+                
+            case 'info':
+            case 'warning':
+                // 只添加新的消息
+                if (data.message && !this.infoMessages.has(data.message)) {
+                    this.infoMessages.add(data.message);
+                    this.addInfoMessage(contentDiv, data.type, data.message);
+                }
+                break;
+                
+            case 'content':
+                // 累積內容並更新顯示
+                this.accumulatedContent += data.content;
+                this.updateContentDisplay(contentDiv);
+                break;
+                
+            case 'tokens':
+                if (data.input) {
+                    responseArea.querySelector('.input-tokens').textContent = data.input.toLocaleString();
+                }
+                if (data.output) {
+                    responseArea.querySelector('.output-tokens').textContent = data.output.toLocaleString();
+                }
+                usageDiv.style.display = 'flex';
+                break;
+                
+            case 'complete':
+                this.handleComplete(data, responseArea);
+                break;
+                
+            case 'error':
+                this.handleError(data.error, responseArea);
+                break;
+                
+            case 'stopped':
+                this.finalizeAnalysis();
+                break;
+        }
+    }
+
+    addInfoMessage(container, type, message) {
+        const messageArea = container.querySelector('.message-area');
+        if (!messageArea) return;
+        
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `ai-${type}-message`;
+        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
+        messageArea.appendChild(msgDiv);
+    }
+
+    displayMessage(container, type, message) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `ai-${type}-message`;
+        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
+        container.appendChild(msgDiv);
+    }
+
+    updateContentDisplay(container) {
+        // 使用防抖動更新
+        if (this.updateTimer) {
+            clearTimeout(this.updateTimer);
+        }
+        
+        this.updateTimer = setTimeout(() => {
+            const contentArea = container.querySelector('.content-area');
+            if (!contentArea) return;
+            
+            // 只更新內容區域，不影響消息區域
+            const formatted = this.formatContentChatGPTStyle(this.accumulatedContent);
+            contentArea.innerHTML = formatted;
+            
+            // 保持滾動在底部
+            this.scrollToBottom();
+        }, 100);  // 100ms 防抖
+    }
+
+    displayFormattedContent(container) {
+        // 使用 requestAnimationFrame 避免頻繁更新
+        if (this.updateTimer) {
+            cancelAnimationFrame(this.updateTimer);
+        }
+        
+        this.updateTimer = requestAnimationFrame(() => {
+            // 清空並重新渲染（ChatGPT 風格）
+            const existingMessages = container.querySelectorAll('.ai-info-message, .ai-warning-message');
+            const messages = Array.from(existingMessages).map(el => ({
+                type: el.className.includes('info') ? 'info' : 'warning',
+                content: el.textContent
+            }));
+            
+            container.innerHTML = '';
+            
+            // 重新添加信息消息
+            messages.forEach(msg => {
+                this.displayMessage(container, msg.type, msg.content);
+            });
+            
+            // 格式化並顯示主要內容
+            const formatted = this.formatContentChatGPTStyle(this.accumulatedContent);
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'chatgpt-style-content';
+            contentWrapper.innerHTML = formatted;
+            container.appendChild(contentWrapper);
+            
+            // 保持滾動在底部
+            this.scrollToBottom();
+        });
+    }
+
+    formatContentChatGPTStyle(text) {
+        if (!text) return '';
+        
+        let html = '<div class="chatgpt-content">';
+        
+        // 智能分段：保留空行、標題前後的換行
+        const lines = text.split('\n');
+        let currentParagraph = [];
+        let inCodeBlock = false;
+        let codeBlockContent = [];
+        let codeBlockLang = '';
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // 處理代碼塊
+            if (line.startsWith('```')) {
+                if (!inCodeBlock) {
+                    // 開始代碼塊
+                    if (currentParagraph.length > 0) {
+                        html += this.processParagraph(currentParagraph.join('\n'));
+                        currentParagraph = [];
+                    }
+                    inCodeBlock = true;
+                    codeBlockLang = line.slice(3).trim();
+                    codeBlockContent = [];
+                } else {
+                    // 結束代碼塊
+                    html += `<pre class="gpt-code-block"><code class="language-${codeBlockLang}">${this.escapeHtml(codeBlockContent.join('\n'))}</code></pre>`;
+                    inCodeBlock = false;
+                    codeBlockContent = [];
+                }
+                continue;
+            }
+            
+            if (inCodeBlock) {
+                codeBlockContent.push(line);
+                continue;
+            }
+            
+            // 檢查是否是標題
+            if (line.match(/^#{1,6}\s/)) {
+                // 先處理之前的段落
+                if (currentParagraph.length > 0) {
+                    html += this.processParagraph(currentParagraph.join('\n'));
+                    currentParagraph = [];
+                }
+                // 處理標題
+                const level = line.match(/^(#{1,6})/)[1].length;
+                const title = line.replace(/^#{1,6}\s+/, '');
+                html += `<h${level} class="gpt-h${level}">${this.formatInline(title)}</h${level}>`;
+                continue;
+            }
+            
+            // 空行表示段落結束
+            if (line.trim() === '') {
+                if (currentParagraph.length > 0) {
+                    html += this.processParagraph(currentParagraph.join('\n'));
+                    currentParagraph = [];
+                }
+                continue;
+            }
+            
+            // 添加到當前段落
+            currentParagraph.push(line);
+        }
+        
+        // 處理最後的段落
+        if (currentParagraph.length > 0) {
+            html += this.processParagraph(currentParagraph.join('\n'));
+        }
+        
+        html += '</div>';
+        return html;
+    }
+
+    processParagraph(text) {
+        if (!text.trim()) return '';
+        
+        // 檢查是否是列表
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        // 編號列表
+        if (lines.every(line => line.match(/^\d+\.\s/))) {
+            let html = '<ol class="gpt-numbered-list">';
+            lines.forEach(line => {
+                const content = line.replace(/^\d+\.\s+/, '');
+                html += `<li class="gpt-list-item">${this.formatInline(content)}</li>`;
+            });
+            html += '</ol>';
+            return html;
+        }
+        
+        // 無序列表
+        if (lines.every(line => line.match(/^[-*]\s/))) {
+            let html = '<ul class="gpt-bullet-list">';
+            lines.forEach(line => {
+                const content = line.replace(/^[-*]\s+/, '');
+                html += `<li class="gpt-list-item">${this.formatInline(content)}</li>`;
+            });
+            html += '</ul>';
+            return html;
+        }
+        
+        // 普通段落
+        return `<p class="gpt-paragraph">${this.formatInline(text)}</p>`;
+    }
+
+    renderElement(container, element) {
+        const div = document.createElement('div');
+        
+        switch (element.type) {
+            case 'heading':
+                const level = element.content.match(/^(#{1,6})/)[1].length;
+                div.innerHTML = `<h${level} class="ai-h${level}">${
+                    element.content.replace(/^#{1,6}\s+/, '')
+                }</h${level}>`;
+                break;
+                
+            case 'list-item':
+                div.innerHTML = `<div class="ai-numbered-item">${
+                    this.formatInlineMarkdown(element.content)
+                }</div>`;
+                break;
+                
+            case 'paragraph':
+            case 'text':
+                div.innerHTML = `<p class="ai-paragraph">${
+                    this.formatInlineMarkdown(element.content)
+                }</p>`;
+                break;
+        }
+        
+        container.appendChild(div.firstChild);
+        
+        // 保持滾動
+        const chatArea = document.getElementById('aiChatArea');
+        if (chatArea) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+    }
+
+    formatInline(text) {
+        // 轉義 HTML
+        text = this.escapeHtml(text);
+        
+        // 處理格式
+        return text
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="gpt-inline-code">$1</code>');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    formatInlineMarkdown(text) {
+        return text
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
+    }
+    
+    scrollToBottom() {
+        const chatArea = document.getElementById('aiChatArea');
+        if (chatArea) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+    }    
+}
+
+// 更優雅的方案：增量解析和更新
+class StreamingMarkdownParser {
+    constructor() {
+        this.buffer = '';
+        this.parsedContent = [];
+        this.lastCompleteIndex = 0;
+    }
+    
+    // 添加新內容並返回可以安全渲染的部分
+    addContent(newContent) {
+        this.buffer += newContent;
+        return this.parseIncrementally();
+    }
+    
+    parseIncrementally() {
+        const updates = [];
+        let currentIndex = this.lastCompleteIndex;
+        
+        // 尋找可以安全解析的完整單元
+        while (currentIndex < this.buffer.length) {
+            const remaining = this.buffer.substring(currentIndex);
+            
+            // 檢查各種 Markdown 元素
+            const element = this.findNextCompleteElement(remaining, currentIndex);
+            
+            if (element) {
+                updates.push(element);
+                currentIndex = element.endIndex;
+                this.lastCompleteIndex = currentIndex;
+            } else {
+                // 沒有找到完整元素，等待更多內容
+                break;
+            }
+        }
+        
+        return updates;
+    }
+    
+    findNextCompleteElement(text, globalIndex) {
+        // 匹配完整的段落（以雙換行結束）
+        const paragraphMatch = text.match(/^([^\n]+)\n\n/);
+        if (paragraphMatch) {
+            return {
+                type: 'paragraph',
+                content: paragraphMatch[1],
+                endIndex: globalIndex + paragraphMatch[0].length
+            };
+        }
+        
+        // 匹配完整的列表項
+        const listMatch = text.match(/^(\d+\.\s+[^\n]+)\n/);
+        if (listMatch) {
+            return {
+                type: 'list-item',
+                content: listMatch[1],
+                endIndex: globalIndex + listMatch[0].length
+            };
+        }
+        
+        // 匹配完整的標題
+        const headingMatch = text.match(/^(#{1,6}\s+[^\n]+)\n/);
+        if (headingMatch) {
+            return {
+                type: 'heading',
+                content: headingMatch[1],
+                endIndex: globalIndex + headingMatch[0].length
+            };
+        }
+        
+        // 如果文本結束了，返回剩餘內容
+        if (text.length > 0 && !text.includes('\n')) {
+            // 檢查是否可能是未完成的 Markdown
+            if (this.mightBeIncomplete(text)) {
+                return null;
+            }
+            
+            return {
+                type: 'text',
+                content: text,
+                endIndex: globalIndex + text.length
+            };
+        }
+        
+        return null;
+    }
+    
+    mightBeIncomplete(text) {
+        // 可能是未完成的粗體、代碼等
+        return text.endsWith('*') || 
+               text.endsWith('`') || 
+               text.endsWith('#') ||
+               text.match(/\d+\.\s*$/);
     }
 }
 
