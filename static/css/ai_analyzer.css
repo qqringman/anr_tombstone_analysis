@@ -12,7 +12,7 @@
 
 .ai-mode-btn {
     flex: 1;
-    padding: 15px;
+    padding: 10px 12px;  /* 從 15px 改為 10px 12px */
     background: #1e1e1e;
     border: 2px solid #3e3e42;
     border-radius: 8px;
@@ -21,9 +21,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 5px;  /* 從 8px 改為 5px */
     position: relative;
     overflow: hidden;
+    font-size: 13px;  /* 新增：縮小字體 */
 }
 
 .ai-mode-btn:hover {
@@ -61,17 +62,17 @@
 }
 
 .mode-icon {
-    font-size: 24px;
+    font-size: 20px;
 }
 
 .mode-name {
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     color: #e0e0e0;
 }
 
 .mode-desc {
-    font-size: 12px;
+    font-size: 11px;
     color: #969696;
     text-align: center;
 }
@@ -609,4 +610,73 @@
 .analysis-complete .ai-usage-info {
     display: flex !important;
     opacity: 1 !important;
+}
+
+/* 在文件末尾添加： */
+.stop-analysis-btn {
+    background: #d73a49;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-top: 5px;
+}
+
+.stop-analysis-btn:hover {
+    background: #cb2431;
+}
+
+/* 分析中的按鈕狀態 */
+.ai-mode-btn.analyzing {
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.ai-mode-btn.analyzing .ai-spinner {
+    margin: 0 auto;
+}
+
+/* 匯出按鈕樣式 */
+.export-html-btn,
+.export-md-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #d4d4d4;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.export-html-btn:hover,
+.export-md-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+/* 停止按鈕樣式 */
+.analyze-stop-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #d73a49;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.ai-mode-selector {
+    position: relative;  /* 為停止按鈕提供定位參考 */
+}
+
+.ai-mode-btn.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }

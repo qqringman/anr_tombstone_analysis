@@ -167,12 +167,12 @@ body {
 
 /* ===== AI 聊天區域 ===== */
 .ai-chat-area {
-	flex: 1;
-	min-height: 300px;
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	position: relative;
+    flex: 1;
+    min-height: 300px;  /* 改為 400px */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
 }
 
 .fullscreen-mode .ai-chat-area {
@@ -2551,10 +2551,12 @@ a.btn {
     background: #1e1e1e;
     border-top: 2px solid #3e3e42;
     padding: 15px 20px;
-    min-height: 180px;
+    min-height: 180px;  /* 改為 120px */
+    max-height: 70%;    /* 改為 40% */
     display: flex;
     flex-direction: column;
-    position: relative; /* 重要：確保子元素定位正確 */
+    max-height: 400px;  /* 改為 300px */
+    overflow-y: auto;
 }
 
 .custom-question-wrapper {
@@ -4124,4 +4126,69 @@ a.btn {
 .analysis-progress.quick-mode .ai-spinner {
     margin: 0 auto 20px;
     display: block;
+}
+
+/* --------------------------------------- */
+
+/* 在 .input-inline-controls 後面添加 (約在第 250 行後)： */
+.provider-select-inline {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #d4d4d4;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 32px;
+}
+
+.provider-select-inline:hover {
+    background: #2d2d30;
+    border-color: #007acc;
+}
+
+/* 調整控制區域布局 */
+.input-inline-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 10;
+    flex-direction: row;  /* 確保橫向排列 */
+}
+
+/* 確保按鈕容器可見 */
+.analyze-file-section {
+    padding: 15px 20px;
+    border-bottom: 1px solid #3e3e42;
+    flex-shrink: 0;
+    display: block;  /* 確保顯示 */
+}
+
+/* 確保輸入控制區可見 */
+.input-inline-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex !important;  /* 強制顯示 */
+    gap: 8px;
+    align-items: center;
+    z-index: 10;
+    visibility: visible !important;  /* 確保可見 */
+}
+
+/* Provider 選擇器樣式 */
+.provider-select-inline {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #d4d4d4;
+    font-size: 12px;
+    cursor: pointer;
+    height: 32px;
+    display: block !important;  /* 確保顯示 */
 }

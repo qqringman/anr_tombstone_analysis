@@ -20,6 +20,7 @@ let searchDebounceTimer = null;
 let isSearching = false;
 let visibleRange = { start: 0, end: 100 }; // 追蹤可見範圍
 let hoveredLine = null; // 追蹤滑鼠懸停的行號
+let aiAnalyzer = null;
 
 // Search optimization variables
 const SEARCH_DELAY = 500; // 500ms 延遲
@@ -216,6 +217,62 @@ function resetAnalyzeButton() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+
+    // 初始化 AI 分析器
+    if (typeof AIAnalyzer !== 'undefined' && document.getElementById('analyzeBtn')) {
+        aiAnalyzer = new AIAnalyzer();
+        window.aiAnalyzer = aiAnalyzer;  // 確保全局可訪問
+    }
+
+    // 綁定模式按鈕事件
+    document.querySelectorAll('.ai-mode-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const mode = this.dataset.mode;
+            executeAIAnalysis(mode);
+        });
+    });
+    
+    // 綁定模型選擇按鈕
+    const modelSelectBtn = document.getElementById('modelSelectInlineBtn');
+    if (modelSelectBtn) {
+        modelSelectBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleModelPopup();
+        });
+    }
+    
+    // 綁定 Provider 選擇器
+    const providerSelect = document.getElementById('providerSelectInline');
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function(e) {
+            if (window.aiAnalyzer) {
+                window.aiAnalyzer.switchProvider(e.target.value);
+            }
+        });
+    }
+    
+    // 綁定發送按鈕
+    const askBtn = document.getElementById('askBtnInline');
+    if (askBtn) {
+        askBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            askCustomQuestion();
+        });
+    }
+    
+    // 監聽輸入框變化
+    const customQuestion = document.getElementById('customQuestion');
+    if (customQuestion) {
+        customQuestion.addEventListener('input', function() {
+            const hasContent = this.value.trim().length > 0;
+            if (askBtn) {
+                askBtn.disabled = !hasContent;
+            }
+        });
+    }
+
 	// 設置 AI 面板初始狀態
 	const aiResponse = document.getElementById('aiResponse');
 	if (aiResponse) {
@@ -288,6 +345,263 @@ function toggleAIInfo() {
     // 如果 modal 不存在，直接使用現有的結構
     if (existingModal) {
         existingModal.style.display = 'flex';
+    }
+}
+
+async function executeAIAnalysis(mode) {
+    // 如果有 aiAnalyzer 實例，使用它的流式輸出
+    if (window.aiAnalyzer) {
+        window.aiAnalyzer.currentMode = mode;
+        await window.aiAnalyzer.startAnalysis();
+        return;
+    }
+    
+    // 否則使用本地的流式實現
+    const btn = document.querySelector(`.ai-mode-btn[data-mode="${mode}"]`);
+    if (!btn || isAnalyzing) return;
+    
+    isAnalyzing = true;
+    
+    // 禁用所有按鈕
+    document.querySelectorAll('.ai-mode-btn').forEach(b => {
+        b.disabled = true;
+        b.classList.add('disabled');
+    });
+    
+    // 保存原始內容
+    const originalContent = btn.innerHTML;
+    
+    // 顯示 loading
+    btn.classList.add('analyzing');
+    btn.innerHTML = `
+        <div class="ai-spinner"></div>
+        <span class="mode-name">分析中...</span>
+    `;
+    
+    const responseDiv = document.getElementById('aiResponse');
+    const responseContent = document.getElementById('aiResponseContent');
+    responseDiv.classList.add('active');
+    
+    // 創建新的對話項目（使用流式輸出）
+    const conversationItem = createConversationItem(mode);
+    responseContent.appendChild(conversationItem);
+    
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    const thinkingDiv = conversationItem.querySelector('.ai-thinking');
+    
+    try {
+        // 使用流式請求
+        const response = await fetch('/api/ai/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: Date.now().toString(),
+                provider: 'anthropic',
+                model: selectedModel,
+                mode: mode,
+                file_path: filePath,
+                file_name: fileName,
+                content: fileContent,
+                stream: true  // 啟用流式輸出
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // 讀取流式響應
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = '';
+        
+        // 隱藏思考動畫
+        if (thinkingDiv) {
+            thinkingDiv.style.display = 'none';
+        }
+        
+        // 創建內容容器
+        contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
+        const contentArea = contentDiv.querySelector('.content-area');
+        const messageArea = contentDiv.querySelector('.message-area');
+        
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        switch (data.type) {
+                            case 'content':
+                                // 累積內容並實時更新
+                                accumulatedContent += data.content;
+                                updateStreamingContent(contentArea, accumulatedContent);
+                                break;
+                                
+                            case 'info':
+                            case 'warning':
+                                displayMessage(messageArea, data.type, data.message);
+                                break;
+                                
+                            case 'complete':
+                                // 完成時更新統計信息
+                                updateUsageInfo(conversationItem, data);
+                                break;
+                                
+                            case 'error':
+                                throw new Error(data.error);
+                        }
+                    } catch (e) {
+                        console.error('解析流數據錯誤:', e);
+                    }
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Analysis error:', error);
+        if (contentDiv) {
+            contentDiv.innerHTML = `
+                <div class="ai-error">
+                    <h3>❌ 分析失敗</h3>
+                    <p>${escapeHtml(error.message)}</p>
+                </div>
+            `;
+        }
+    } finally {
+        // 恢復按鈕
+        btn.innerHTML = originalContent;
+        btn.classList.remove('analyzing');
+        
+        document.querySelectorAll('.ai-mode-btn').forEach(b => {
+            b.disabled = false;
+            b.classList.remove('disabled');
+        });
+        
+        isAnalyzing = false;
+    }
+}
+
+// 流式更新內容，使用 requestAnimationFrame 優化性能
+let updateTimer = null;
+function updateStreamingContent(container, content) {
+    if (updateTimer) {
+        cancelAnimationFrame(updateTimer);
+    }
+    
+    updateTimer = requestAnimationFrame(() => {
+        const formatted = formatStreamingContent(content);
+        container.innerHTML = formatted;
+        
+        // 保持滾動在底部
+        const chatArea = document.getElementById('aiChatArea');
+        if (chatArea) {
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+    });
+}
+
+// 格式化流式內容（支援 Markdown）
+function formatStreamingContent(text) {
+    if (!text) return '';
+    
+    let html = '<div class="chatgpt-content">';
+    
+    // 處理代碼塊
+    text = text.replace(/```([\w]*)\n([\s\S]*?)```/g, function(match, lang, code) {
+        return `<pre class="gpt-code-block"><code class="language-${lang || 'text'}">${escapeHtml(code.trim())}</code></pre>`;
+    });
+    
+    // 處理標題
+    text = text.replace(/^### (.+)$/gm, '<h3 class="gpt-h3">$1</h3>');
+    text = text.replace(/^## (.+)$/gm, '<h2 class="gpt-h2">$1</h2>');
+    text = text.replace(/^# (.+)$/gm, '<h1 class="gpt-h1">$1</h1>');
+    
+    // 處理粗體和斜體
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    
+    // 處理行內代碼
+    text = text.replace(/`([^`]+)`/g, '<code class="gpt-inline-code">$1</code>');
+    
+    // 處理列表
+    const lines = text.split('\n');
+    let inList = false;
+    let listType = null;
+    let processedLines = [];
+    
+    for (let line of lines) {
+        // 編號列表
+        const olMatch = line.match(/^(\d+)\.\s+(.+)$/);
+        if (olMatch) {
+            if (!inList || listType !== 'ol') {
+                if (inList) processedLines.push(`</${listType}>`);
+                processedLines.push('<ol class="gpt-numbered-list">');
+                inList = true;
+                listType = 'ol';
+            }
+            processedLines.push(`<li class="gpt-list-item">${olMatch[2]}</li>`);
+            continue;
+        }
+        
+        // 無序列表
+        const ulMatch = line.match(/^[-*]\s+(.+)$/);
+        if (ulMatch) {
+            if (!inList || listType !== 'ul') {
+                if (inList) processedLines.push(`</${listType}>`);
+                processedLines.push('<ul class="gpt-bullet-list">');
+                inList = true;
+                listType = 'ul';
+            }
+            processedLines.push(`<li class="gpt-list-item">${ulMatch[1]}</li>`);
+            continue;
+        }
+        
+        // 非列表項目
+        if (inList) {
+            processedLines.push(`</${listType}>`);
+            inList = false;
+            listType = null;
+        }
+        
+        // 處理段落
+        if (line.trim()) {
+            processedLines.push(`<p class="gpt-paragraph">${line}</p>`);
+        }
+    }
+    
+    if (inList) {
+        processedLines.push(`</${listType}>`);
+    }
+    
+    html += processedLines.join('\n');
+    html += '</div>';
+    
+    return html;
+}
+
+// 顯示消息
+function displayMessage(container, type, message) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `ai-${type}-message`;
+    msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
+    container.appendChild(msgDiv);
+}
+
+// 更新使用信息
+function updateUsageInfo(conversationItem, data) {
+    const usageDiv = conversationItem.querySelector('.ai-usage-info');
+    if (usageDiv && data.usage) {
+        conversationItem.querySelector('.input-tokens').textContent = data.usage.input.toLocaleString();
+        conversationItem.querySelector('.output-tokens').textContent = data.usage.output.toLocaleString();
+        conversationItem.querySelector('.total-cost').textContent = (data.cost || 0).toFixed(4);
+        usageDiv.style.display = 'flex';
     }
 }
 
@@ -392,18 +706,230 @@ function createAIInfoModal() {
 }
 
 // 確保快速問題功能正常運作
-function useQuickQuestion(question) {
-    const customQuestionElement = document.getElementById('customQuestion');
-    if (customQuestionElement) {
-        customQuestionElement.value = question;
-        // 關閉下拉選單
+async function useQuickQuestion(question) {
+    if (isAskingQuestion) return;
+    
+    isAskingQuestion = true;
+    
+    const responseDiv = document.getElementById('aiResponse');
+    const responseContent = document.getElementById('aiResponseContent');
+    
+    if (!responseDiv || !responseContent) {
+        isAskingQuestion = false;
+        return;
+    }
+    
+    responseDiv.classList.add('active');
+    
+    // 創建對話項目
+    const conversationItem = createQuestionConversationItem(question);
+    responseContent.appendChild(conversationItem);
+    
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    const thinkingDiv = conversationItem.querySelector('.ai-thinking');
+    
+    try {
+        // 使用流式請求（如果有 aiAnalyzer）
+        if (window.aiAnalyzer) {
+            window.aiAnalyzer.messages.push({
+                role: 'user',
+                content: question
+            });
+            
+            // 使用 aiAnalyzer 的流式方法
+            const response = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: window.aiAnalyzer.sessionId,
+                    provider: 'anthropic',
+                    model: selectedModel,
+                    mode: 'quick',
+                    file_path: filePath,
+                    file_name: fileName,
+                    content: fileContent,
+                    stream: true,
+                    context: [{
+                        role: 'user',
+                        content: question
+                    }]
+                })
+            });
+            
+            // 處理流式響應
+            await handleStreamResponse(response, conversationItem);
+        } else {
+            // 使用非流式後備方案
+            const response = await fetch('/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: Date.now().toString(),
+                    provider: 'anthropic',
+                    model: selectedModel,
+                    mode: 'quick',
+                    file_path: filePath,
+                    file_name: fileName,
+                    content: fileContent,
+                    stream: false,
+                    context: [{
+                        role: 'user',
+                        content: question
+                    }]
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+            
+            if (response.ok && data.success) {
+                contentDiv.innerHTML = formatStreamingContent(data.result || data.analysis);
+                updateUsageInfo(conversationItem, data);
+            } else {
+                throw new Error(data.error || '分析失敗');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Quick question error:', error);
+        if (thinkingDiv) {
+            thinkingDiv.style.display = 'none';
+        }
+        contentDiv.innerHTML = `
+            <div class="ai-error">
+                <h3>❌ 分析失敗</h3>
+                <p>${escapeHtml(error.message)}</p>
+            </div>
+        `;
+    } finally {
+        isAskingQuestion = false;
+        
+        // 關閉快速問題選單
         const menu = document.getElementById('quickQuestionsMenu');
         if (menu) {
             menu.classList.remove('show');
         }
-        // 自動觸發 AI 分析
-        askCustomQuestion();  // 這裡會走「使用者自訂」流程
     }
+}
+
+async function handleStreamResponse(response, conversationItem) {
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    const thinkingDiv = conversationItem.querySelector('.ai-thinking');
+    
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulatedContent = '';
+    
+    // 隱藏思考動畫
+    if (thinkingDiv) {
+        thinkingDiv.style.display = 'none';
+    }
+    
+    // 創建內容容器
+    contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
+    const contentArea = contentDiv.querySelector('.content-area');
+    const messageArea = contentDiv.querySelector('.message-area');
+    
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    
+                    switch (data.type) {
+                        case 'content':
+                            accumulatedContent += data.content;
+                            updateStreamingContent(contentArea, accumulatedContent);
+                            break;
+                            
+                        case 'info':
+                        case 'warning':
+                            displayMessage(messageArea, data.type, data.message);
+                            break;
+                            
+                        case 'complete':
+                            updateUsageInfo(conversationItem, data);
+                            break;
+                            
+                        case 'error':
+                            throw new Error(data.error);
+                    }
+                } catch (e) {
+                    console.error('解析流數據錯誤:', e);
+                }
+            }
+        }
+    }
+}
+
+function createQuestionConversationItem(question) {
+    const conversationItem = document.createElement('div');
+    conversationItem.className = 'ai-conversation-item';
+    conversationItem.id = `conversation-${Date.now()}`;
+    
+    const shortQuestion = question.length > 50 ? question.substring(0, 50) + '...' : question;
+    
+    conversationItem.innerHTML = `
+        <div class="ai-conversation-header">
+            <div class="conversation-meta">
+                <span class="mode-indicator">
+                    <span class="mode-icon">💡</span>
+                    <span class="mode-text">快速問題</span>
+                </span>
+                <span class="model-info">${selectedModel}</span>
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="conversation-actions">
+                <button class="copy-btn" onclick="copyAIResponse('${conversationItem.id}')">
+                    📋 複製
+                </button>
+                <button class="export-html-btn" onclick="exportSingleResponse('${conversationItem.id}', 'html')">
+                    🌐 HTML
+                </button>
+                <button class="export-md-btn" onclick="exportSingleResponse('${conversationItem.id}', 'markdown')">
+                    📝 MD
+                </button>
+            </div>
+        </div>
+        <div class="user-question">
+            ${escapeHtml(question)}
+        </div>
+        <div class="ai-conversation-content">
+            <div class="ai-thinking">
+                <span class="thinking-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </span>
+                正在分析：${escapeHtml(shortQuestion)}
+            </div>
+            <div class="ai-response-text"></div>
+            <div class="ai-usage-info" style="display: none;">
+                <span class="token-count">Tokens: <span class="input-tokens">0</span> / <span class="output-tokens">0</span></span>
+                <span class="cost-info">成本: $<span class="total-cost">0.00</span></span>
+            </div>
+        </div>
+    `;
+    
+    conversationHistory.push(conversationItem);
+    
+    // 滾動到新內容
+    setTimeout(() => {
+        conversationItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+    
+    return conversationItem;
 }
 
 // 匯出對話功能
@@ -1038,24 +1564,21 @@ async function askCustomQuestion() {
         const fullContent = `${fileInfo}${fileContext}使用者問題：${questionToSend}`;
 
         // 發送自訂問題請求 - 確保不觸發分段分析
-        const response = await fetch('/analyze-with-ai', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                file_path: filePath,
-                content: fullContent,
-                file_type: 'custom_with_context',
-                model: selectedModel,
-                is_custom_question: true,
-                original_question: questionToSend,
-                // 明確指定不要分段
-                force_single_request: true,
-                skip_segmentation: true,
-                max_segments: 1
-            })
-        });
+        const response = await fetch('/api/ai/analyze', {  // 改為正確的端點
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				session_id: aiAnalyzer ? aiAnalyzer.sessionId : Date.now().toString(),
+				provider: 'anthropic',
+				model: selectedModel,
+				mode: 'quick',
+				file_path: filePath,
+				file_name: fileName,
+				content: `${fileInfo}${fileContext}使用者問題：${questionToSend}`,
+				stream: false,
+				context: []
+			})
+		});
 
         // 移除 loading
         if (loadingDiv && loadingDiv.parentNode) {
@@ -1065,38 +1588,16 @@ async function askCustomQuestion() {
         const data = await response.json();
         
         if (response.ok && data.success) {
-			// 確保所有必要的資料都存在
-			const analysisText = data.analysis || '無分析結果';
-			const truncatedFlag = data.truncated || truncated;
-			const modelUsed = data.model || selectedModel;
-			const questionText = questionToSend || '無問題內容';
-			const thinkingContent = data.thinking || null;
-			const analyzedLength = data.analyzed_length || (truncated ? truncatedContent.length : fileContent.length);
-			const originalLength = data.original_length || fileContent.length;
-
-			// 顯示分析結果
 			displayAIAnalysisWithContext(
-				analysisText,
-				truncatedFlag,
-				modelUsed,
-				questionText,
-				thinkingContent,
-				analyzedLength,  // 傳遞實際分析的長度
-				originalLength   // 傳遞原始長度
+				data.analysis || data.result || '無分析結果',
+				data.truncated || truncated,
+				data.model || selectedModel,
+				questionToSend,
+				data.thinking || null,
+				data.analyzed_length || truncatedContent.length,
+				data.original_length || fileContent.length
 			);
-			
-        } else {
-            // 顯示錯誤
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'ai-error';
-            errorDiv.innerHTML = `
-                <h3>❌ 分析失敗</h3>
-                <p>${escapeHtml(data.error || '無法完成 AI 分析')}</p>
-                ${data.details ? `<p><small>${escapeHtml(data.details)}</small></p>` : ''}
-            `;
-            responseContent.appendChild(errorDiv);
-            conversationHistory.push(errorDiv);
-        }
+		}
         
     } catch (error) {
         console.error('AI analysis error:', error);
@@ -3478,50 +3979,58 @@ function displayFullAnalysis(data) {
 }
 
 // 創建對話項目
-function createConversationItem(type, content, data) {
-	const conversationItem = document.createElement('div');
-	conversationItem.className = 'conversation-item';
-	
-	const timestamp = new Date().toLocaleString('zh-TW');
-	const modelName = getModelDisplayName(data.model || selectedModel);
-	
-	// 根據類型決定圖標和標題
-	let icon = '🔍';
-	let typeText = '檔案分析';
-	
-	if (type === '您的問題') {
-		icon = '👤';
-		typeText = type;
-	} else if (type === '分段分析') {
-		icon = '📊';
-		typeText = '大檔案分段分析';
-	}
-	
-	conversationItem.innerHTML = `
-		<div class="conversation-header">
-			<span class="conversation-icon">${icon}</span>
-			<span class="conversation-type">${typeText}</span>
-			<span class="conversation-time">${timestamp}</span>
-		</div>
-		${type === '您的問題' ? `
-			<div class="user-question">
-				${escapeHtml(data.question || '分析整個檔案')}
-			</div>
-		` : ''}
-		<div class="ai-response-item">
-			<div class="ai-icon">🤖</div>
-			<div class="ai-message">
-				${content}
-				<div class="ai-footer">
-					<span>由 ${modelName} 提供分析</span>
-					${data.is_segmented ? `<span style="margin-left: 10px;">• 分 ${data.total_segments} 段分析</span>` : ''}
-					${data.thinking_log && data.thinking_log.length > 0 ? '<span style="margin-left: 10px;">• 包含深度思考</span>' : ''}
-				</div>
-			</div>
-		</div>
-	`;
-	
-	return conversationItem;
+function createConversationItem(mode) {
+    const modeInfo = {
+        'smart': { icon: '🧠', name: '智能分析' },
+        'quick': { icon: '⚡', name: '快速分析' },
+        'deep': { icon: '🔍', name: '深度分析' }
+    }[mode];
+    
+    const conversationItem = document.createElement('div');
+    conversationItem.className = 'ai-conversation-item';
+    conversationItem.id = `conversation-${Date.now()}`;
+    
+    conversationItem.innerHTML = `
+        <div class="ai-conversation-header">
+            <div class="conversation-meta">
+                <span class="mode-indicator">
+                    <span class="mode-icon">${modeInfo.icon}</span>
+                    <span class="mode-text">${modeInfo.name}</span>
+                </span>
+                <span class="model-info">${selectedModel}</span>
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="conversation-actions">
+                <button class="copy-btn" onclick="copyAIResponse('${conversationItem.id}')">
+                    📋 複製
+                </button>
+                <button class="export-html-btn" onclick="exportSingleResponse('${conversationItem.id}', 'html')">
+                    🌐 HTML
+                </button>
+                <button class="export-md-btn" onclick="exportSingleResponse('${conversationItem.id}', 'markdown')">
+                    📝 MD
+                </button>
+            </div>
+        </div>
+        <div class="ai-conversation-content">
+            <div class="ai-thinking">
+                <span class="thinking-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </span>
+                AI 正在思考中
+            </div>
+            <div class="ai-response-text"></div>
+            <div class="ai-usage-info" style="display: none;">
+                <span class="token-count">Tokens: <span class="input-tokens">0</span> / <span class="output-tokens">0</span></span>
+                <span class="cost-info">成本: $<span class="total-cost">0.00</span></span>
+            </div>
+        </div>
+    `;
+    
+    // 添加到對話歷史
+    conversationHistory.push(conversationItem);
+    
+    return conversationItem;
 }
 
 // 提取段落摘要

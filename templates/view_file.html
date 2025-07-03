@@ -124,15 +124,28 @@
             
             <!-- AI 對話區（可調整大小） -->
             <div class="ai-chat-area" id="aiChatArea">
-                <!-- 智能分析模式選擇 -->
+                <!-- 分析按鈕區域 -->
                 <div class="analyze-file-section">
-                    <!-- 分析按鈕 -->
-                    <button class="analyze-current-btn" id="analyzeBtn" onclick="startSmartAnalysis()">
-                        <span id="analyzeIcon">🔍</span> 
-                        <span id="analyzeText">開始智能分析</span>
-                    </button>
+                    <!-- 三個模式按鈕 -->
+                    <div class="ai-mode-selector">
+                        <button class="ai-mode-btn smart active" data-mode="smart">
+                            <span class="mode-icon">🧠</span>
+                            <span class="mode-name">智能分析</span>
+                            <span class="mode-desc">自動最佳策略</span>
+                        </button>
+                        <button class="ai-mode-btn quick" data-mode="quick">
+                            <span class="mode-icon">⚡</span>
+                            <span class="mode-name">快速分析</span>
+                            <span class="mode-desc">30秒內完成</span>
+                        </button>
+                        <button class="ai-mode-btn deep" data-mode="deep">
+                            <span class="mode-icon">🔍</span>
+                            <span class="mode-name">深度分析</span>
+                            <span class="mode-desc">詳細診斷</span>
+                        </button>
+                    </div>
                 </div>
-
+            
                 <!-- AI Response -->
                 <div class="ai-response" id="aiResponse">
                     <div class="ai-response-content" id="aiResponseContent">
@@ -159,17 +172,23 @@
                         
                         <!-- 控制按鈕區（保持在底部） -->
                         <div class="input-inline-controls">
+                            <!-- Provider 選擇器 -->
+                            <select class="provider-select-inline" id="providerSelectInline">
+                                <option value="anthropic">Anthropic</option>
+                                <option value="openai">OpenAI</option>
+                            </select>
+                            
                             <!-- 模型選擇器 -->
                             <div class="model-selector-inline">
-                                <button class="model-select-inline-btn" id="modelSelectInlineBtn" onclick="toggleModelPopup()">
+                                <button class="model-select-inline-btn" id="modelSelectInlineBtn">
                                     <span id="selectedModelNameInline">Claude 4 Sonnet</span>
                                     <span class="dropdown-arrow">▼</span>
                                 </button>
                             </div>
+                            
                             <!-- 發送按鈕 -->
-                            <button class="send-btn-inline" id="askBtnInline" onclick="askCustomQuestion()" 
-                                    disabled title="輸入訊息後發送">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <button class="send-btn-inline" id="askBtnInline" disabled>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M22 2L11 13"></path>
                                     <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
                                 </svg>

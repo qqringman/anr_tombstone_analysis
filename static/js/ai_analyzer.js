@@ -40,17 +40,17 @@ class AIAnalyzer {
                 <button class="ai-mode-btn smart active" data-mode="smart">
                     <span class="mode-icon">🧠</span>
                     <span class="mode-name">智能分析</span>
-                    <span class="mode-desc">自動選擇最佳策略</span>
+                    <span class="mode-desc">自動最佳策略</span>
                 </button>
                 <button class="ai-mode-btn quick" data-mode="quick">
                     <span class="mode-icon">⚡</span>
                     <span class="mode-name">快速分析</span>
-                    <span class="mode-desc">30秒內獲得結果</span>
+                    <span class="mode-desc">30秒內完成</span>
                 </button>
                 <button class="ai-mode-btn deep" data-mode="deep">
                     <span class="mode-icon">🔍</span>
                     <span class="mode-name">深度分析</span>
-                    <span class="mode-desc">詳細深入的診斷</span>
+                    <span class="mode-desc">詳細診斷</span>
                 </button>
             </div>
         `;
@@ -58,13 +58,21 @@ class AIAnalyzer {
         // 插入到分析按鈕之前
         const analyzeSection = document.querySelector('.analyze-file-section');
         if (analyzeSection) {
-            analyzeSection.insertAdjacentHTML('afterbegin', modeButtons);
+            const analyzeBtn = analyzeSection.querySelector('#analyzeBtn');
+            if (analyzeBtn) {
+                analyzeBtn.insertAdjacentHTML('beforebegin', modeButtons);
+            } else {
+                analyzeSection.insertAdjacentHTML('afterbegin', modeButtons);
+            }
         }
         
         // 綁定點擊事件
         document.querySelectorAll('.ai-mode-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.selectMode(e.currentTarget.dataset.mode);
+                e.preventDefault();
+                e.stopPropagation();
+                const mode = e.currentTarget.dataset.mode;
+                this.executeAnalysis(mode);
             });
         });
     }
@@ -327,6 +335,12 @@ class AIAnalyzer {
                 <div class="conversation-actions">
                     <button class="copy-btn" onclick="aiAnalyzer.copyResponse('${conversationItem.id}')">
                         📋 複製
+                    </button>
+                    <button class="export-html-btn" onclick="aiAnalyzer.exportSingleResponse('${conversationItem.id}', 'html')">
+                        🌐 HTML
+                    </button>
+                    <button class="export-md-btn" onclick="aiAnalyzer.exportSingleResponse('${conversationItem.id}', 'markdown')">
+                        📝 MD
                     </button>
                 </div>
             </div>
@@ -657,18 +671,25 @@ class AIAnalyzer {
         const conversation = document.getElementById(conversationId);
         if (!conversation) return;
         
-        const responseText = conversation.querySelector('.ai-response-text').innerText;
+        // 獲取純文字內容
+        const responseTextElement = conversation.querySelector('.ai-response-text, .ai-analysis-content');
+        if (!responseTextElement) return;
+        
+        const responseText = responseTextElement.innerText || responseTextElement.textContent;
         
         navigator.clipboard.writeText(responseText).then(() => {
             // 顯示複製成功提示
             const copyBtn = conversation.querySelector('.copy-btn');
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = '✅ 已複製';
-            setTimeout(() => {
-                copyBtn.textContent = originalText;
-            }, 2000);
+            if (copyBtn) {
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '✅ 已複製';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                }, 2000);
+            }
         }).catch(err => {
             console.error('複製失敗:', err);
+            alert('複製失敗，請手動選擇文字複製');
         });
     }
     
@@ -1059,7 +1080,156 @@ class AIAnalyzer {
         if (chatArea) {
             chatArea.scrollTop = chatArea.scrollHeight;
         }
-    }    
+    }  
+
+    async executeAnalysis(mode) {
+        // 防止重複分析
+        if (this.isAnalyzing) return;
+        
+        // 設置當前模式
+        this.currentMode = mode;
+        
+        // 獲取按鈕
+        const btn = document.querySelector(`.ai-mode-btn[data-mode="${mode}"]`);
+        if (!btn) return;
+        
+        // 標記所有按鈕為分析中
+        document.querySelectorAll('.ai-mode-btn').forEach(b => {
+            b.disabled = true;
+            b.classList.add('disabled');
+        });
+        
+        // 保存原始內容
+        const originalContent = btn.innerHTML;
+        
+        // 顯示 loading 狀態
+        btn.classList.add('analyzing');
+        btn.innerHTML = `
+            <div class="ai-spinner"></div>
+            <span class="mode-name">分析中...</span>
+        `;
+        
+        // 添加停止按鈕
+        const stopBtn = document.createElement('button');
+        stopBtn.className = 'analyze-stop-btn';
+        stopBtn.id = 'stopAnalysisBtn';
+        stopBtn.innerHTML = '⏹️ 停止';
+        stopBtn.onclick = () => this.stopAnalysis();
+        btn.parentElement.appendChild(stopBtn);
+        
+        try {
+            await this.startAnalysis();
+        } finally {
+            // 恢復按鈕狀態
+            btn.innerHTML = originalContent;
+            btn.classList.remove('analyzing');
+            
+            // 恢復所有按鈕
+            document.querySelectorAll('.ai-mode-btn').forEach(b => {
+                b.disabled = false;
+                b.classList.remove('disabled');
+            });
+            
+            // 移除停止按鈕
+            const stopButton = document.getElementById('stopAnalysisBtn');
+            if (stopButton) {
+                stopButton.remove();
+            }
+        }
+    }
+    
+    exportSingleResponse(conversationId, format) {
+        const conversation = document.getElementById(conversationId);
+        if (!conversation) return;
+        
+        const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content');
+        const timeElement = conversation.querySelector('.timestamp');
+        const modeElement = conversation.querySelector('.mode-text');
+        
+        if (!responseElement) return;
+        
+        const content = responseElement.innerHTML;
+        const timestamp = timeElement ? timeElement.textContent : new Date().toLocaleTimeString();
+        const mode = modeElement ? modeElement.textContent : '分析';
+        
+        let exportContent = '';
+        let filename = `AI_${mode}_${timestamp.replace(/:/g, '-')}.${format === 'html' ? 'html' : 'md'}`;
+        
+        if (format === 'html') {
+            exportContent = this.generateSingleHTML(content, mode, timestamp);
+        } else if (format === 'markdown') {
+            exportContent = this.generateSingleMarkdown(responseElement, mode, timestamp);
+        }
+        
+        // 下載檔案
+        const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    
+    generateSingleHTML(content, mode, timestamp) {
+        return `<!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <title>AI ${mode} - ${timestamp}</title>
+        <style>
+            body { 
+                font-family: -apple-system, sans-serif; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .header {
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 15px;
+                margin-bottom: 20px;
+            }
+            .content { line-height: 1.8; }
+            code { 
+                background: #f0f0f0; 
+                padding: 2px 6px; 
+                border-radius: 3px;
+                font-family: monospace;
+            }
+            pre {
+                background: #f5f5f5;
+                padding: 15px;
+                border-radius: 5px;
+                overflow-x: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>AI ${mode}結果</h1>
+                <p>時間：${timestamp}</p>
+                <p>檔案：${window.fileName || 'Unknown'}</p>
+            </div>
+            <div class="content">
+                ${content}
+            </div>
+        </div>
+    </body>
+    </html>`;
+    }
+    
+    generateSingleMarkdown(element, mode, timestamp) {
+        const textContent = element.innerText || element.textContent;
+        return `# AI ${mode}結果\n\n**時間：** ${timestamp}\n**檔案：** ${window.fileName || 'Unknown'}\n\n---\n\n${textContent}`;
+    }
+    
 }
 
 // 更優雅的方案：增量解析和更新
