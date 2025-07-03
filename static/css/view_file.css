@@ -4192,3 +4192,93 @@ a.btn {
     height: 32px;
     display: block !important;  /* 確保顯示 */
 }
+
+/* 統一對話項目樣式 */
+.ai-conversation-item {
+    margin-bottom: 20px;
+    background: #2d2d30;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease;
+    border-left: 4px solid #667eea;  /* 統一的左邊框 */
+}
+
+/* 不同類型的邊框顏色 */
+.ai-conversation-item.smart-mode {
+    border-left-color: #667eea;  /* 智能分析 - 紫色 */
+}
+
+.ai-conversation-item.quick-mode {
+    border-left-color: #ffd700;  /* 快速分析 - 金色 */
+}
+
+.ai-conversation-item.deep-mode {
+    border-left-color: #4ec9b0;  /* 深度分析 - 青色 */
+}
+
+.ai-conversation-item.user-question {
+    border-left-color: #ff6b6b;  /* 用戶問題 - 紅色 */
+}
+
+/* 統一的模式按鈕背景色 */
+.ai-mode-btn {
+    flex: 1;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  /* 統一使用漸變背景 */
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+    overflow: hidden;
+    font-size: 13px;
+    color: white;  /* 白色文字 */
+}
+
+.ai-mode-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    filter: brightness(1.1);
+}
+
+.ai-mode-btn.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.ai-mode-btn.analyzing {
+    background: #969696;
+    cursor: not-allowed;
+}
+
+/* 內聯停止按鈕 */
+.stop-btn-inline {
+    background: #d73a49;
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-top: 5px;
+}
+
+.stop-btn-inline:hover {
+    background: #cb2431;
+}
+
+/* 分析中的按鈕內容排列 */
+.ai-mode-btn.analyzing {
+    justify-content: center;
+}
+
+.ai-mode-btn.analyzing .ai-spinner {
+    width: 20px;
+    height: 20px;
+    margin-bottom: 5px;
+}
