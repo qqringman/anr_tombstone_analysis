@@ -848,7 +848,7 @@ function createQuestionConversationItem(question) {
                 <span class="timestamp">${new Date().toLocaleTimeString()}</span>
             </div>
             <div class="conversation-actions">
-                <button class="copy-btn" onclick="copyAIResponse('${conversationItem.id}')">
+                <button class="copy-btn" onclick="copyAIResponse('${conversationId}')">
                     📋 複製
                 </button>
                 <button class="export-html-btn" onclick="exportSingleResponse('${conversationItem.id}', 'html')">
@@ -4019,7 +4019,9 @@ function createConversationItem(mode) {
         'quick': { icon: '⚡', name: '快速分析' },
         'deep': { icon: '🔍', name: '深度分析' }
     }[mode];
-    
+
+	// 在創建對話項目時，確保按鈕有唯一的 ID
+	const conversationId = `conversation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const conversationItem = document.createElement('div');
     conversationItem.className = 'ai-conversation-item';
     conversationItem.id = `conversation-${Date.now()}`;
@@ -5114,3 +5116,187 @@ askCustomQuestion = async function() {
     });
     return originalAskCustomQuestion();
 };
+
+// 複製 AI 回應
+function copyAIResponse(conversationId) {
+    const conversation = document.getElementById(conversationId);
+    if (!conversation) return;
+    
+    // 找到 AI 回應內容
+    const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content, .chatgpt-content');
+    if (!responseElement) {
+        console.error('找不到回應內容');
+        return;
+    }
+    
+    // 獲取純文字內容
+    const textContent = responseElement.innerText || responseElement.textContent || '';
+    
+    // 複製到剪貼板
+    navigator.clipboard.writeText(textContent).then(() => {
+        // 顯示成功提示
+        const copyBtn = conversation.querySelector('.copy-btn');
+        if (copyBtn) {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = '✅ 已複製';
+            copyBtn.disabled = true;
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHTML;
+                copyBtn.disabled = false;
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error('複製失敗:', err);
+        alert('複製失敗，請手動選擇文字複製');
+    });
+}
+
+// 匯出單個回應
+function exportSingleResponse(conversationId, format) {
+    const conversation = document.getElementById(conversationId);
+    if (!conversation) return;
+    
+    // 獲取對話資訊
+    const timestamp = conversation.querySelector('.timestamp')?.textContent || new Date().toLocaleTimeString();
+    const modeText = conversation.querySelector('.mode-text')?.textContent || '分析';
+    const userQuestion = conversation.querySelector('.user-question')?.textContent || '';
+    const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content');
+    
+    if (!responseElement) {
+        alert('沒有內容可以匯出');
+        return;
+    }
+    
+    let content = '';
+    let filename = `AI_${modeText}_${timestamp.replace(/:/g, '-')}`;
+    
+    if (format === 'html') {
+        content = generateSingleHTML(responseElement.innerHTML, modeText, timestamp, userQuestion);
+        filename += '.html';
+    } else if (format === 'markdown') {
+        content = generateSingleMarkdown(responseElement, modeText, timestamp, userQuestion);
+        filename += '.md';
+    }
+    
+    // 下載檔案
+    downloadContent(content, filename);
+}
+
+// 生成單個 HTML
+function generateSingleHTML(htmlContent, mode, timestamp, question) {
+    return `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AI ${mode} - ${timestamp}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #667eea;
+            margin: 0 0 10px 0;
+        }
+        .meta {
+            color: #666;
+            font-size: 14px;
+        }
+        .question {
+            background: #f0f0f0;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .content {
+            line-height: 1.8;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 3px solid #667eea;
+        }
+        .gpt-h1, .gpt-h2, .gpt-h3 {
+            color: #333;
+            margin: 20px 0 10px 0;
+        }
+        .gpt-paragraph {
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI ${mode}結果</h1>
+            <div class="meta">
+                <p>時間：${timestamp}</p>
+                <p>檔案：${window.fileName || 'Unknown'}</p>
+            </div>
+        </div>
+        ${question ? `
+        <div class="question">
+            <strong>問題：</strong><br>
+            ${escapeHtml(question)}
+        </div>
+        ` : ''}
+        <div class="content">
+            ${htmlContent}
+        </div>
+    </div>
+</body>
+</html>`;
+}
+
+// 生成單個 Markdown
+function generateSingleMarkdown(element, mode, timestamp, question) {
+    const textContent = element.innerText || element.textContent || '';
+    
+    let markdown = `# AI ${mode}結果\n\n`;
+    markdown += `**時間：** ${timestamp}\n`;
+    markdown += `**檔案：** ${window.fileName || 'Unknown'}\n\n`;
+    
+    if (question) {
+        markdown += `## 問題\n\n${question}\n\n`;
+    }
+    
+    markdown += `## 回答\n\n${textContent}`;
+    
+    return markdown;
+}
+
+// 下載內容
+function downloadContent(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}

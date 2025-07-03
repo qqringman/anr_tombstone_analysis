@@ -680,3 +680,17 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* 移除用戶問題的邊條 */
+.ai-conversation-item.user-question {
+    border-left: none !important;
+}
+
+/* 用戶問題區塊樣式調整 */
+.user-question {
+    background: #2d2d30;
+    padding: 12px 15px;
+    margin: 15px 0;
+    border-radius: 6px;
+    color: #d4d4d4;
+}
