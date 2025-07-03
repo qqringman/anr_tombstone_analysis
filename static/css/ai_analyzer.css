@@ -731,3 +731,383 @@
 .gpt-content > :first-child.gpt-h5 {
     margin-top: 0;
 }
+
+/* 在 ai_analyzer.css 中添加或更新 */
+
+/* 嵌套列表樣式 */
+.gpt-bullet-list.nested,
+.gpt-numbered-list.nested {
+    margin-left: 20px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+.gpt-bullet-list li {
+    position: relative;
+    padding-left: 20px;
+}
+
+.gpt-bullet-list li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #969696;
+}
+
+/* 嵌套的無序列表使用不同的符號 */
+.gpt-bullet-list.nested li::before {
+    content: "◦";
+}
+
+/* 確保代碼塊保留原始格式 */
+.gpt-code-block {
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+}
+
+.gpt-code-block code {
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre; /* 保留空白和縮進 */
+    display: block;
+}
+
+/* ===== ChatGPT 風格代碼塊 ===== */
+.gpt-code-block {
+    position: relative;
+    background: #0d0d0d;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    margin: 16px 0;
+    overflow: hidden;
+}
+
+/* 語言標籤（可選） */
+.gpt-code-block::before {
+    content: attr(data-language);
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #969696;
+    font-size: 12px;
+    border-bottom-left-radius: 6px;
+}
+
+.gpt-code-block code {
+    display: block;
+    padding: 16px;
+    color: #f8f8f2;
+    font-family: 'Söhne Mono', Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* 代碼高亮顏色 - Java/通用 */
+.gpt-code-block .keyword {
+    color: #ff79c6;
+}
+
+.gpt-code-block .string {
+    color: #f1fa8c;
+}
+
+.gpt-code-block .comment {
+    color: #6272a4;
+    font-style: italic;
+}
+
+.gpt-code-block .function {
+    color: #50fa7b;
+}
+
+.gpt-code-block .number {
+    color: #bd93f9;
+}
+
+/* ===== ChatGPT 風格文字內容 ===== */
+.gpt-content {
+    font-family: 'Söhne', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.75;
+    color: #ececec;
+}
+
+/* 標題樣式 */
+.gpt-h1 {
+    font-size: 28px;
+    font-weight: 600;
+    margin: 32px 0 16px 0;
+    color: #ffffff;
+    line-height: 1.3;
+}
+
+.gpt-h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 28px 0 14px 0;
+    color: #ffffff;
+    line-height: 1.4;
+}
+
+.gpt-h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 24px 0 12px 0;
+    color: #ffffff;
+    line-height: 1.4;
+}
+
+/* 段落 */
+.gpt-paragraph {
+    margin: 16px 0;
+    color: #ececec;
+    font-size: 15px;
+    line-height: 1.75;
+}
+
+/* 列表樣式 */
+.gpt-numbered-list,
+.gpt-bullet-list {
+    margin: 16px 0;
+    padding-left: 24px;
+    color: #ececec;
+}
+
+.gpt-list-item {
+    margin: 8px 0;
+    line-height: 1.75;
+    font-size: 15px;
+}
+
+/* 嵌套列表 */
+.gpt-bullet-list.nested,
+.gpt-numbered-list.nested {
+    margin-left: 24px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+/* 無序列表符號 */
+.gpt-bullet-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.gpt-bullet-list li {
+    position: relative;
+    padding-left: 24px;
+}
+
+.gpt-bullet-list li::before {
+    content: "•";
+    position: absolute;
+    left: 8px;
+    color: #ececec;
+}
+
+.gpt-bullet-list.nested li::before {
+    content: "◦";
+    color: #ababab;
+}
+
+/* 行內代碼 */
+.gpt-inline-code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Söhne Mono', Monaco, monospace;
+    font-size: 0.875em;
+    color: #f8f8f2;
+    white-space: nowrap;
+}
+
+/* 強調文字 */
+.gpt-content strong {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.gpt-content em {
+    font-style: italic;
+    color: #ececec;
+}
+
+/* ===== AI 對話項目容器優化 ===== */
+.ai-conversation-item {
+    background: #2b2b2b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.ai-conversation-header {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-conversation-content {
+    padding: 24px;
+}
+
+/* 模式指示器 */
+.mode-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 16px;
+    font-size: 13px;
+}
+
+/* 思考過程 */
+.ai-thinking {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #ababab;
+    font-style: italic;
+    padding: 20px 0;
+}
+
+.thinking-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.thinking-dots span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #667eea;
+    border-radius: 50%;
+    animation: thinking 1.4s infinite;
+}
+
+/* 滾動條樣式 */
+.gpt-code-block::-webkit-scrollbar {
+    height: 8px;
+}
+
+.gpt-code-block::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.gpt-code-block::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.gpt-code-block::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* 複製按鈕（可選） */
+.gpt-code-block .copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #ababab;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.gpt-code-block:hover .copy-button {
+    opacity: 1;
+}
+
+.gpt-code-block .copy-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+/* YAML 特定樣式 */
+.gpt-code-block .yaml-separator {
+    color: #ff79c6;
+    font-weight: bold;
+}
+
+.gpt-code-block .yaml-key {
+    color: #8be9fd;
+    font-weight: 600;
+}
+
+.gpt-code-block .yaml-value {
+    color: #f1fa8c;
+}
+
+.gpt-code-block .yaml-list-marker {
+    color: #ff79c6;
+}
+
+.gpt-code-block .boolean {
+    color: #bd93f9;
+    font-weight: 600;
+}
+
+/* Bash/Shell 特定樣式 */
+.gpt-code-block .bash-command {
+    color: #50fa7b;
+    font-weight: 600;
+}
+
+.gpt-code-block .bash-option {
+    color: #ff79c6;
+}
+
+.gpt-code-block .bash-path {
+    color: #8be9fd;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+}
+
+/* Java 增強樣式 */
+.gpt-code-block .annotation {
+    color: #f1fa8c;
+    font-style: italic;
+}
+
+.gpt-code-block .class-name {
+    color: #8be9fd;
+}
+
+/* 通用樣式調整 */
+.gpt-code-block .keyword {
+    color: #ff79c6;
+    font-weight: 600;
+}
+
+.gpt-code-block .string {
+    color: #f1fa8c;
+}
+
+.gpt-code-block .comment {
+    color: #6272a4;
+    font-style: italic;
+}
+
+.gpt-code-block .function {
+    color: #50fa7b;
+}
+
+.gpt-code-block .number {
+    color: #bd93f9;
+}

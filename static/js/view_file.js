@@ -463,82 +463,293 @@ function updateStreamingContent(container, content) {
 }
 
 // 格式化流式內容（支援 Markdown）
+// 完整的 formatStreamingContent 函數
 function formatStreamingContent(text) {
     if (!text) return '';
     
-    let html = '<div class="chatgpt-content">';
+    let html = '<div class="gpt-content">';
     
-    // 處理代碼塊
-    text = text.replace(/```([\w]*)\n([\s\S]*?)```/g, function(match, lang, code) {
-        return `<pre class="gpt-code-block"><code class="language-${lang || 'text'}">${escapeHtml(code.trim())}</code></pre>`;
+    // 1. 處理代碼塊 - 徹底修正版本
+    const codeBlocks = [];
+    
+    text = text.replace(/```(\w*)\r?\n([\s\S]*?)```/g, function(match, lang, code) {
+        const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+        
+        // 關鍵修正：移除代碼塊內容結尾的所有空白字符（包括空格、換行等）
+        // 但保留代碼內部的格式
+        let lines = code.split('\n');
+        
+        // 從結尾開始移除空行
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        
+        // 重新組合代碼
+        code = lines.join('\n');
+        
+        // 使用語法高亮
+        const highlightedCode = lang ? highlightCode(code, lang) : escapeHtml(code);
+        
+        // 創建代碼塊 HTML
+        const codeBlockHtml = `<pre class="gpt-code-block" data-language="${lang || 'text'}"><code class="language-${lang || 'text'}">${highlightedCode}</code></pre>`;
+        
+        codeBlocks.push(codeBlockHtml);
+        return placeholder;
     });
     
-    // 處理標題
-    text = text.replace(/^### (.+)$/gm, '<h3 class="gpt-h3">$1</h3>');
-    text = text.replace(/^## (.+)$/gm, '<h2 class="gpt-h2">$1</h2>');
-    text = text.replace(/^# (.+)$/gm, '<h1 class="gpt-h1">$1</h1>');
+    // 2. 處理標題
+    text = text.replace(/^#{1,6}\s+(.+)$/gm, function(match, title) {
+        const level = match.match(/^(#{1,6})/)[1].length;
+        return `<h${level} class="gpt-h${level}">${title}</h${level}>`;
+    });
     
-    // 處理粗體和斜體
-    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    
-    // 處理行內代碼
-    text = text.replace(/`([^`]+)`/g, '<code class="gpt-inline-code">$1</code>');
-    
-    // 處理列表
+    // 3. 處理列表
     const lines = text.split('\n');
-    let inList = false;
-    let listType = null;
     let processedLines = [];
+    let listStack = [];
     
-    for (let line of lines) {
-        // 編號列表
-        const olMatch = line.match(/^(\d+)\.\s+(.+)$/);
-        if (olMatch) {
-            if (!inList || listType !== 'ol') {
-                if (inList) processedLines.push(`</${listType}>`);
-                processedLines.push('<ol class="gpt-numbered-list">');
-                inList = true;
-                listType = 'ol';
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        
+        // 檢查是否是代碼塊佔位符
+        if (line.includes('__CODE_BLOCK_')) {
+            while (listStack.length > 0) {
+                processedLines.push(`</${listStack.pop()}>`);
             }
-            processedLines.push(`<li class="gpt-list-item">${olMatch[2]}</li>`);
+            processedLines.push(line);
+            continue;
+        }
+        
+        // 計算縮進層級
+        const indent = line.match(/^(\s*)/)[1];
+        const indentLevel = Math.floor(indent.length / 2);
+        
+        // 編號列表
+        const olMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+        if (olMatch) {
+            handleListItem(processedLines, listStack, 'ol', indentLevel, olMatch[3]);
             continue;
         }
         
         // 無序列表
-        const ulMatch = line.match(/^[-*]\s+(.+)$/);
+        const ulMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
         if (ulMatch) {
-            if (!inList || listType !== 'ul') {
-                if (inList) processedLines.push(`</${listType}>`);
-                processedLines.push('<ul class="gpt-bullet-list">');
-                inList = true;
-                listType = 'ul';
-            }
-            processedLines.push(`<li class="gpt-list-item">${ulMatch[1]}</li>`);
+            const itemIndentLevel = Math.floor(ulMatch[1].length / 2);
+            handleListItem(processedLines, listStack, 'ul', itemIndentLevel, ulMatch[2]);
             continue;
         }
         
-        // 非列表項目
-        if (inList) {
-            processedLines.push(`</${listType}>`);
-            inList = false;
-            listType = null;
-        }
-        
-        // 處理段落
-        if (line.trim()) {
-            processedLines.push(`<p class="gpt-paragraph">${line}</p>`);
+        // 非列表行
+        if (line.trim() === '') {
+            while (listStack.length > 0) {
+                processedLines.push(`</${listStack.pop()}>`);
+            }
+            processedLines.push('');
+        } else {
+            while (listStack.length > 0) {
+                processedLines.push(`</${listStack.pop()}>`);
+            }
+            processedLines.push(`<p class="gpt-paragraph">${processInlineFormatting(line)}</p>`);
         }
     }
     
-    if (inList) {
-        processedLines.push(`</${listType}>`);
+    // 關閉剩餘的列表
+    while (listStack.length > 0) {
+        processedLines.push(`</${listStack.pop()}>`);
     }
     
+    // 4. 組合內容
     html += processedLines.join('\n');
+    
+    // 5. 還原代碼塊
+    codeBlocks.forEach((block, index) => {
+        html = html.replace(`__CODE_BLOCK_${index}__`, block);
+    });
+    
     html += '</div>';
     
     return html;
+}
+
+// 增強的語法高亮函數
+function highlightCode(code, language) {
+    if (!language || language === 'text') return escapeHtml(code);
+    
+    let highlighted = escapeHtml(code);
+    
+    // 根據語言類型選擇不同的高亮規則
+    switch(language.toLowerCase()) {
+        case 'yaml':
+        case 'yml':
+            return highlightYAML(highlighted);
+        case 'json':
+            return highlightJSON(highlighted);
+        case 'bash':
+        case 'sh':
+        case 'shell':
+            return highlightBash(highlighted);
+        case 'java':
+            return highlightJava(highlighted);
+        case 'xml':
+        case 'html':
+            return highlightXML(highlighted);
+        default:
+            return highlightGeneric(highlighted);
+    }
+}
+
+// YAML 高亮
+function highlightYAML(code) {
+    // 高亮分隔符 ---
+    code = code.replace(/^---$/gm, '<span class="yaml-separator">---</span>');
+    
+    // 高亮 key: value 格式
+    code = code.replace(/^(\s*)([a-zA-Z_][\w\-]*)\s*:/gm, function(match, indent, key) {
+        return indent + '<span class="yaml-key">' + key + '</span>:';
+    });
+    
+    // 高亮字符串值
+    code = code.replace(/:\s*([^\n#]+)/g, function(match, value) {
+        // 如果值被引號包圍
+        if (value.match(/^["'].*["']$/)) {
+            return ': <span class="string">' + value + '</span>';
+        }
+        // 如果是數字
+        else if (value.match(/^\d+(\.\d+)?$/)) {
+            return ': <span class="number">' + value + '</span>';
+        }
+        // 如果是布爾值
+        else if (value.match(/^(true|false|yes|no|on|off)$/i)) {
+            return ': <span class="boolean">' + value + '</span>';
+        }
+        // 其他值
+        else {
+            return ': <span class="yaml-value">' + value + '</span>';
+        }
+    });
+    
+    // 高亮註釋
+    code = code.replace(/#.*$/gm, '<span class="comment">$&</span>');
+    
+    // 高亮列表項目
+    code = code.replace(/^\s*-\s+/gm, '<span class="yaml-list-marker">$&</span>');
+    
+    return code;
+}
+
+// Bash/Shell 高亮
+function highlightBash(code) {
+    // Shell 命令
+    const commands = ['adb', 'echo', 'cd', 'ls', 'cat', 'grep', 'sed', 'awk', 
+                     'chmod', 'chown', 'rm', 'mv', 'cp', 'mkdir', 'shell', 
+                     'am', 'pm', 'start', 'stop', 'force-stop'];
+    
+    commands.forEach(cmd => {
+        const regex = new RegExp(`\\b${cmd}\\b`, 'g');
+        code = code.replace(regex, `<span class="bash-command">${cmd}</span>`);
+    });
+    
+    // 參數和選項
+    code = code.replace(/\s(-{1,2}[\w-]+)/g, ' <span class="bash-option">$1</span>');
+    
+    // 路徑和包名
+    code = code.replace(/(\/[\w\/.]+|com\.[\w\.]+)/g, '<span class="bash-path">$1</span>');
+    
+    // 字符串
+    code = code.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="string">$&</span>');
+    
+    // 註釋
+    code = code.replace(/#.*$/gm, '<span class="comment">$&</span>');
+    
+    return code;
+}
+
+// Java 高亮（改進版）
+function highlightJava(code) {
+    // Java 關鍵字
+    const keywords = ['synchronized', 'public', 'private', 'protected', 'class', 'interface', 
+                     'extends', 'implements', 'new', 'return', 'void', 'if', 'else', 
+                     'for', 'while', 'try', 'catch', 'finally', 'throw', 'throws',
+                     'static', 'final', 'abstract', 'import', 'package', 'this', 'super'];
+    
+    keywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'g');
+        code = code.replace(regex, `<span class="keyword">${keyword}</span>`);
+    });
+    
+    // 註解
+    code = code.replace(/@\w+/g, '<span class="annotation">$&</span>');
+    
+    // 字符串
+    code = code.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="string">$&</span>');
+    
+    // 註釋
+    code = code.replace(/\/\/.*$/gm, '<span class="comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>');
+    
+    // 數字
+    code = code.replace(/\b\d+\b/g, '<span class="number">$&</span>');
+    
+    // 函數/方法調用
+    code = code.replace(/(\w+)(?=\s*\()/g, '<span class="function">$1</span>');
+    
+    // 類名（大寫開頭）
+    code = code.replace(/\b[A-Z]\w*\b/g, '<span class="class-name">$&</span>');
+    
+    return code;
+}
+
+// 通用高亮（後備方案）
+function highlightGeneric(code) {
+    // 字符串
+    code = code.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="string">$&</span>');
+    
+    // 數字
+    code = code.replace(/\b\d+(\.\d+)?\b/g, '<span class="number">$&</span>');
+    
+    // 註釋（多種格式）
+    code = code.replace(/\/\/.*$/gm, '<span class="comment">$&</span>');
+    code = code.replace(/#.*$/gm, '<span class="comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>');
+    
+    return code;
+}
+
+// 處理列表項的輔助函數
+function handleListItem(processedLines, listStack, listType, indentLevel, content) {
+    // 關閉超過當前縮進層級的列表
+    while (listStack.length > indentLevel) {
+        processedLines.push(`</${listStack.pop()}>`);
+    }
+    
+    // 開啟需要的列表
+    while (listStack.length < indentLevel + 1) {
+        const newListType = listStack.length === indentLevel ? listType : 'ul';
+        const listClass = newListType === 'ol' ? 'gpt-numbered-list' : 'gpt-bullet-list';
+        const nestedClass = listStack.length > 0 ? ' nested' : '';
+        processedLines.push(`<${newListType} class="${listClass}${nestedClass}">`);
+        listStack.push(newListType);
+    }
+    
+    // 確保當前層級的列表類型正確
+    if (listStack[indentLevel] !== listType) {
+        processedLines.push(`</${listStack[indentLevel]}>`);
+        const listClass = listType === 'ol' ? 'gpt-numbered-list' : 'gpt-bullet-list';
+        processedLines.push(`<${listType} class="${listClass}">`);
+        listStack[indentLevel] = listType;
+    }
+    
+    // 添加列表項
+    processedLines.push(`<li class="gpt-list-item">${processInlineFormatting(content)}</li>`);
+}
+
+// 處理行內格式的輔助函數
+function processInlineFormatting(text) {
+    return text
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code class="gpt-inline-code">$1</code>');
 }
 
 // 顯示消息
@@ -5369,3 +5580,157 @@ function downloadContent(content, filename) {
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
 }
+
+// 測試函數 - 模擬 ANR 分析回應
+function testANRAnalysisUI() {
+    // 模擬 ANR 分析的回應內容
+    const mockANRResponse = `# ANR 分析報告
+
+## 🔍 問題摘要
+
+系統檢測到應用程式無回應（ANR），主要原因是 **主執行緒被阻塞超過 5 秒**。
+
+## 🎯 根本原因
+
+根據日誌分析，ANR 的根本原因為：
+
+1. **主執行緒死鎖**
+   - 執行緒 "main" 正在等待鎖 \`0x12d65880\`
+   - 該鎖被執行緒 "AsyncTask #1" 持有
+   - AsyncTask 執行緒同時在等待主執行緒完成 UI 操作
+
+2. **同步操作不當**
+   \`\`\`java
+   synchronized (mLock) {
+       // 在主執行緒中執行耗時操作
+       performDatabaseQuery(); // 問題代碼
+   }
+   \`\`\`
+
+## 📋 受影響的組件
+
+### 主要進程
+- **com.example.app** (PID: 12345)
+  - CPU 使用率：85%
+  - 記憶體使用：256MB
+
+### 關鍵執行緒狀態
+1. **main** (tid=1)
+   - 狀態：BLOCKED
+   - 等待：monitor contention
+
+2. **AsyncTask #1** (tid=15)
+   - 狀態：WAITING
+   - 等待：UI thread callback
+
+## 💡 解決方案
+
+### 立即修復
+1. **移除主執行緒中的同步鎖**
+   \`\`\`java
+   // 錯誤寫法
+   synchronized (mLock) {
+       performDatabaseQuery();
+   }
+   
+   // 正確寫法
+   new AsyncTask<Void, Void, Result>() {
+       @Override
+       protected Result doInBackground(Void... params) {
+           return performDatabaseQuery();
+       }
+   }.execute();
+   \`\`\`
+
+2. **使用 Handler 進行執行緒通訊**
+   - 避免直接的執行緒間同步
+   - 使用 \`Handler.post()\` 進行 UI 更新
+
+### 預防措施
+- 啟用 StrictMode 檢測主執行緒違規
+- 實施 5 秒規則：主執行緒操作不超過 5 秒
+- 使用 Profiler 監控執行緒性能
+
+## ⚠️ 警告事項
+
+**注意**：此 ANR 已經發生 ***3 次***，建議立即修復以避免應用被系統終止。
+
+## 📊 技術細節
+
+### Stack Trace 分析
+\`\`\`
+"main" prio=5 tid=1 Blocked
+  | group="main" sCount=1 dsCount=0 flags=1 obj=0x72c2c1a0 self=0xb400007174c81380
+  | sysTid=12345 nice=-10 cgrp=top-app sched=0/0 handle=0x7175c254f8
+  | state=S schedstat=( 1234567890 987654321 1234 ) utm=100 stm=50 core=0 HZ=100
+  | stack=0x7ffc123456-0x7ffc654321
+  | held mutexes=
+  at com.example.app.MainActivity.onClick(MainActivity.java:156)
+  - waiting to lock <0x12d65880> held by thread 15
+\`\`\`
+
+---
+*分析完成時間：2025-01-09 14:30:25*
+--- 
+
+`;
+
+    // 創建一個假的對話項目來測試格式化
+    const responseContent = document.getElementById('aiResponseContent');
+    if (!responseContent) {
+        console.error('找不到 AI 回應區域');
+        return;
+    }
+
+    // 使用現有的 createConversationItem 函數
+    const conversationItem = createConversationItem('quick');
+    responseContent.appendChild(conversationItem);
+
+    // 隱藏 loading
+    const thinkingDiv = conversationItem.querySelector('.ai-thinking');
+    if (thinkingDiv) {
+        thinkingDiv.style.display = 'none';
+    }
+
+    // 測試格式化函數
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    if (contentDiv) {
+        // 測試 formatStreamingContent 函數
+        console.log('測試 formatStreamingContent...');
+        const formattedContent = formatStreamingContent(mockANRResponse);
+        contentDiv.innerHTML = formattedContent;
+
+        // 也測試 formatAnalysisContent 函數
+        console.log('測試 formatAnalysisContent...');
+        // const alternativeFormat = formatAnalysisContent(mockANRResponse);
+        // console.log('Alternative format:', alternativeFormat);
+    }
+
+    // 更新使用信息
+    updateUsageInfo(conversationItem, {
+        usage: { input: 1500, output: 800 },
+        cost: 0.0023
+    });
+
+    // 滾動到新內容
+    conversationItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    console.log('ANR 分析 UI 測試完成！');
+}
+
+// 添加測試按鈕到快速分析模式
+document.addEventListener('DOMContentLoaded', function() {
+    // 在快速分析按鈕上添加測試功能
+    const quickBtn = document.querySelector('.ai-mode-btn.quick');
+    if (quickBtn) {
+        // Ctrl+點擊進入測試模式
+        quickBtn.addEventListener('click', function(e) {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('進入測試模式...');
+                testANRAnalysisUI();
+            }
+        });
+    }
+});
