@@ -731,3 +731,244 @@
 .gpt-content > :first-child.gpt-h5 {
     margin-top: 0;
 }
+
+/* ChatGPT 風格優化 */
+.gpt-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', sans-serif;
+    line-height: 1.6;
+    color: #e0e0e0;
+}
+
+/* 標題樣式 */
+.gpt-h1 {
+    font-size: 28px;
+    font-weight: 600;
+    margin: 32px 0 16px 0;
+    color: #ffffff;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+
+.gpt-h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 28px 0 14px 0;
+    color: #ffffff;
+}
+
+.gpt-h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 24px 0 12px 0;
+    color: #ffffff;
+}
+
+.gpt-h4 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 20px 0 10px 0;
+    color: #e0e0e0;
+}
+
+/* 段落樣式 */
+.gpt-paragraph {
+    margin: 16px 0;
+    line-height: 1.7;
+    color: #d4d4d4;
+}
+
+.gpt-paragraph:first-child {
+    margin-top: 0;
+}
+
+.gpt-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* 列表樣式 */
+.gpt-numbered-list,
+.gpt-bullet-list {
+    margin: 16px 0;
+    padding-left: 24px;
+    color: #d4d4d4;
+}
+
+.gpt-list-item {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+.gpt-numbered-list .gpt-list-item {
+    list-style-type: decimal;
+}
+
+.gpt-bullet-list .gpt-list-item {
+    list-style-type: disc;
+}
+
+/* 行內代碼 */
+.gpt-inline-code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #f8c555;
+    white-space: nowrap;
+}
+
+/* 代碼塊 */
+.gpt-code-block {
+    background: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 20px 0;
+    overflow-x: auto;
+    position: relative;
+}
+
+.gpt-code-block::before {
+    content: attr(data-language);
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 11px;
+    color: #969696;
+    text-transform: uppercase;
+}
+
+.gpt-code-block code {
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre;
+    display: block;
+}
+
+/* 優化間距 */
+.gpt-content > *:first-child {
+    margin-top: 0 !important;
+}
+
+.gpt-content > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* 連續元素間距調整 */
+.gpt-paragraph + .gpt-paragraph {
+    margin-top: 12px;
+}
+
+.gpt-h1 + .gpt-paragraph,
+.gpt-h2 + .gpt-paragraph,
+.gpt-h3 + .gpt-paragraph,
+.gpt-h4 + .gpt-paragraph {
+    margin-top: 8px;
+}
+
+.gpt-paragraph + .gpt-numbered-list,
+.gpt-paragraph + .gpt-bullet-list {
+    margin-top: 12px;
+}
+
+.gpt-numbered-list + .gpt-paragraph,
+.gpt-bullet-list + .gpt-paragraph {
+    margin-top: 16px;
+}
+
+/* 強調文字 */
+.gpt-content strong {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.gpt-content em {
+    font-style: italic;
+    color: #e0e0e0;
+}
+
+/* 鏈接樣式 */
+.gpt-content a {
+    color: #67b3ff;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.gpt-content a:hover {
+    border-bottom-color: #67b3ff;
+}
+
+/* 分隔線 */
+.gpt-content hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 24px 0;
+}
+
+/* 引用樣式 */
+.gpt-content blockquote {
+    border-left: 4px solid #667eea;
+    padding-left: 16px;
+    margin: 16px 0;
+    color: #b0b0b0;
+    font-style: italic;
+}
+
+/* 重試通知樣式 */
+.retry-notice {
+    margin: 15px 0;
+    animation: slideIn 0.3s ease;
+}
+
+.retry-progress {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.retry-countdown {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffd700;
+    min-width: 40px;
+    text-align: center;
+}
+
+.retry-info {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+/* 過載錯誤提示 */
+.overload-error {
+    background: #ff5722;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+}
+
+.overload-error h3 {
+    margin: 0 0 10px 0;
+}
+
+.overload-tips {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.overload-tips ul {
+    margin: 5px 0 0 20px;
+    padding: 0;
+}
+
+.overload-tips li {
+    margin: 5px 0;
+}

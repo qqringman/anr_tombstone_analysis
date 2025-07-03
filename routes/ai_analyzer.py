@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 import anthropic
 from config.config import AI_PROVIDERS, ANALYSIS_MODES, TOKEN_PRICING, RATE_LIMITS, MODEL_LIMITS, CLAUDE_API_KEY
 from enum import Enum
+from collections import deque
 
 ai_analyzer_bp = Blueprint('ai_analyzer_bp', __name__)
 
@@ -94,7 +95,10 @@ class AnthropicProvider(AIProvider):
         self.max_tokens = self.model_config.get('max_tokens', 200000)
         self.max_output_tokens = self.model_config.get('max_output_tokens', 4096)
         self.chars_per_token = self.model_config.get('chars_per_token', 4)
-    
+
+        # 獲取速率限制管理器
+        self.rate_limiter = get_rate_limiter('anthropic')
+
     def calculate_tokens(self, text: str) -> int:
         """計算 token 數量"""
         if not text:
@@ -152,24 +156,93 @@ class AnthropicProvider(AIProvider):
     
     def analyze_sync(self, context: AnalysisContext) -> str:
         """同步分析"""
-        try:
-            messages = self._prepare_messages(context)
-            response = self.client.messages.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self._get_max_tokens(context.mode),
-                temperature=self._get_temperature(context.mode)
-            )
-            return response.content[0].text
-        except Exception as e:
-            raise Exception(f"Anthropic API 錯誤: {str(e)}")
+        retry_count = 0
+        max_retries = 3
+        base_delay = 5  # 基礎延遲5秒
+        
+        while retry_count <= max_retries:
+            try:
+                messages = self._prepare_messages(context)
+                response = self.client.messages.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=self._get_max_tokens(context.mode),
+                    temperature=self._get_temperature(context.mode)
+                )
+                return response.content[0].text
+            except Exception as e:
+                error_str = str(e)
+                
+                # 檢查是否是過載錯誤
+                if "overloaded" in error_str.lower():
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        # 指數退避策略
+                        delay = base_delay * (2 ** (retry_count - 1))
+                        print(f"API 過載，等待 {delay} 秒後重試... (第 {retry_count}/{max_retries} 次)")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        raise Exception("API 持續過載，請稍後再試（建議等待 1-2 分鐘）")
+                
+                # 其他錯誤直接拋出
+                raise Exception(f"Anthropic API 錯誤: {error_str}")
     
     def stream_analyze_sync(self, context: AnalysisContext):
         """同步流式分析"""
         self.reset_stop_flag()
+        
+        # 估算 token 使用量
+        messages = self._prepare_messages(context)
+        estimated_input_tokens = sum(self.calculate_tokens(str(msg)) for msg in messages)
+        estimated_total_tokens = estimated_input_tokens + self.max_output_tokens
+        
+        # 獲取使用統計
+        usage_stats = self.rate_limiter.get_usage_stats()
+        
+        # 發送速率限制信息
+        yield json.dumps({
+            'type': 'rate_limit_info',
+            'usage': usage_stats,
+            'estimated_tokens': estimated_total_tokens
+        }) + '\n'
+        
+        # 檢查速率限制
+        can_proceed, wait_time = self.rate_limiter.can_make_request(estimated_total_tokens)
+        
+        if not can_proceed:
+            # 如果需要等待時間小於30秒，自動等待
+            if wait_time <= 30:
+                yield json.dumps({
+                    'type': 'rate_limit_wait',
+                    'wait_time': wait_time,
+                    'reason': self._get_rate_limit_reason(usage_stats)
+                }) + '\n'
+                
+                # 等待並重試
+                if self._wait_for_rate_limit(estimated_total_tokens):
+                    can_proceed = True
+                else:
+                    yield json.dumps({
+                        'type': 'error',
+                        'error': '速率限制：請稍後再試',
+                        'usage_stats': usage_stats
+                    }) + '\n'
+                    return
+            else:
+                # 等待時間太長，直接返回錯誤
+                yield json.dumps({
+                    'type': 'error',
+                    'error': f'已達到速率限制，請等待 {int(wait_time)} 秒後再試',
+                    'usage_stats': usage_stats
+                }) + '\n'
+                return
+        
+        # 記錄請求開始
+        request_start_time = time.time()
+        actual_output_tokens = 0
+        
         try:
-            messages = self._prepare_messages(context)
-            
             # 使用 stream
             with self.client.messages.stream(
                 model=self.model,
@@ -180,10 +253,49 @@ class AnthropicProvider(AIProvider):
                 for text in stream.text_stream:
                     if self.should_stop():
                         break
-                    yield text
+                    actual_output_tokens += self.calculate_tokens(text)
+                    yield json.dumps({
+                        'type': 'content',
+                        'content': text
+                    }) + '\n'
+                
+                # 記錄實際使用的 tokens
+                actual_total_tokens = estimated_input_tokens + actual_output_tokens
+                self.rate_limiter.record_request(actual_total_tokens)
+                
+                # 發送完成信息，包含速率限制狀態
+                final_usage = self.rate_limiter.get_usage_stats()
+                yield json.dumps({
+                    'type': 'complete',
+                    'usage': {
+                        'input': estimated_input_tokens,
+                        'output': actual_output_tokens,
+                        'total': actual_total_tokens
+                    },
+                    'rate_limit_status': final_usage
+                }) + '\n'
                     
         except Exception as e:
-            yield f"\n\n錯誤: {str(e)}"
+            error_str = str(e)
+            
+            # 檢查是否是速率限制錯誤
+            if any(keyword in error_str.lower() for keyword in ['rate', 'limit', 'overloaded', '429']):
+                # 記錄失敗的請求（使用估算的 tokens）
+                self.rate_limiter.record_request(estimated_total_tokens)
+                
+                current_usage = self.rate_limiter.get_usage_stats()
+                yield json.dumps({
+                    'type': 'error',
+                    'error': '達到 API 速率限制',
+                    'error_detail': error_str,
+                    'usage_stats': current_usage,
+                    'retry_after': 60  # 建議等待60秒
+                }) + '\n'
+            else:
+                yield json.dumps({
+                    'type': 'error',
+                    'error': f'分析錯誤: {error_str}'
+                }) + '\n'
     
     def _prepare_messages(self, context: AnalysisContext) -> List[Dict]:
         """準備訊息格式"""
@@ -224,7 +336,44 @@ class AnthropicProvider(AIProvider):
         context.metadata['actual_input_tokens'] = self.calculate_tokens(user_message)
         
         return messages
-    
+
+    def _wait_for_rate_limit(self, estimated_tokens: int) -> bool:
+        """等待速率限制"""
+        max_wait = 60  # 最多等待60秒
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            can_proceed, wait_time = self.rate_limiter.can_make_request(estimated_tokens)
+            
+            if can_proceed:
+                return True
+            
+            if wait_time > max_wait - (time.time() - start_time):
+                # 等待時間太長
+                return False
+            
+            # 智能等待
+            actual_wait = min(wait_time + 1, 5)  # 最多等5秒後重新檢查
+            print(f"速率限制，等待 {actual_wait:.1f} 秒...")
+            time.sleep(actual_wait)
+        
+        return False
+
+    def _get_rate_limit_reason(self, usage_stats: dict) -> str:
+        """獲取速率限制原因"""
+        reasons = []
+        
+        if usage_stats['rpm_current'] >= usage_stats['rpm_limit']:
+            reasons.append(f"每分鐘請求數已達上限 ({usage_stats['rpm_current']}/{usage_stats['rpm_limit']})")
+        
+        if usage_stats['tpm_current'] >= usage_stats['tpm_limit']:
+            reasons.append(f"每分鐘 Token 數已達上限 ({usage_stats['tpm_current']:,}/{usage_stats['tpm_limit']:,})")
+        
+        if usage_stats['tpd_current'] >= usage_stats['tpd_limit'] * 0.9:  # 接近每日限制
+            reasons.append(f"接近每日 Token 限制 ({usage_stats['tpd_current']:,}/{usage_stats['tpd_limit']:,})")
+        
+        return " | ".join(reasons) if reasons else "API 繁忙"
+
     def _get_system_prompt(self, mode: AnalysisMode) -> str:
         """根據模式獲取系統提示"""
         prompts = {
@@ -344,6 +493,118 @@ class AnalysisSession:
         self.total_tokens['input'] += input_tokens
         self.total_tokens['output'] += output_tokens
         self.total_cost += self.provider.get_cost(input_tokens, output_tokens)
+
+class RateLimitManager:
+    """速率限制管理器"""
+    
+    def __init__(self, provider: str = 'anthropic', tier: str = 'tier1'):
+        self.provider = provider
+        self.tier = tier
+        self.limits = RATE_LIMITS.get(provider, {}).get(tier, {})
+        
+        # 請求歷史記錄
+        self.request_history = deque()  # (timestamp, tokens)
+        self.lock = threading.Lock()
+        
+        # 當前使用統計
+        self.minute_requests = 0
+        self.minute_tokens = 0
+        self.day_tokens = 0
+        self.last_reset_minute = time.time()
+        self.last_reset_day = time.time()
+        
+    def can_make_request(self, estimated_tokens: int) -> tuple[bool, float]:
+        """
+        檢查是否可以發送請求
+        返回: (是否可以, 需要等待的秒數)
+        """
+        with self.lock:
+            current_time = time.time()
+            
+            # 清理過期的請求記錄
+            self._cleanup_history(current_time)
+            
+            # 檢查每分鐘請求數 (RPM)
+            rpm_limit = self.limits.get('rpm', 50)
+            current_rpm = self._count_requests_in_window(60)
+            if current_rpm >= rpm_limit:
+                wait_time = 60 - (current_time - self.request_history[0][0])
+                return False, wait_time
+            
+            # 檢查每分鐘 token 數 (TPM)
+            tpm_limit = self.limits.get('tpm', 50000)
+            current_tpm = self._count_tokens_in_window(60)
+            if current_tpm + estimated_tokens > tpm_limit:
+                wait_time = 60 - (current_time - self.request_history[0][0])
+                return False, wait_time
+            
+            # 檢查每日 token 數 (TPD)
+            tpd_limit = self.limits.get('tpd', 1000000)
+            current_tpd = self._count_tokens_in_window(86400)  # 24小時
+            if current_tpd + estimated_tokens > tpd_limit:
+                # 建議等待到第二天
+                return False, 3600  # 返回1小時作為建議等待時間
+            
+            return True, 0
+    
+    def record_request(self, tokens_used: int):
+        """記錄一次請求"""
+        with self.lock:
+            self.request_history.append((time.time(), tokens_used))
+    
+    def _cleanup_history(self, current_time: float):
+        """清理超過24小時的記錄"""
+        cutoff_time = current_time - 86400  # 24小時前
+        while self.request_history and self.request_history[0][0] < cutoff_time:
+            self.request_history.popleft()
+    
+    def _count_requests_in_window(self, window_seconds: int) -> int:
+        """計算時間窗口內的請求數"""
+        cutoff_time = time.time() - window_seconds
+        count = 0
+        for timestamp, _ in self.request_history:
+            if timestamp >= cutoff_time:
+                count += 1
+        return count
+    
+    def _count_tokens_in_window(self, window_seconds: int) -> int:
+        """計算時間窗口內的 token 總數"""
+        cutoff_time = time.time() - window_seconds
+        total_tokens = 0
+        for timestamp, tokens in self.request_history:
+            if timestamp >= cutoff_time:
+                total_tokens += tokens
+        return total_tokens
+    
+    def get_usage_stats(self) -> dict:
+        """獲取當前使用統計"""
+        with self.lock:
+            current_time = time.time()
+            self._cleanup_history(current_time)
+            
+            return {
+                'rpm_current': self._count_requests_in_window(60),
+                'rpm_limit': self.limits.get('rpm', 50),
+                'tpm_current': self._count_tokens_in_window(60),
+                'tpm_limit': self.limits.get('tpm', 50000),
+                'tpd_current': self._count_tokens_in_window(86400),
+                'tpd_limit': self.limits.get('tpd', 1000000),
+            }
+
+# 全局速率限制管理器實例
+rate_limiters = {}
+
+def get_rate_limiter(provider: str, tier: str = None) -> RateLimitManager:
+    """獲取或創建速率限制管理器"""
+    if tier is None:
+        # 根據 API key 或其他邏輯判斷 tier
+        # 這裡預設使用 tier2
+        tier = 'tier2'
+    
+    key = f"{provider}_{tier}"
+    if key not in rate_limiters:
+        rate_limiters[key] = RateLimitManager(provider, tier)
+    return rate_limiters[key]
 
 # API 路由
 @ai_analyzer_bp.route('/api/ai/analyze', methods=['POST'])
@@ -629,3 +890,46 @@ def get_models(provider):
             for model_id, info in models.items()
         ]
     })
+
+@ai_analyzer_bp.route('/api/ai/rate-limit-status', methods=['GET'])
+def get_rate_limit_status():
+    """獲取當前速率限制狀態"""
+    provider = request.args.get('provider', 'anthropic')
+    
+    try:
+        limiter = get_rate_limiter(provider)
+        stats = limiter.get_usage_stats()
+        
+        # 計算剩餘配額百分比
+        rpm_percentage = (stats['rpm_current'] / stats['rpm_limit'] * 100) if stats['rpm_limit'] > 0 else 0
+        tpm_percentage = (stats['tpm_current'] / stats['tpm_limit'] * 100) if stats['tpm_limit'] > 0 else 0
+        tpd_percentage = (stats['tpd_current'] / stats['tpd_limit'] * 100) if stats['tpd_limit'] > 0 else 0
+        
+        return jsonify({
+            'success': True,
+            'provider': provider,
+            'usage': {
+                'requests_per_minute': {
+                    'current': stats['rpm_current'],
+                    'limit': stats['rpm_limit'],
+                    'percentage': round(rpm_percentage, 1)
+                },
+                'tokens_per_minute': {
+                    'current': stats['tpm_current'],
+                    'limit': stats['tpm_limit'],
+                    'percentage': round(tpm_percentage, 1)
+                },
+                'tokens_per_day': {
+                    'current': stats['tpd_current'],
+                    'limit': stats['tpd_limit'],
+                    'percentage': round(tpd_percentage, 1)
+                }
+            },
+            'status': 'normal' if max(rpm_percentage, tpm_percentage) < 80 else 'warning'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
