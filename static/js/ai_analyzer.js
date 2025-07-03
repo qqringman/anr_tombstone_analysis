@@ -394,204 +394,84 @@ class AIAnalyzer {
     }
     
     formatMarkdown(text) {
-        if (!text) return '';
-        
-        let html = '';
+        console.log(text)
         const lines = text.split('\n');
-        let i = 0;
-        
-        while (i < lines.length) {
-            const line = lines[i];
-            
-            // 1. 檢查代碼塊開始
+        let html = '';
+        let inCodeBlock = false;
+        let codeLang = '';
+        let listType = null; // 'ol' 或 'ul'
+
+        for (let line of lines) {
+            // 1. CODE BLOCK 開關
+            if (inCodeBlock) {
             if (line.trim().startsWith('```')) {
-                const lang = line.trim().slice(3).trim();
-                let codeLines = [];
-                i++; // 跳過開始標記
-                
-                // 收集代碼內容直到找到結束標記
-                while (i < lines.length && !lines[i].trim().startsWith('```')) {
-                    codeLines.push(lines[i]);
-                    i++;
-                }
-                
-                if (i < lines.length) { // 找到結束標記
-                    html += `<pre class="gpt-code-block"><code class="language-${lang || 'text'}">${this.escapeHtml(codeLines.join('\n'))}</code></pre>\n`;
-                    i++; // 跳過結束標記
-                }
-                continue;
+                html += '</code></pre>';
+                inCodeBlock = false;
+            } else {
+                html += this.escapeHtml(line) + '\n';
             }
-            
-            // 2. 檢查標題 (####, ###, ##, #)
-            const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
-            if (headingMatch) {
-                const level = headingMatch[1].length;
-                const content = this.processInlineElements(headingMatch[2]);
-                html += `<h${level} class="gpt-h${level}">${content}</h${level}>\n`;
-                i++;
-                continue;
+            continue;
             }
-            
-            // 3. 檢查編號列表
-            const orderedMatch = line.match(/^(\d+)\.\s+(.+)$/);
-            if (orderedMatch) {
-                let listItems = [];
-                
-                // 收集所有連續的編號列表項
-                while (i < lines.length) {
-                    const currentLine = lines[i];
-                    const match = currentLine.match(/^(\d+)\.\s+(.+)$/);
-                    if (match) {
-                        listItems.push(this.processInlineElements(match[2]));
-                        i++;
-                    } else if (currentLine.trim() === '') {
-                        i++;
-                        break; // 空行結束列表
-                    } else {
-                        break; // 非列表項結束列表
-                    }
-                }
-                
-                if (listItems.length > 0) {
-                    html += '<ol class="gpt-numbered-list">\n';
-                    listItems.forEach(item => {
-                        html += `  <li class="gpt-list-item">${item}</li>\n`;
-                    });
-                    html += '</ol>\n';
-                }
-                continue;
+            if (line.trim().startsWith('```')) {
+            codeLang = line.trim().slice(3).trim();
+            html += `<pre class="ai-code-block"><code class="language-${codeLang}">`;
+            inCodeBlock = true;
+            continue;
             }
-            
-            // 4. 檢查無序列表 (•, -, *)
-            const bulletMatch = line.match(/^[•\-\*]\s+(.+)$/);
-            if (bulletMatch) {
-                let listItems = [];
-                
-                // 收集所有連續的無序列表項
-                while (i < lines.length) {
-                    const currentLine = lines[i];
-                    const match = currentLine.match(/^[•\-\*]\s+(.+)$/);
-                    if (match) {
-                        listItems.push(this.processInlineElements(match[1]));
-                        i++;
-                    } else if (currentLine.trim() === '') {
-                        i++;
-                        break; // 空行結束列表
-                    } else {
-                        break; // 非列表項結束列表
-                    }
-                }
-                
-                if (listItems.length > 0) {
-                    html += '<ul class="gpt-bullet-list">\n';
-                    listItems.forEach(item => {
-                        html += `  <li class="gpt-list-item">${item}</li>\n`;
-                    });
-                    html += '</ul>\n';
-                }
-                continue;
+
+            // 2. HEADING
+            const hdMatch = line.match(/^(#{1,3})\s+(.*)$/);
+            if (hdMatch) {
+            const lvl = hdMatch[1].length;
+            html += `<h${lvl} class="ai-h${lvl}">${hdMatch[2]}</h${lvl}>`;
+            continue;
             }
-            
-            // 5. 檢查是否是空行
+
+            // 3. 有序列表
+            const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+            if (olMatch) {
+            if (listType !== 'ol') {
+                if (listType === 'ul') html += '</ul>';
+                html += '<ol class="ai-ordered-list">';
+                listType = 'ol';
+            }
+            html += `<li class="ai-ordered-item">${olMatch[2]}</li>`;
+            continue;
+            }
+
+            // 4. 無序列表
+            const ulMatch = line.match(/^- (.*)$/);
+            if (ulMatch) {
+            if (listType !== 'ul') {
+                if (listType === 'ol') html += '</ol>';
+                html += '<ul class="ai-unordered-list">';
+                listType = 'ul';
+            }
+            html += `<li class="ai-unordered-item">${ulMatch[1]}</li>`;
+            continue;
+            }
+
+            // 遇到空行，結束當前列表
             if (line.trim() === '') {
-                i++;
-                continue; // 跳過空行
+            if (listType === 'ol') html += '</ol>';
+            if (listType === 'ul') html += '</ul>';
+            listType = null;
+            continue;
             }
-            
-            // 6. 處理普通段落
-            let paragraphLines = [];
-            
-            // 收集連續的非特殊格式行作為一個段落
-            while (i < lines.length) {
-                const currentLine = lines[i];
-                
-                // 如果是空行，段落結束
-                if (currentLine.trim() === '') {
-                    break;
-                }
-                
-                // 如果是特殊格式（標題、列表、代碼塊），段落結束
-                if (currentLine.match(/^#{1,6}\s+/) || 
-                    currentLine.match(/^\d+\.\s+/) || 
-                    currentLine.match(/^[•\-\*]\s+/) ||
-                    currentLine.trim().startsWith('```')) {
-                    break;
-                }
-                
-                paragraphLines.push(currentLine);
-                i++;
-            }
-            
-            if (paragraphLines.length > 0) {
-                const paragraphText = paragraphLines.join(' ').trim();
-                if (paragraphText) {
-                    html += `<p class="gpt-paragraph">${this.processInlineElements(paragraphText)}</p>\n`;
-                }
-            }
+
+            // 5. 段落＋行內格式
+            let inline = line
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
+            html += `<p class="ai-paragraph">${inline}</p>`;
         }
-        
-        return `<div class="gpt-content">${html}</div>`;
-    }
-    
-    // 處理行內元素（粗體、斜體、行內代碼等）
-    processInlineElements(text) {
-        if (!text) return '';
-        
-        // 先轉義 HTML
-        text = this.escapeHtml(text);
-        
-        // 處理行內代碼（優先處理，避免內部的特殊字符被處理）
-        text = text.replace(/`([^`]+)`/g, (match, code) => {
-            return `<code class="gpt-inline-code">${code}</code>`;
-        });
-        
-        // 處理粗體（**text**）
-        text = text.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
-        
-        // 處理斜體（*text*）- 注意不要和粗體衝突
-        text = text.replace(/(?<!\*)\*([^\*]+)\*(?!\*)/g, '<em>$1</em>');
-        
-        // 處理鏈接 [text](url)
-        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-        
-        return text;
-    }
-    
-    // 新增輔助函數：格式化行內元素
-    formatInlineElements(text) {
-        if (!text) return '';
-        
-        // 先轉義 HTML
-        text = this.escapeHtml(text);
-        
-        // 處理行內代碼（先處理，避免被其他規則影響）
-        text = text.replace(/`([^`]+)`/g, '<code class="gpt-inline-code">$1</code>');
-        
-        // 處理粗體
-        text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        
-        // 處理斜體
-        text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-        
-        // 處理鏈接
-        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-        
-        return text;
-    }
-    
-    // 新增輔助函數：創建列表
-    createList(type, items) {
-        if (items.length === 0) return '';
-        
-        const tag = type === 'ol' ? 'ol' : 'ul';
-        const className = type === 'ol' ? 'gpt-numbered-list' : 'gpt-bullet-list';
-        
-        let html = `<${tag} class="${className}">`;
-        items.forEach(item => {
-            html += `<li class="gpt-list-item">${item}</li>`;
-        });
-        html += `</${tag}>`;
-        
+
+        // 收尾：還沒關的 codeblock 或 list
+        if (inCodeBlock) html += '</code></pre>';
+        if (listType === 'ol') html += '</ol>';
+        if (listType === 'ul') html += '</ul>';
+        console.log(html    )
         return html;
     }
     
@@ -922,66 +802,14 @@ class AIAnalyzer {
             case 'start':
                 thinkingDiv.style.display = 'none';
                 this.accumulatedContent = '';
-                this.infoMessages.clear();
-                // 如果是重試，顯示提示
-                if (data.retry_count > 0) {
-                    contentDiv.innerHTML = `
-                        <div class="ai-info-message">
-                            <span class="info-icon">🔄</span> 
-                            正在重試 (第 ${data.retry_count} 次)
-                        </div>
-                    `;
-                } else {
-                    contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
-                }
-                break;
-            case 'rate_limit_info':
-                // 更新速率限制顯示
-                this.updateRateLimitDisplay(data.usage);
-                break;
-            case 'rate_limit_wait':
-                // 顯示速率限制等待
-                this.showRateLimitWait(data, contentDiv);
-                break;
-            case 'retry':
-                // 顯示重試信息
-                if (!contentDiv.querySelector('.retry-notice')) {
-                    const retryDiv = document.createElement('div');
-                    retryDiv.className = 'retry-notice';
-                    retryDiv.innerHTML = `
-                        <div class="ai-warning-message">
-                            <span class="warning-icon">⚠️</span>
-                            ${data.message}
-                            <div class="retry-progress">
-                                <div class="retry-countdown" id="retry-countdown">${data.delay}</div>
-                                <div class="retry-info">重試 ${data.retry_count}/${data.max_retries}</div>
-                            </div>
-                        </div>
-                    `;
-                    contentDiv.appendChild(retryDiv);
-                    
-                    // 倒計時
-                    let countdown = data.delay;
-                    const countdownInterval = setInterval(() => {
-                        countdown--;
-                        const countdownEl = document.getElementById('retry-countdown');
-                        if (countdownEl) {
-                            countdownEl.textContent = countdown;
-                        }
-                        if (countdown <= 0) {
-                            clearInterval(countdownInterval);
-                            // 移除重試通知
-                            const retryNotice = contentDiv.querySelector('.retry-notice');
-                            if (retryNotice) {
-                                retryNotice.remove();
-                            }
-                        }
-                    }, 1000);
-                }
+                this.infoMessages.clear();  // 清除追蹤
+                // 清空內容區但保留結構
+                contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
                 break;
                 
             case 'info':
             case 'warning':
+                // 只添加新的消息
                 if (data.message && !this.infoMessages.has(data.message)) {
                     this.infoMessages.add(data.message);
                     this.addInfoMessage(contentDiv, data.type, data.message);
@@ -989,11 +817,6 @@ class AIAnalyzer {
                 break;
                 
             case 'content':
-                // 移除任何重試通知
-                const retryNotice = contentDiv.querySelector('.retry-notice');
-                if (retryNotice) {
-                    retryNotice.remove();
-                }
                 // 累積內容並更新顯示
                 this.accumulatedContent += data.content;
                 this.updateContentDisplay(contentDiv);
@@ -1021,67 +844,6 @@ class AIAnalyzer {
                 this.finalizeAnalysis();
                 break;
         }
-    }
-
-    updateRateLimitDisplay(usage) {
-        // 可以在 UI 中顯示當前使用情況
-        console.log('速率限制狀態:', usage);
-        
-        // 如果接近限制，顯示警告
-        if (usage.tpm_current / usage.tpm_limit > 0.8) {
-            this.showRateLimitWarning();
-        }
-    }
-
-    showRateLimitWarning() {
-        // 在 UI 某處顯示速率限制警告
-        const warning = document.createElement('div');
-        warning.className = 'rate-limit-warning';
-        warning.innerHTML = `
-            <div class="ai-warning-message">
-                <span class="warning-icon">⚠️</span>
-                接近速率限制，請減少請求頻率
-            </div>
-        `;
-        
-        // 添加到合適的位置
-        const chatArea = document.getElementById('aiChatArea');
-        if (chatArea && !chatArea.querySelector('.rate-limit-warning')) {
-            chatArea.insertBefore(warning, chatArea.firstChild);
-            
-            // 5秒後自動移除
-            setTimeout(() => warning.remove(), 5000);
-        }
-    }
-        
-    showRateLimitWait(data, container) {
-        const waitDiv = document.createElement('div');
-        waitDiv.className = 'rate-limit-wait';
-        waitDiv.innerHTML = `
-            <div class="ai-warning-message">
-                <span class="warning-icon">⏱️</span>
-                <div>
-                    <div>達到速率限制：${data.reason}</div>
-                    <div>等待 ${Math.ceil(data.wait_time)} 秒後自動重試...</div>
-                    <div class="wait-countdown" id="wait-countdown">${Math.ceil(data.wait_time)}</div>
-                </div>
-            </div>
-        `;
-        container.appendChild(waitDiv);
-        
-        // 倒計時
-        let remaining = Math.ceil(data.wait_time);
-        const interval = setInterval(() => {
-            remaining--;
-            const countdown = document.getElementById('wait-countdown');
-            if (countdown) {
-                countdown.textContent = remaining;
-            }
-            if (remaining <= 0) {
-                clearInterval(interval);
-                waitDiv.remove();
-            }
-        }, 1000);
     }
 
     addInfoMessage(container, type, message) {
@@ -1154,7 +916,79 @@ class AIAnalyzer {
     }
 
     formatContentChatGPTStyle(text) {
-        return this.formatMarkdown(text);
+        if (!text) return '';
+        
+        let html = '<div class="chatgpt-content">';
+        
+        // 智能分段：保留空行、標題前後的換行
+        const lines = text.split('\n');
+        let currentParagraph = [];
+        let inCodeBlock = false;
+        let codeBlockContent = [];
+        let codeBlockLang = '';
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // 處理代碼塊
+            if (line.startsWith('```')) {
+                if (!inCodeBlock) {
+                    // 開始代碼塊
+                    if (currentParagraph.length > 0) {
+                        html += this.processParagraph(currentParagraph.join('\n'));
+                        currentParagraph = [];
+                    }
+                    inCodeBlock = true;
+                    codeBlockLang = line.slice(3).trim();
+                    codeBlockContent = [];
+                } else {
+                    // 結束代碼塊
+                    html += `<pre class="gpt-code-block"><code class="language-${codeBlockLang}">${this.escapeHtml(codeBlockContent.join('\n'))}</code></pre>`;
+                    inCodeBlock = false;
+                    codeBlockContent = [];
+                }
+                continue;
+            }
+            
+            if (inCodeBlock) {
+                codeBlockContent.push(line);
+                continue;
+            }
+            
+            // 檢查是否是標題
+            if (line.match(/^#{1,6}\s/)) {
+                // 先處理之前的段落
+                if (currentParagraph.length > 0) {
+                    html += this.processParagraph(currentParagraph.join('\n'));
+                    currentParagraph = [];
+                }
+                // 處理標題
+                const level = line.match(/^(#{1,6})/)[1].length;
+                const title = line.replace(/^#{1,6}\s+/, '');
+                html += `<h${level} class="gpt-h${level}">${this.formatInline(title)}</h${level}>`;
+                continue;
+            }
+            
+            // 空行表示段落結束
+            if (line.trim() === '') {
+                if (currentParagraph.length > 0) {
+                    html += this.processParagraph(currentParagraph.join('\n'));
+                    currentParagraph = [];
+                }
+                continue;
+            }
+            
+            // 添加到當前段落
+            currentParagraph.push(line);
+        }
+        
+        // 處理最後的段落
+        if (currentParagraph.length > 0) {
+            html += this.processParagraph(currentParagraph.join('\n'));
+        }
+        
+        html += '</div>';
+        return html;
     }
 
     processParagraph(text) {
