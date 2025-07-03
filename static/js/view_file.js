@@ -979,88 +979,77 @@ function generateMarkdown() {
 
 // 生成 HTML
 function generateHTML() {
-	let html = `<!DOCTYPE html>
+    // 獲取當前檔案名
+    const currentFileName = window.fileName || window.escaped_filename || 'Unknown';
+    
+    let html = `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>AI 對話記錄 - ${fileName}</title>
-	<style>
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-			max-width: 800px;
-			margin: 0 auto;
-			padding: 20px;
-			background: #f5f5f5;
-			color: #333;
-		}
-		.header {
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-			color: white;
-			padding: 20px;
-			border-radius: 10px;
-			margin-bottom: 20px;
-		}
-		.conversation {
-			background: white;
-			padding: 20px;
-			margin-bottom: 20px;
-			border-radius: 10px;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-		}
-		.conversation-header {
-			color: #666;
-			font-size: 14px;
-			margin-bottom: 10px;
-		}
-		.user-question {
-			background: #f0f0f0;
-			padding: 15px;
-			border-left: 4px solid #667eea;
-			margin-bottom: 15px;
-			border-radius: 5px;
-		}
-		.ai-response {
-			padding: 15px;
-			line-height: 1.6;
-		}
-		code {
-			background: #f5f5f5;
-			padding: 2px 6px;
-			border-radius: 3px;
-			font-family: monospace;
-		}
-		pre {
-			background: #f5f5f5;
-			padding: 15px;
-			border-radius: 5px;
-			overflow-x: auto;
-		}
-		h3 {
-			color: #667eea;
-		}
-	</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 對話記錄 - ${currentFileName}</title>
+    <style>
+        /* 複製 AI 分析器的所有樣式 */
+        ${getAIAnalyzerStyles()}
+    </style>
 </head>
-<body>
-	<div class="header">
-		<h1>AI 對話記錄</h1>
-		<p>檔案：${escapeHtml(fileName)}</p>
-		<p>日期：${new Date().toLocaleString('zh-TW')}</p>
-	</div>`;
-	
-	conversationHistory.forEach((item, index) => {
-		const element = item;
-		html += `<div class="conversation">`;
-		
-		// 複製整個對話內容
-		const conversationContent = element.innerHTML;
-		html += conversationContent;
-		
-		html += `</div>`;
-	});
-	
-	html += `</body></html>`;
-	return html;
+<body style="background: #1e1e1e; color: #d4d4d4;">
+    <div class="header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; margin-bottom: 20px;">
+        <h1>AI 對話記錄</h1>
+        <p>檔案：${escapeHtml(currentFileName)}</p>
+        <p>日期：${new Date().toLocaleString('zh-TW')}</p>
+    </div>
+    <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">`;
+    
+    conversationHistory.forEach((item, index) => {
+        const element = item;
+        html += `<div class="ai-conversation-item" style="margin-bottom: 20px;">`;
+        
+        // 複製整個對話內容，保持原有樣式
+        html += element.innerHTML;
+        
+        html += `</div>`;
+    });
+    
+    html += `</div></body></html>`;
+    return html;
+}
+
+// 新增函數：獲取 AI 分析器的樣式
+function getAIAnalyzerStyles() {
+    // 從當前頁面提取所有相關的 CSS
+    let styles = '';
+    const styleSheets = document.styleSheets;
+    
+    for (let i = 0; i < styleSheets.length; i++) {
+        try {
+            const sheet = styleSheets[i];
+            if (sheet.href && sheet.href.includes('ai_analyzer.css')) {
+                // 獲取 AI 分析器的樣式
+                const rules = sheet.cssRules || sheet.rules;
+                for (let j = 0; j < rules.length; j++) {
+                    styles += rules[j].cssText + '\n';
+                }
+            }
+        } catch (e) {
+            console.log('無法訪問樣式表:', e);
+        }
+    }
+    
+    // 添加基礎樣式
+    styles += `
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
+        .ai-conversation-item { background: #2d2d30; border-radius: 12px; padding: 0; overflow: hidden; }
+        .ai-conversation-header { background: linear-gradient(135deg, #3e3e42 0%, #2d2d30 100%); padding: 12px 20px; }
+        .ai-conversation-content { padding: 20px; }
+        .ai-response-text { color: #e0e0e0; line-height: 1.7; }
+        .gpt-h1, .gpt-h2, .gpt-h3 { color: #4ec9b0; margin: 20px 0 10px 0; }
+        .gpt-paragraph { margin: 12px 0; line-height: 1.8; }
+        .inline-code { background: rgba(45, 45, 48, 0.8); padding: 2px 6px; border-radius: 4px; color: #ce9178; }
+        .code-block { background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    `;
+    
+    return styles;
 }
 
 // 生成純文字
@@ -1132,12 +1121,33 @@ function downloadFile(content, filename, mimeType) {
 }
 
 function improvedResizeDivider() {
-	const divider = document.getElementById('aiResizeDivider');
-	const chatArea = document.getElementById('aiChatArea');
-	const inputArea = document.getElementById('aiInputArea');
-	const rightPanel = document.getElementById('rightPanel');
-	
-	if (!divider || !chatArea || !inputArea || !rightPanel) return;
+    const divider = document.getElementById('aiResizeDivider');
+    const chatArea = document.getElementById('aiChatArea');
+    const inputArea = document.getElementById('aiInputArea');
+    const rightPanel = document.getElementById('rightPanel');
+    
+    if (!divider || !chatArea || !inputArea || !rightPanel) return;
+    
+    // 設置初始比例 8:2
+    const initializeRatio = () => {
+        const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
+        const dividerHeight = divider.offsetHeight;
+        const totalHeight = rightPanel.offsetHeight;
+        const availableHeight = totalHeight - headerHeight - dividerHeight;
+        
+        // 8:2 比例
+        const chatHeight = Math.floor(availableHeight * 0.8);
+        const inputHeight = Math.floor(availableHeight * 0.2);
+        
+        chatArea.style.height = `${chatHeight}px`;
+        inputArea.style.height = `${inputHeight}px`;
+    };
+    
+    // 初始化比例
+    setTimeout(initializeRatio, 100);
+    
+    // 視窗大小改變時重新計算
+    window.addEventListener('resize', initializeRatio);
 	
 	let isResizing = false;
 	let currentY = 0;
@@ -1667,12 +1677,71 @@ async function handleProviderChange(provider) {
         if (provider === 'anthropic') {
             selectedModel = 'claude-sonnet-4-20250514';
             document.getElementById('selectedModelNameInline').textContent = 'Claude 4 Sonnet';
+            
+            // 更新模型選擇彈窗
+            updateModelPopupForProvider('anthropic');
         } else if (provider === 'openai') {
             selectedModel = 'gpt-4-turbo-preview';
             document.getElementById('selectedModelNameInline').textContent = 'GPT-4 Turbo';
+            
+            // 更新模型選擇彈窗
+            updateModelPopupForProvider('openai');
         }
     } catch (error) {
         console.error('Provider switch error:', error);
+    }
+}
+
+// 新增函數：更新模型彈窗內容
+function updateModelPopupForProvider(provider) {
+    const modelGrid = document.querySelector('.model-popup-grid');
+    if (!modelGrid) return;
+    
+    if (provider === 'openai') {
+        modelGrid.innerHTML = `
+            <div class="model-card selected" data-model="gpt-4-turbo-preview" onclick="selectModel(this)">
+                <div class="model-card-name">GPT-4 Turbo</div>
+                <div class="model-card-desc">最新的 GPT-4，支援 128K context</div>
+            </div>
+            <div class="model-card" data-model="gpt-4" onclick="selectModel(this)">
+                <div class="model-card-name">GPT-4</div>
+                <div class="model-card-desc">強大的推理能力</div>
+            </div>
+            <div class="model-card" data-model="gpt-3.5-turbo" onclick="selectModel(this)">
+                <div class="model-card-name">GPT-3.5 Turbo</div>
+                <div class="model-card-desc">快速且經濟的選擇</div>
+            </div>
+        `;
+    } else {
+        // 恢復 Claude 模型列表
+        modelGrid.innerHTML = `
+            <div class="model-card" data-model="claude-opus-4-20250514" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 4 Opus</div>
+                <div class="model-card-desc">🚀 最強大，300K tokens，複雜分析首選</div>
+                <div class="model-card-badge new">NEW</div>
+            </div>
+            <div class="model-card selected" data-model="claude-sonnet-4-20250514" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 4 Sonnet</div>
+                <div class="model-card-desc">⚡ 推薦！250K tokens，平衡效能</div>
+                <div class="model-card-badge new">NEW</div>
+            </div>
+            <div class="model-card" data-model="claude-3-5-sonnet-20241022" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 3.5 Sonnet</div>
+                <div class="model-card-desc">快速準確，適合一般分析</div>
+            </div>
+            <div class="model-card" data-model="claude-3-5-haiku-20241022" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 3.5 Haiku</div>
+                <div class="model-card-desc">輕量快速，簡單分析</div>
+            </div>
+            <div class="model-card" data-model="claude-3-opus-20240229" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 3 Opus</div>
+                <div class="model-card-desc">深度分析，詳細但較慢</div>
+            </div>
+            <div class="model-card" data-model="claude-3-haiku-20240307" onclick="selectModel(this)">
+                <div class="model-card-name">Claude 3 Haiku</div>
+                <div class="model-card-desc">經濟實惠，基本分析</div>
+            </div>
+        `;
     }
 }
 
@@ -4495,6 +4564,9 @@ function updateAnalyzeButton(mode) {
 
 // 顯示模式選擇提示
 function showModeSelectionToast(mode) {
+    // 不在初始化時顯示，只在用戶點擊時顯示
+    if (!mode || window.isInitializing) return;
+    
     const modeConfig = ANALYSIS_MODES[mode];
     if (!modeConfig) return;
     
@@ -4658,6 +4730,11 @@ function formatAnalysisContent(content) {
         // 先處理特殊字符
         formatted = formatted.replace(/\*\*\*/g, '');  // 移除多餘的星號
         
+        // 處理代碼塊（優先處理，避免內部內容被其他規則影響）
+        formatted = formatted.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
+            return `<pre class="code-block"><code class="language-${lang || 'text'}">${escapeHtml(code.trim())}</code></pre>`;
+        });
+        
         // 處理編號標題（例如：1. 標題、2. 標題）
         formatted = formatted.replace(/^(\d+)\.\s*([^：:]+)[:：]\s*$/gm, 
             '<h3 class="gpt-numbered-title"><span class="title-number">$1.</span> $2</h3>');
@@ -4694,52 +4771,36 @@ function formatAnalysisContent(content) {
         // 處理行內代碼
         formatted = formatted.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
         
-        // 處理代碼塊
-        formatted = formatted.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
-            return `<pre class="code-block"><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`;
-        });
-        
-        // 處理段落和空行
+        // 處理段落 - 優化版本，減少空行
         const lines = formatted.split('\n');
         const processedLines = [];
-        let inParagraph = false;
-        let paragraphContent = [];
+        let inSpecialBlock = false;
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             
-            if (!line) {
-                // 空行，結束當前段落
-                if (paragraphContent.length > 0) {
-                    processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
-                    paragraphContent = [];
-                    inParagraph = false;
-                }
-                continue;
-            }
-            
-            // 檢查是否是已處理的特殊格式
-            if (line.match(/^<[^>]+>/)) {
-                // 先處理未完成的段落
-                if (paragraphContent.length > 0) {
-                    processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
-                    paragraphContent = [];
-                    inParagraph = false;
-                }
+            // 檢查是否是特殊格式（已處理的）
+            if (line.match(/^<[^>]+>/) || !line) {
                 processedLines.push(line);
+                inSpecialBlock = true;
             } else {
-                // 普通文本，加入段落
-                paragraphContent.push(line);
-                inParagraph = true;
+                // 只有在非特殊格式且非空行時才包裝成段落
+                if (!inSpecialBlock && line) {
+                    processedLines.push(`<p class="gpt-paragraph">${line}</p>`);
+                } else if (line) {
+                    processedLines.push(line);
+                }
+                inSpecialBlock = false;
             }
         }
         
-        // 處理最後的段落
-        if (paragraphContent.length > 0) {
-            processedLines.push(`<p class="gpt-paragraph">${paragraphContent.join(' ')}</p>`);
-        }
+        // 過濾掉多餘的空行
+        const finalLines = processedLines.filter((line, index, arr) => {
+            // 保留非空行或第一個空行
+            return line || (index === 0 || arr[index - 1]);
+        });
         
-        return `<div class="gpt-content">${processedLines.join('\n')}</div>`;
+        return `<div class="gpt-content">${finalLines.join('\n')}</div>`;
         
     } catch (error) {
         console.error('格式化錯誤:', error);
@@ -4878,6 +4939,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeAnalysisModes() {
+    // 設置初始化標記
+    window.isInitializing = true;
+    
     // 設置默認模式，但不顯示提示
     selectedAnalysisMode = 'auto';
     
@@ -4893,6 +4957,11 @@ function initializeAnalysisModes() {
     if (descElement) {
         descElement.textContent = '自動選擇最佳分析策略，平衡速度與深度';
     }
+    
+    // 清除初始化標記
+    setTimeout(() => {
+        window.isInitializing = false;
+    }, 100);
 }
 
 // 更新深度分析顯示

@@ -694,3 +694,40 @@
     border-radius: 6px;
     color: #d4d4d4;
 }
+
+/* 優化段落和代碼塊間距 */
+.gpt-content > * {
+    margin: 10px 0;  /* 統一間距 */
+}
+
+.gpt-content > *:first-child {
+    margin-top: 0;
+}
+
+.gpt-content > *:last-child {
+    margin-bottom: 0;
+}
+
+/* 代碼塊特別處理 */
+.code-block {
+    margin: 15px 0;  /* 代碼塊稍微大一點的間距 */
+}
+
+/* 連續的段落減少間距 */
+.gpt-paragraph + .gpt-paragraph {
+    margin-top: 8px;
+}
+
+/* 標題前後間距 */
+.gpt-h1, .gpt-h2, .gpt-h3, .gpt-h4, .gpt-h5 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.gpt-content > :first-child.gpt-h1,
+.gpt-content > :first-child.gpt-h2,
+.gpt-content > :first-child.gpt-h3,
+.gpt-content > :first-child.gpt-h4,
+.gpt-content > :first-child.gpt-h5 {
+    margin-top: 0;
+}

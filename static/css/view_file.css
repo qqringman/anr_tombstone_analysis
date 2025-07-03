@@ -265,8 +265,6 @@ body {
 	background: #1e1e1e;
 	border-top: 2px solid #3e3e42;
 	padding: 15px 20px;
-	min-height: 180px;
-	max-height: 70%;
 	display: flex;
 	flex-direction: column;
 	max-height: 400px;
@@ -2550,11 +2548,8 @@ a.btn {
     background: #1e1e1e;
     border-top: 2px solid #3e3e42;
     padding: 15px 20px;
-    min-height: 180px;  /* 改為 120px */
-    max-height: 70%;    /* 改為 40% */
     display: flex;
     flex-direction: column;
-    max-height: 400px;  /* 改為 300px */
     overflow-y: auto;
 }
 
@@ -2583,7 +2578,7 @@ a.btn {
     resize: vertical;
     font-family: inherit;
     min-height: 100px;
-    max-height: 400px;
+    max-height: 100%;
     box-sizing: border-box;
 }
 
@@ -3979,9 +3974,9 @@ a.btn {
     color: #d4d4d4;
     line-height: 1.8;
     font-size: 14px;
-    /* 移除這些會阻止滾動的設定 */
-    /* max-height: none; */
-    /* overflow-y: visible; */
+    flex: 1;
+    overflow-y: auto;  /* 只有內容區域可滾動 */
+    padding-right: 10px;  /* 為滾動條留空間 */
 }
 
 /* 確保對話項目不會破壞滾動 */
@@ -4164,7 +4159,7 @@ a.btn {
     padding: 15px 20px;
     border-bottom: 1px solid #3e3e42;
     flex-shrink: 0;
-    display: block;  /* 確保顯示 */
+    overflow: hidden;  /* 防止產生滾動條 */
 }
 
 /* 確保輸入控制區可見 */
@@ -4311,10 +4306,12 @@ a.btn {
 /* 移除 AI 回應區域的額外捲軸 */
 .ai-response {
     flex: 1;
-    overflow-y: visible;  /* 改為 visible */
+    overflow: hidden;  /* 改為 hidden，防止雙滾動條 */
     padding: 20px;
-    height: auto;  /* 改為 auto */
+    height: 100%;
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 /* 全屏模式優化 */
@@ -4445,3 +4442,103 @@ a.btn {
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
 
+/* 模式按鈕基礎樣式 */
+.ai-mode-btn {
+    flex: 1;
+    padding: 10px 12px;
+    background: #3e3e42;  /* 統一的灰色背景 */
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+    overflow: hidden;
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+/* 智能分析按鈕 hover */
+.ai-mode-btn.smart:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* 快速分析按鈕 hover */
+.ai-mode-btn.quick:hover {
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4b 100%);
+    color: #333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+}
+
+/* 深度分析按鈕 hover */
+.ai-mode-btn.deep:hover {
+    background: linear-gradient(135deg, #4ec9b0 0%, #45d3b8 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(78, 201, 176, 0.3);
+}
+
+/* 活躍狀態保持 hover 的顏色 */
+.ai-mode-btn.smart.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.ai-mode-btn.quick.active {
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4b 100%);
+    color: #333;
+    border-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.ai-mode-btn.deep.active {
+    background: linear-gradient(135deg, #4ec9b0 0%, #45d3b8 100%);
+    color: white;
+    border-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+/* ===== AI 輸入區域 ===== */
+.ai-input-area {
+    flex-shrink: 0;
+    background: #1e1e1e;
+    border-top: 2px solid #3e3e42;
+    padding: 15px 20px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;  /* 允許垂直滾動 */
+}
+
+/* ===== 右側 AI 面板 ===== */
+.right-panel {
+    width: 0;
+    background: #252526;
+    border-left: 2px solid #007acc;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;  /* 重要：防止整個面板滾動 */
+    transition: width 0.3s ease;
+    height: 100%;
+    position: relative;
+    min-width: 0;
+    max-width: 70%;
+}
+
+/* ===== AI 聊天區域 ===== */
+.ai-chat-area {
+    flex: 1;
+    min-height: 0;  /* 重要：允許 flexbox 收縮 */
+    overflow: hidden;  /* 改為 hidden */
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}

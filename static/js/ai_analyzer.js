@@ -37,7 +37,7 @@ class AIAnalyzer {
         // 創建模式選擇按鈕組
         const modeButtons = `
             <div class="ai-mode-selector">
-                <button class="ai-mode-btn smart active" data-mode="smart">
+                <button class="ai-mode-btn smart" data-mode="smart">
                     <span class="mode-icon">🧠</span>
                     <span class="mode-name">智能分析</span>
                     <span class="mode-desc">自動最佳策略</span>
@@ -72,6 +72,12 @@ class AIAnalyzer {
                 e.preventDefault();
                 e.stopPropagation();
                 const mode = e.currentTarget.dataset.mode;
+                
+                // 更新選中狀態
+                document.querySelectorAll('.ai-mode-btn').forEach(b => b.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                
+                // 執行分析
                 this.executeAnalysis(mode);
             });
         });
