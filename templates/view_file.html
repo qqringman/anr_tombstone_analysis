@@ -345,7 +345,7 @@
 		window.escaped_filename = {{ escaped_filename | safe }};
 		window.escaped_file_path = {{ escaped_file_path | safe }};
 	</script>
+    <script src="{{ url_for('static', filename='js/ai_analyzer.js') }}"></script>    
     <script src="{{ url_for('static', filename='js/view_file.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ai_analyzer.js') }}"></script>
 </body>
 </html>

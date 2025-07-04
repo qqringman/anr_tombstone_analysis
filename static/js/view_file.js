@@ -326,7 +326,28 @@ document.addEventListener('DOMContentLoaded', function() {
             selectAnalysisMode(mode);
         });
     });
+
+    // 檢查必要的全局對象
+    if (!window.aiRequestManager) {
+        console.error('AIRequestManager 未載入，請確認 ai_analyzer.js 已正確載入');
+        return;
+    }
+
+    // 監聽 ESC 鍵停止分析
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && window.aiRequestManager && window.aiRequestManager.isProcessing) {
+            e.preventDefault();
+            window.aiRequestManager.stopRequest();
+        }
+    });
     
+    // 確保在頁面卸載時清理
+    window.addEventListener('beforeunload', function() {
+        if (window.aiRequestManager && window.aiRequestManager.isProcessing) {
+            window.aiRequestManager.stopRequest();
+        }
+    });
+
     // 初始化默認選中的模式
     selectAnalysisMode('auto');
 
@@ -346,15 +367,28 @@ function toggleAIInfo() {
     }
 }
 
+// 獲取 AIRequestManager 的輔助函數
+function getAIRequestManager() {
+    if (!window.aiRequestManager) {
+        throw new Error('AIRequestManager 未初始化，請確認 ai_analyzer.js 已正確載入');
+    }
+    return window.aiRequestManager;
+}
+
 async function executeAIAnalysis(mode) {
-    if (isAnalyzing) return;
-    
-    isAnalyzing = true;
+
+    // 檢查 aiRequestManager 是否可用
+    if (!window.aiRequestManager) {
+        console.error('AIRequestManager 未初始化');
+        return;
+    }
+
+    // 使用統一的請求管理器
+    const signal = window.aiRequestManager.startRequest(mode);
     
     const btn = document.querySelector(`.ai-mode-btn[data-mode="${mode}"]`);
     if (!btn) return;
     
-    // 標記模式類型
     const conversationClass = `${mode}-mode`;
     
     // 禁用所有模式按鈕
@@ -363,15 +397,11 @@ async function executeAIAnalysis(mode) {
         b.classList.add('disabled');
     });
     
-    // 保存原始內容
-    const originalContent = btn.innerHTML;
-    
-    // 顯示 loading 和停止按鈕
+    // 顯示 loading 狀態
     btn.classList.add('analyzing');
     btn.innerHTML = `
         <div class="ai-spinner"></div>
         <span class="mode-name">分析中...</span>
-        <button class="stop-btn-inline" onclick="stopCurrentAnalysis()">停止</button>
     `;
     
     const responseDiv = document.getElementById('aiResponse');
@@ -380,13 +410,12 @@ async function executeAIAnalysis(mode) {
     
     // 創建新的對話項目
     const conversationItem = createConversationItem(mode);
-    conversationItem.classList.add(conversationClass);  // 添加模式類別
+    conversationItem.classList.add(conversationClass);
     responseContent.appendChild(conversationItem);
     
-    // 創建 AbortController
-    currentAnalysisController = new AbortController();
-    
     try {
+        const requestManager = getAIRequestManager();
+        const signal = requestManager.startRequest(mode);		
         const response = await fetch('/api/ai/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -400,7 +429,7 @@ async function executeAIAnalysis(mode) {
                 content: fileContent,
                 stream: true
             }),
-            signal: currentAnalysisController.signal  // 添加取消信號
+            signal: signal  // 使用統一的 signal
         });
         
         await handleStreamResponse(response, conversationItem);
@@ -429,17 +458,10 @@ async function executeAIAnalysis(mode) {
             }
         }
     } finally {
-        // 恢復按鈕
-        btn.innerHTML = originalContent;
-        btn.classList.remove('analyzing');
-        
-        document.querySelectorAll('.ai-mode-btn').forEach(b => {
-            b.disabled = false;
-            b.classList.remove('disabled');
-        });
-        
-        isAnalyzing = false;
-        currentAnalysisController = null;
+		// 使用統一的清理
+		if (window.aiRequestManager) {
+			window.aiRequestManager.cleanup();
+		}
     }
 }
 
@@ -873,15 +895,21 @@ function createAIInfoModal() {
 
 // 確保快速問題功能正常運作
 async function useQuickQuestion(question) {
-    if (isAskingQuestion) return;
-    
-    isAskingQuestion = true;
+
+    // 檢查 aiRequestManager 是否可用
+    if (!window.aiRequestManager) {
+        console.error('AIRequestManager 未初始化');
+        return;
+    }
+
+    // 使用統一的請求管理器
+    const signal = window.aiRequestManager.startRequest('quick-question')
     
     const responseDiv = document.getElementById('aiResponse');
     const responseContent = document.getElementById('aiResponseContent');
     
     if (!responseDiv || !responseContent) {
-        isAskingQuestion = false;
+        aiRequestManager.cleanup();
         return;
     }
     
@@ -895,89 +923,64 @@ async function useQuickQuestion(question) {
     const thinkingDiv = conversationItem.querySelector('.ai-thinking');
     
     try {
-        // 使用流式請求（如果有 aiAnalyzer）
-        if (window.aiAnalyzer) {
-            window.aiAnalyzer.messages.push({
-                role: 'user',
-                content: question
-            });
-            
-            // 使用 aiAnalyzer 的流式方法
-            const response = await fetch('/api/ai/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: window.aiAnalyzer.sessionId,
-                    provider: 'anthropic',
-                    model: selectedModel,
-                    mode: 'quick',
-                    file_path: filePath,
-                    file_name: fileName,
-                    content: fileContent,
-                    stream: true,
-                    context: [{
-                        role: 'user',
-                        content: question
-                    }]
-                })
-            });
-            
-            // 處理流式響應
-            await handleStreamResponse(response, conversationItem);
-        } else {
-            // 使用非流式後備方案
-            const response = await fetch('/api/ai/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: Date.now().toString(),
-                    provider: 'anthropic',
-                    model: selectedModel,
-                    mode: 'quick',
-                    file_path: filePath,
-                    file_name: fileName,
-                    content: fileContent,
-                    stream: false,
-                    context: [{
-                        role: 'user',
-                        content: question
-                    }]
-                })
-            });
-            
-            const data = await response.json();
-            
+        // 使用 aiAnalyzer 的流式方法
+        const response = await fetch('/api/ai/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
+                provider: 'anthropic',
+                model: selectedModel,
+                mode: 'quick',
+                file_path: filePath,
+                file_name: fileName,
+                content: fileContent,
+                stream: true,
+                context: [{
+                    role: 'user',
+                    content: question
+                }]
+            }),
+            signal: signal  // 使用統一的 signal
+        });
+        
+        // 處理流式響應
+        await handleStreamResponse(response, conversationItem);
+        
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('快速問題已取消');
             if (thinkingDiv) {
                 thinkingDiv.style.display = 'none';
             }
-            
-            if (response.ok && data.success) {
-                contentDiv.innerHTML = formatStreamingContent(data.result || data.analysis);
-                updateUsageInfo(conversationItem, data);
-            } else {
-                throw new Error(data.error || '分析失敗');
+            contentDiv.innerHTML = `
+                <div class="ai-warning">
+                    <span class="warning-icon">⚠️</span> 分析已被使用者取消
+                </div>
+            `;
+        } else {
+            console.error('Quick question error:', error);
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
             }
+            contentDiv.innerHTML = `
+                <div class="ai-error">
+                    <h3>❌ 分析失敗</h3>
+                    <p>${escapeHtml(error.message)}</p>
+                </div>
+            `;
         }
-        
-    } catch (error) {
-        console.error('Quick question error:', error);
-        if (thinkingDiv) {
-            thinkingDiv.style.display = 'none';
-        }
-        contentDiv.innerHTML = `
-            <div class="ai-error">
-                <h3>❌ 分析失敗</h3>
-                <p>${escapeHtml(error.message)}</p>
-            </div>
-        `;
     } finally {
-        isAskingQuestion = false;
-        
         // 關閉快速問題選單
         const menu = document.getElementById('quickQuestionsMenu');
         if (menu) {
             menu.classList.remove('show');
         }
+        
+		// 使用統一的清理
+		if (window.aiRequestManager) {
+			window.aiRequestManager.cleanup();
+		}
     }
 }
 
@@ -1003,41 +1006,57 @@ async function handleStreamResponse(response, conversationItem) {
     const contentArea = contentDiv.querySelector('.content-area');
     const messageArea = contentDiv.querySelector('.message-area');
     
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                try {
-                    const data = JSON.parse(line.slice(6));
-                    
-                    switch (data.type) {
-                        case 'content':
-                            accumulatedContent += data.content;
-                            updateStreamingContent(contentArea, accumulatedContent);
-                            break;
-                            
-                        case 'info':
-                        case 'warning':
-                            displayMessage(messageArea, data.type, data.message);
-                            break;
-                            
-                        case 'complete':
-                            updateUsageInfo(conversationItem, data);
-                            break;
-                            
-                        case 'error':
-                            throw new Error(data.error);
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            // 檢查是否被取消
+            if (!window.aiRequestManager || !window.aiRequestManager.isProcessing) {
+                reader.cancel();
+                break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        switch (data.type) {
+                            case 'content':
+                                accumulatedContent += data.content;
+                                updateStreamingContent(contentArea, accumulatedContent);
+                                break;
+                                
+                            case 'info':
+                            case 'warning':
+                                displayMessage(messageArea, data.type, data.message);
+                                break;
+                                
+                            case 'complete':
+                                updateUsageInfo(conversationItem, data);
+                                break;
+                                
+                            case 'error':
+                                throw new Error(data.error);
+                        }
+                    } catch (e) {
+                        console.error('解析流數據錯誤:', e);
                     }
-                } catch (e) {
-                    console.error('解析流數據錯誤:', e);
                 }
             }
         }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw error;  // 重新拋出中止錯誤
+        }
+        console.error('Stream processing error:', error);
+        throw error;
+    } finally {
+        reader.releaseLock();
     }
 }
 
@@ -1672,14 +1691,18 @@ function createTokenUsageBar(estimatedTokens, label = 'Token 使用量') {
 
 // Ask custom question
 async function askCustomQuestion() {
-    if (isAskingQuestion) return;
-    
+
+    // 檢查 aiRequestManager 是否可用
+    if (!window.aiRequestManager) {
+        console.error('AIRequestManager 未初始化');
+        return;
+    }
+
     const customQuestionElement = document.getElementById('customQuestion');
     const responseDiv = document.getElementById('aiResponse');
     const responseContent = document.getElementById('aiResponseContent');
-    const askBtn = document.getElementById('askBtnInline');
     
-    if (!askBtn || !customQuestionElement || !responseDiv || !responseContent) {
+    if (!customQuestionElement || !responseDiv || !responseContent) {
         return;
     }
     
@@ -1689,20 +1712,12 @@ async function askCustomQuestion() {
         return;
     }
     
-    isAskingQuestion = true;
+    // 使用統一的請求管理器
+    const signal = window.aiRequestManager.startRequest('custom');	
     const questionToSend = customQuestion;
     
     // 清空輸入框
     customQuestionElement.value = '';
-    customQuestionElement.disabled = true;
-    askBtn.disabled = true;
-    
-    // 保存原始按鈕內容
-    const originalBtnContent = askBtn.innerHTML;
-    
-    // 顯示停止按鈕
-    askBtn.innerHTML = '⏹️';
-    askBtn.onclick = () => stopCurrentAnalysis();
     
     responseDiv.classList.add('active');
     
@@ -1738,34 +1753,46 @@ async function askCustomQuestion() {
                 file_path: filePath,
                 file_name: fileName,
                 content: fullContent,
-                stream: true,  // 啟用流式
+                stream: true,
                 context: []
-            })
+            }),
+            signal: signal  // 使用統一的 signal
         });
         
         // 處理流式響應
         await handleStreamResponse(response, conversationItem);
         
     } catch (error) {
-        console.error('Custom question error:', error);
-        if (thinkingDiv) {
-            thinkingDiv.style.display = 'none';
+        if (error.name === 'AbortError') {
+            console.log('問題已取消');
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+            contentDiv.innerHTML = `
+                <div class="ai-warning">
+                    <span class="warning-icon">⚠️</span> 分析已被使用者取消
+                </div>
+            `;
+        } else {
+            console.error('Custom question error:', error);
+            if (thinkingDiv) {
+                thinkingDiv.style.display = 'none';
+            }
+            contentDiv.innerHTML = `
+                <div class="ai-error">
+                    <h3>❌ 分析失敗</h3>
+                    <p>${escapeHtml(error.message)}</p>
+                    <p style="margin-top: 10px;">
+                        <button class="retry-btn" onclick="retryQuestion('${escapeHtml(questionToSend)}')">🔄 重試</button>
+                    </p>
+                </div>
+            `;
         }
-        contentDiv.innerHTML = `
-            <div class="ai-error">
-                <h3>❌ 分析失敗</h3>
-                <p>${escapeHtml(error.message)}</p>
-                <p style="margin-top: 10px;">
-                    <button class="retry-btn" onclick="retryQuestion('${escapeHtml(questionToSend)}')">🔄 重試</button>
-                </p>
-            </div>
-        `;
     } finally {
-        isAskingQuestion = false;
-        customQuestionElement.disabled = false;
-        askBtn.disabled = false;
-        askBtn.innerHTML = originalBtnContent;
-        askBtn.onclick = () => askCustomQuestion();
+		// 使用統一的清理
+		if (window.aiRequestManager) {
+			window.aiRequestManager.cleanup();
+		}
     }
 }
 
@@ -1774,51 +1801,11 @@ let currentAnalysisController = null;
 
 // 停止當前分析
 function stopCurrentAnalysis() {
-    if (currentAnalysisController) {
-        currentAnalysisController.abort();
-        currentAnalysisController = null;
+    if (window.aiRequestManager) {
+        window.aiRequestManager.stopRequest();
+    } else {
+        console.error('AIRequestManager 未初始化');
     }
-    
-    // 如果有 aiAnalyzer 實例
-    if (window.aiAnalyzer && window.aiAnalyzer.isAnalyzing) {
-        window.aiAnalyzer.stopAnalysis();
-    }
-    
-    // 恢復所有按鈕狀態
-    document.querySelectorAll('.ai-mode-btn').forEach(btn => {
-        btn.disabled = false;
-        btn.classList.remove('disabled', 'analyzing');
-        // 恢復原始內容
-        const mode = btn.dataset.mode;
-        const modeInfo = {
-            'smart': { icon: '🧠', name: '智能分析', desc: '自動最佳策略' },
-            'quick': { icon: '⚡', name: '快速分析', desc: '30秒內完成' },
-            'deep': { icon: '🔍', name: '深度分析', desc: '詳細診斷' }
-        }[mode];
-        
-        if (modeInfo) {
-            btn.innerHTML = `
-                <span class="mode-icon">${modeInfo.icon}</span>
-                <span class="mode-name">${modeInfo.name}</span>
-                <span class="mode-desc">${modeInfo.desc}</span>
-            `;
-        }
-    });
-    
-    // 恢復輸入按鈕
-    const askBtn = document.getElementById('askBtnInline');
-    if (askBtn) {
-        askBtn.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 2L11 13"></path>
-                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
-            </svg>
-        `;
-        askBtn.onclick = () => askCustomQuestion();
-    }
-    
-    isAnalyzing = false;
-    isAskingQuestion = false;
 }
 
 // 創建用戶問題對話項目

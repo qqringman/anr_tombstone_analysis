@@ -1111,3 +1111,51 @@
 .gpt-code-block .number {
     color: #bd93f9;
 }
+
+/* ======================================================= */
+/* ===== 統一的停止按鈕樣式 ===== */
+.ai-stop-btn-unified {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: #d73a49;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(215, 58, 73, 0.3);
+    transition: all 0.2s;
+}
+
+.ai-stop-btn-unified:hover {
+    background: #cb2431;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(215, 58, 73, 0.4);
+}
+
+.ai-stop-btn-unified .ai-spinner {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+}
+
+/* 輸入按鈕的停止模式 */
+.send-btn-inline.stop-mode {
+    background: #d73a49;
+}
+
+.send-btn-inline.stop-mode:hover {
+    background: #cb2431;
+}
+
+/* 分析區域的相對定位 */
+.analyze-file-section {
+    position: relative;
+}

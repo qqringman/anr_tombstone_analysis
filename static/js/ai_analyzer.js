@@ -1,3 +1,157 @@
+class AIRequestManager {
+    constructor() {
+        this.currentController = null;
+        this.isProcessing = false;
+        this.currentMode = null;
+        this.stopButton = null;
+    }
+    
+    // 開始新請求
+    startRequest(mode) {
+        this.cleanup();
+        this.currentController = new AbortController();
+        this.isProcessing = true;
+        this.currentMode = mode;
+        this.showStopButton();
+        return this.currentController.signal;
+    }
+    
+    // 停止當前請求
+    stopRequest() {
+        console.log('執行統一停止請求...');
+        
+        // 1. 取消 fetch 請求
+        if (this.currentController) {
+            this.currentController.abort();
+            console.log('已發送 abort 信號');
+        }
+        
+        // 2. 如果有 aiAnalyzer 實例，也停止它
+        if (window.aiAnalyzer && window.aiAnalyzer.isAnalyzing) {
+            window.aiAnalyzer.stopAnalysis();
+        }
+        
+        // 3. 清理狀態
+        this.cleanup();
+    }
+    
+    // 清理狀態
+    cleanup() {
+        this.currentController = null;
+        this.isProcessing = false;
+        this.currentMode = null;
+        this.hideStopButton();
+        this.resetAllButtons();
+    }
+    
+    // 顯示統一的停止按鈕
+    showStopButton() {
+        // 移除所有現有的停止按鈕
+        document.querySelectorAll('.ai-stop-btn-unified').forEach(btn => btn.remove());
+        
+        // 在分析區域創建統一的停止按鈕
+        const analyzeSection = document.querySelector('.analyze-file-section');
+        if (analyzeSection) {
+            this.stopButton = document.createElement('button');
+            this.stopButton.className = 'ai-stop-btn-unified';
+            this.stopButton.innerHTML = `
+                <span class="stop-icon">⏹️</span>
+                <span>停止分析</span>
+                <div class="ai-spinner"></div>
+            `;
+            this.stopButton.onclick = () => this.stopRequest();
+            
+            // 添加到分析區域
+            analyzeSection.appendChild(this.stopButton);
+        }
+        
+        // 同時在輸入區域顯示停止狀態
+        this.updateInputAreaState(true);
+    }
+    
+    // 隱藏停止按鈕
+    hideStopButton() {
+        if (this.stopButton) {
+            this.stopButton.remove();
+            this.stopButton = null;
+        }
+        this.updateInputAreaState(false);
+    }
+    
+    // 更新輸入區域狀態
+    updateInputAreaState(isProcessing) {
+        const askBtn = document.getElementById('askBtnInline');
+        const customQuestion = document.getElementById('customQuestion');
+        
+        if (isProcessing) {
+            if (askBtn) {
+                askBtn.innerHTML = '⏹️';
+                askBtn.onclick = () => this.stopRequest();
+                askBtn.disabled = false;
+                askBtn.classList.add('stop-mode');
+            }
+            if (customQuestion) {
+                customQuestion.disabled = true;
+                customQuestion.placeholder = '分析進行中...';
+            }
+        } else {
+            if (askBtn) {
+                askBtn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                    </svg>
+                `;
+                askBtn.onclick = () => askCustomQuestion();
+                askBtn.disabled = !customQuestion?.value?.trim();
+                askBtn.classList.remove('stop-mode');
+            }
+            if (customQuestion) {
+                customQuestion.disabled = false;
+                customQuestion.placeholder = '詢問關於這個檔案的任何問題...';
+            }
+        }
+    }
+    
+    // 重置所有按鈕狀態
+    resetAllButtons() {
+        // 重置模式按鈕
+        document.querySelectorAll('.ai-mode-btn').forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('analyzing', 'disabled');
+            
+            const mode = btn.dataset.mode;
+            const modeInfo = {
+                'smart': { icon: '🧠', name: '智能分析', desc: '自動最佳策略' },
+                'quick': { icon: '⚡', name: '快速分析', desc: '30秒內完成' },
+                'deep': { icon: '🔍', name: '深度分析', desc: '詳細診斷' }
+            }[mode];
+            
+            if (modeInfo) {
+                btn.innerHTML = `
+                    <span class="mode-icon">${modeInfo.icon}</span>
+                    <span class="mode-name">${modeInfo.name}</span>
+                    <span class="mode-desc">${modeInfo.desc}</span>
+                `;
+            }
+        });
+        
+        // 重置分析按鈕（如果存在）
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        if (analyzeBtn && typeof resetAnalyzeButton === 'function') {
+            resetAnalyzeButton();
+        }
+        
+        // 重置全局狀態
+        if (typeof window.isAnalyzing !== 'undefined') {
+            window.isAnalyzing = false;
+        }
+        if (typeof window.isAskingQuestion !== 'undefined') {
+            window.isAskingQuestion = false;
+        }
+    }
+}
+
 // AI 分析器的前端邏輯
 class AIAnalyzer {
     constructor() {
@@ -1355,3 +1509,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 導出全域函數供 HTML 使用
 window.aiAnalyzer = aiAnalyzer;
+
+// 創建全局實例並掛載到 window
+window.aiRequestManager = new AIRequestManager();
