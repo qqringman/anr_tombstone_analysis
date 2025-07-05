@@ -71,10 +71,10 @@ class AndroidLogAnalyzer:
                                 text=True, 
                                 timeout=2)
             available = result.returncode == 0
-            print(f"✓ unzip is {'available' if available else 'not available'}")
+            print("✓ unzip is {}".format('available' if available else 'not available'))
             return available
         except Exception as e:
-            print(f"✗ unzip not available: {e}")
+            print("✗ unzip not available: {}".format(e))
             return False
 
     def extract_and_process_zip_files(self, base_path: str) -> List[str]:
@@ -295,11 +295,11 @@ class AndroidLogAnalyzer:
                             else:
                                 # 處理 Tombstone Cmdline
                                 cmdline_match = self.cmdline_pattern.search(content)
-                            if not cmdline_match:
-                                cmdline_match = self.cmdline_pattern.search(line)
-                            if cmdline_match:
-                                cmdline = cmdline_match.group(1).strip()
-                                results.append((filepath, cmdline, line_number))
+                                if not cmdline_match:
+                                    cmdline_match = self.cmdline_pattern.search(line)
+                                if cmdline_match:
+                                    cmdline = cmdline_match.group(1).strip()
+                                    results.append((filepath, cmdline, line_number))
                 
             print(f"grep found {len(results)} files in {folder_path}")
             
@@ -365,10 +365,10 @@ class AndroidLogAnalyzer:
                         else:
                             # Tombstone: 搜尋 Cmdline
                             cmdline_match = self.cmdline_pattern.search(line)
-                        if cmdline_match:
-                            info['cmdline'] = cmdline_match.group(1).strip()
-                            info['line_number'] = line_no
-                            info['process'] = self.extract_process_name(info['cmdline'])
+                            if cmdline_match:
+                                info['cmdline'] = cmdline_match.group(1).strip()
+                                info['line_number'] = line_no
+                                info['process'] = self.extract_process_name(info['cmdline'])
                     
                     # If we have cmdline but not line number, find it
                     elif not info['line_number'] and info['cmdline']:
@@ -378,8 +378,8 @@ class AndroidLogAnalyzer:
                                 info['line_number'] = line_no
                         else:
                             cmdline_match = self.cmdline_pattern.search(line)
-                        if cmdline_match and cmdline_match.group(1).strip() == info['cmdline']:
-                            info['line_number'] = line_no
+                            if cmdline_match and cmdline_match.group(1).strip() == info['cmdline']:
+                                info['line_number'] = line_no
             
             # Get file modification time if timestamp not found
             if not info['timestamp']:
@@ -430,10 +430,10 @@ class AndroidLogAnalyzer:
                         else:
                             # Tombstone: 搜尋 Cmdline
                             cmdline_match = self.cmdline_pattern.search(line)
-                        if cmdline_match:
-                            info['cmdline'] = cmdline_match.group(1).strip()
-                            info['line_number'] = line_no
-                            info['process'] = self.extract_process_name(info['cmdline'])
+                            if cmdline_match:
+                                info['cmdline'] = cmdline_match.group(1).strip()
+                                info['line_number'] = line_no
+                                info['process'] = self.extract_process_name(info['cmdline'])
                     
                     # Extract timestamp
                     if not info['timestamp']:
