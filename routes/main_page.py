@@ -20,12 +20,14 @@ from collections import OrderedDict
 import uuid
 import asyncio
 import queue
-from routes.grep_analyzer import AndroidLogAnalyzer
+from routes.grep_analyzer import AndroidLogAnalyzer, LimitedCache
+import shutil
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
 
 # Global storage for analysis results
+analysis_cache = LimitedCache(max_size=100, max_age_hours=24)
 analyzer = AndroidLogAnalyzer()
 analysis_lock = threading.Lock()
 
@@ -1054,6 +1056,162 @@ HTML_TEMPLATE = r'''
     .footer p {
         margin: 0;
     }
+
+    #results {
+        display: none;
+    }
+    
+    .grep-badge {
+        display: inline-block;
+        background: #48bb78;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        margin-left: 10px;
+    }
+    
+    .no-grep-badge {
+        background: #f56565;
+    }
+    
+    .footer {
+        background-color: #2d3748;
+        color: #a0aec0;
+        text-align: center;
+        padding: 10px;
+        margin-top: 10px;
+        font-size: 14px;
+    }
+    
+    .footer p {
+        margin: 0;
+    }
+    
+    .filesize {
+        color: #666;
+        font-size: 0.9em;
+    }
+    
+    .line-number {
+        font-weight: bold;
+        color: #667eea;
+        text-align: center;
+        transition: all 0.2s;
+    }
+
+    ul {
+        list-style: none;
+        padding: 0;
+        /* 讓整個列表向右縮排 */
+        margin-left: 40px;
+    }
+    
+    .icon {
+        padding:2px;
+        margin:2px;
+    }
+    
+    .path-format {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border: 2px solid #e1e4e8;
+        border-left: 5px solid #3498db;
+        border-radius: 8px;
+        margin-top: 5px;
+        display: flex;
+        align-items: flex-start;
+    }
+    
+    .path-format strong {
+        color: #3498db;
+    }
+
+    .line-number {
+        padding: 0 15px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+    }
+
+    .line-number:hover::after {
+        content: "📌";
+        position: absolute;
+        right: 2px;
+        font-size: 10px;
+        opacity: 0.5;
+    }
+
+    .line-number.bookmarked:hover::after {
+        content: "❌";
+        opacity: 0.7;
+    }
+
+    .process-name div {
+        padding: 2px 0;
+    }
+
+    .process-name div:not(:last-child) {
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .table-highlight {
+        background-color: #fff59d !important;
+        color: #000;
+        font-weight: 600;
+    }
+
+    .logs-table-content table thead tr th {
+        white-space: nowrap
+    }
+
+    /* Analysis Result Button */
+    .analysis-result-btn {
+        position: fixed;
+        bottom: 30px;
+        right: 90px;  /* 在返回頂部按鈕左邊 */
+        background: #28a745;  /* 綠色背景 */
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        cursor: pointer;
+        transition: all 0.3s;
+        opacity: 0;
+        visibility: hidden;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        text-decoration: none;
+    }
+
+    .analysis-result-btn.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .analysis-result-btn:hover {
+        background: #218838;
+        transform: translateY(-5px);
+        box-shadow: 0 6px 16px rgba(40, 167, 69, 0.6);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* 當有多個按鈕時的排列 */
+    @media (max-width: 768px) {
+        .analysis-result-btn {
+            right: 30px;
+            bottom: 90px;  /* 在返回頂部按鈕上方 */
+        }
+        
+        .nav-toggle-btn {
+            bottom: 150px;  /* 再往上移 */
+        }
+    }    
     </style>      
 </head>
 <body>
@@ -1078,6 +1236,8 @@ HTML_TEMPLATE = r'''
         </div>
         
         <!-- Back to Top Button -->
+        <!-- Analysis Result Button -->
+        <a class="analysis-result-btn" id="analysisResultBtn" href="" target="_blank" title="查看詳細分析報告">📊</a>        
         <div class="back-to-top" id="backToTop" onclick="scrollToTop()">↑</div>
         <div class="global-toggle-btn" id="globalToggleBtn" onclick="toggleAllSections()">
             <span id="globalToggleIcon">⊕</span>
@@ -1097,7 +1257,7 @@ HTML_TEMPLATE = r'''
                     <li><span class="icon">🔍</span> <strong>路徑自動建議：</strong> 當您輸入時，工具會自動建議可用的子資料夾，讓您更輕鬆地導航到所需的目錄。</li>
                     <li><span class="icon">📂</span> <strong>自動解壓縮 ZIP 檔案：</strong> 指定路徑下的所有 ZIP 檔案將會自動解壓縮，方便您的操作。</li>
                     <li><span class="icon">🔄</span> <strong>遞迴資料夾搜尋：</strong> 工具會遞迴搜尋所有 <strong>anr</strong> 和 <strong>tombstones</strong> 資料夾，確保不會遺漏任何相關的紀錄檔資料。</li>
-                    <li><span class="icon">📜</span> <strong>彈性命令列解析：</strong> 支援 "Cmd line:" 和 "Cmdline:" 兩種格式，從紀錄檔中擷取命令列資訊。</li>
+                    <li><span class="icon">📜</span> <strong>彈性解析：</strong> ANR 檔案搜尋 "Subject:"，Tombstone 檔案搜尋 "Cmd line:" 或 "Cmdline:"</li>
                     <li><span class="icon">👆</span> <strong>可點擊檔案名稱：</strong> 只需點擊檔案名稱，即可輕鬆查看任何紀錄檔的內容。</li>
                 </ul>
                 <h2 style="margin-top:10px;margin-bottom:10px">💻 支援路徑格式</h2>
@@ -1564,6 +1724,8 @@ HTML_TEMPLATE = r'''
     
         }
         
+        let analysisIndexPath = null;  // 儲存分析結果的 index.html 路徑
+
         // Initialize autocomplete
         document.addEventListener('DOMContentLoaded', function() {
             const pathInput = document.getElementById('pathInput');
@@ -1659,22 +1821,21 @@ HTML_TEMPLATE = r'''
             window.addEventListener('scroll', function() {
                 const backToTopBtn = document.getElementById('backToTop');
                 const navToggleBtn = document.getElementById('navToggleBtn');
-                const globalToggleBtn = document.getElementById('globalToggleBtn');
-                const resultsDiv = document.getElementById('results');
+                const analysisResultBtn = document.getElementById('analysisResultBtn');
                 
                 if (window.pageYOffset > 300) {
                     backToTopBtn.classList.add('show');
-                    
-                    // 只有在結果已顯示時才顯示導覽按鈕
-                    if (resultsDiv && resultsDiv.style.display !== 'none') {
+                    if (document.getElementById('results').style.display !== 'none') {
                         navToggleBtn.classList.add('show');
-                        // 全局按鈕不在這裡控制顯示，由 showGlobalToggleButton 控制
+                        // 如果有分析結果，顯示分析結果按鈕
+                        if (window.vpAnalyzeSuccess && analysisIndexPath) {
+                            analysisResultBtn.classList.add('show');
+                        }
                     }
                 } else {
                     backToTopBtn.classList.remove('show');
                     navToggleBtn.classList.remove('show');
-                    // 不要在這裡隱藏全局按鈕
-                    
+                    analysisResultBtn.classList.remove('show');
                     // 滾動到頂部時關閉導覽列
                     if (navBarOpen) {
                         toggleNavBar();
@@ -1977,6 +2138,9 @@ HTML_TEMPLATE = r'''
                 return;
             }
             
+            document.getElementById('analysisResultBtn').classList.remove('show');
+            analysisIndexPath = null;            
+            
             // Disable analyze button
             document.getElementById('analyzeBtn').disabled = true;
             document.getElementById('loading').style.display = 'block';
@@ -2022,6 +2186,27 @@ HTML_TEMPLATE = r'''
                 // Reset filters and pagination
                 resetFiltersAndPagination();
                 
+                // === 新增：保存分析輸出路徑和狀態 ===
+                window.vpAnalyzeOutputPath = data.vp_analyze_output_path;
+                window.vpAnalyzeSuccess = data.vp_analyze_success;
+
+                // 設定分析結果按鈕
+                if (data.vp_analyze_success && data.vp_analyze_output_path) {
+                    // 將路徑轉換為 file:// 格式
+                    let filePath = data.vp_analyze_output_path + '/index.html';
+                    
+                    // 新程式碼：使用新的路由
+                    analysisIndexPath = '/view-analysis-report?path=' + encodeURIComponent(data.vp_analyze_output_path);
+                    const analysisBtn = document.getElementById('analysisResultBtn');
+                    analysisBtn.href = analysisIndexPath;
+                }
+                                
+                console.log('vp_analyze 執行結果:', {
+                    success: data.vp_analyze_success,
+                    outputPath: data.vp_analyze_output_path,
+                    error: data.vp_analyze_error
+                });
+                
                 // Update UI
                 updateResults(data);
                 
@@ -2036,6 +2221,13 @@ HTML_TEMPLATE = r'''
                     message += '<span class="grep-badge">使用 grep 加速</span>';
                 } else {
                     message += '<span class="grep-badge no-grep-badge">未使用 grep</span>';
+                }
+                
+                // 新增 vp_analyze 狀態訊息
+                if (data.vp_analyze_success) {
+                    message += '<br><span style="color: #28a745;">✓ 詳細分析報告已生成</span>';
+                } else if (data.vp_analyze_error) {
+                    message += `<br><span style="color: #dc3545;">✗ 詳細分析失敗: ${data.vp_analyze_error}</span>`;
                 }
                 
                 showMessage(message, 'success');
@@ -2153,6 +2345,10 @@ HTML_TEMPLATE = r'''
                     <p>包含 Cmdline</p>
                 </div>
                 <div class="stat-card">
+                    <h3>${data.anr_subject_count || 0}</h3>
+                    <p>ANR Subject</p>
+                </div>                
+                <div class="stat-card">
                     <h3>${uniqueProcesses}</h3>
                     <p>不同的程序</p>
                 </div>
@@ -2163,7 +2359,7 @@ HTML_TEMPLATE = r'''
             `;
             document.getElementById('statsSummary').innerHTML = summaryHtml;
             
-            // Update charts
+            // Update charts - 修正這裡，使用 type_process_summary 來確保排序一致
             updateProcessChart(data.statistics.type_process_summary);
             updateTypeChart(data.statistics.by_type);
             updateDailyChart(data.statistics.by_date, data.statistics.by_date_type);
@@ -2384,6 +2580,7 @@ HTML_TEMPLATE = r'''
                         
                         filteredLogs = allLogs.filter(searchFunction);
                         
+                        // 對於 logs，每一筆就是一個記錄，所以總次數等於筆數
                         countElement.innerHTML = `找到 <span style="color: #e53e3e;">${filteredLogs.length}</span> 筆記錄`;
                         countElement.style.display = 'inline';
                     } catch (error) {
@@ -2393,7 +2590,7 @@ HTML_TEMPLATE = r'''
                         filteredLogs = [];
                     }
                 }
-                logsPage = 1;
+                logsPage = 1; // Reset to first page
                 updateLogsTable();
             };
             
@@ -2465,7 +2662,7 @@ HTML_TEMPLATE = r'''
                         filteredFiles = [];
                     }
                 }
-                filesPage = 1;
+                filesPage = 1; // Reset to first page
                 updateFilesTable();
             };
             
@@ -2814,6 +3011,28 @@ HTML_TEMPLATE = r'''
                     // Create clickable file link
                     const fileLink = `/view-file?path=${encodeURIComponent(log.file)}`;
                     
+                    // === 新增：建立分析報告連結 ===
+                    let analyzeReportLink = '';
+                    if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {
+                        // 取得基礎路徑（使用者輸入的路徑）
+                        const basePath = document.getElementById('pathInput').value;
+                        const filePath = log.file || '';
+                        
+                        // 從檔案路徑中提取相對路徑
+                        if (filePath.startsWith(basePath)) {
+                            // 取得從基礎路徑之後的相對路徑
+                            let relativePath = filePath.substring(basePath.length);
+                            // 移除開頭的斜線
+                            if (relativePath.startsWith('/')) {
+                                relativePath = relativePath.substring(1);
+                            }
+                            
+                            // 建立分析報告路徑
+                            const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                            analyzeReportLink = ` <a href="/view-file?path=${encodeURIComponent(analyzedFilePath)}" target="_blank" class="file-link" style="color: #28a745; font-size: 0.9em;">(分析報告)</a>`;
+                        }
+                    }
+                    
                     // Process display
                     const processDisplay = log.process || '-';
                     
@@ -2829,7 +3048,7 @@ HTML_TEMPLATE = r'''
                         <td class="process-name">${highlightText(processDisplay, searchTerm, useRegex)}</td>
                         <td style="text-align: center; font-weight: bold; color: #667eea;">${lineNumber}</td>
                         <td style="color: #999; font-size: 0.9em;">${highlightText(folderPath, searchTerm, useRegex)}</td>
-                        <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(log.filename, searchTerm, useRegex)}</a></td>
+                        <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(log.filename, searchTerm, useRegex)}</a>${analyzeReportLink}</td>
                         <td>${log.timestamp || '-'}</td>
                     `;
                 });
@@ -2908,6 +3127,28 @@ HTML_TEMPLATE = r'''
                     const fileLink = `/view-file?path=${encodeURIComponent(file.filepath || '')}`;
                     const folderPath = file.folder_path || '-';
                     
+                    // === 新增：建立分析報告連結 ===
+                    let analyzeReportLink = '';
+                    if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {
+                        // 取得基礎路徑（使用者輸入的路徑）
+                        const basePath = document.getElementById('pathInput').value;
+                        const filePath = file.filepath || '';
+                        
+                        // 從檔案路徑中提取相對路徑
+                        if (filePath.startsWith(basePath)) {
+                            // 取得從基礎路徑之後的相對路徑
+                            let relativePath = filePath.substring(basePath.length);
+                            // 移除開頭的斜線
+                            if (relativePath.startsWith('/')) {
+                                relativePath = relativePath.substring(1);
+                            }
+                            
+                            // 建立分析報告路徑
+                            const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                            analyzeReportLink = ` <a href="/view-file?path=${encodeURIComponent(analyzedFilePath)}" target="_blank" class="file-link" style="color: #28a745; font-size: 0.9em;">(分析報告)</a>`;
+                        }
+                    }
+                    
                     // 處理 processes 高亮
                     const processesHtml = file.processes.length > 0 ? 
                         file.processes.map(p => {
@@ -2929,7 +3170,7 @@ HTML_TEMPLATE = r'''
                         <td>${highlightText(file.type, searchTerm, useRegex)}</td>
                         <td class="process-name">${processesHtml}</td>
                         <td style="color: #999; font-size: 0.9em;">${highlightText(folderPath, searchTerm, useRegex)}</td>
-                        <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(file.filename, searchTerm, useRegex)}</a></td>
+                        <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(file.filename, searchTerm, useRegex)}</a>${analyzeReportLink}</td>
                         <td style="text-align: center; font-weight: bold; color: #e53e3e;">${file.count}</td>
                         <td>${timestamp}</td>
                     `;
@@ -3471,6 +3712,103 @@ def analyze():
         # 執行分析 - 這裡是關鍵，確保 results 被定義
         results = analyzer.analyze_logs(path)
                
+        # === 新增：執行 vp_analyze_logs.py ===
+        # 取得路徑的最後一個資料夾名稱
+        last_folder_name = os.path.basename(path.rstrip(os.sep))
+        # 建立輸出目錄名稱
+        output_dir_name = f"{last_folder_name}_anr_tombstones_analyze"
+        output_path = os.path.join(path, output_dir_name)
+
+        # 檢查輸出目錄是否已存在，如果存在則刪除
+        if os.path.exists(output_path):
+            print(f"發現已存在的輸出目錄: {output_path}")
+            try:
+                shutil.rmtree(output_path)
+                print(f"已刪除舊的輸出目錄: {output_path}")
+            except Exception as e:
+                print(f"刪除輸出目錄失敗: {e}")
+                # 可以選擇是否要繼續執行或返回錯誤
+                vp_analyze_error = f"無法刪除現有的輸出目錄: {output_path}, 錯誤: {str(e)}"
+                # 如果刪除失敗，您可以選擇：
+                # 選項1: 繼續執行（可能會有問題）
+                # 選項2: 停止執行並返回錯誤（建議）
+                vp_analyze_success = False
+        else:
+            print(f"輸出目錄不存在，將建立新的: {output_path}")
+    
+        # 執行 vp_analyze_logs.py
+        vp_analyze_success = False
+        vp_analyze_error = None
+        
+        try:
+            # 確保 vp_analyze_logs.py 在同一目錄
+            vp_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vp_analyze_logs.py')
+            
+            if os.path.exists(vp_script_path):
+                print(f"找到 vp_analyze_logs.py: {vp_script_path}")
+                print(f"執行命令: python3.12 {vp_script_path} {path} {output_path}")
+                
+                # 使用 python3.12 執行 vp_analyze_logs.py
+                cmd = ['python3.12', vp_script_path, path, output_path]
+                
+                # 執行命令
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=300,
+                    cwd=os.path.dirname(vp_script_path)  # 設定工作目錄
+                )
+                
+                print(f"Return code: {result.returncode}")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
+                
+                if result.returncode == 0:
+                    vp_analyze_success = True
+                    print("vp_analyze_logs.py 執行成功")
+                    print(f"分析結果輸出到: {output_path}")
+                    
+                    # 檢查輸出目錄是否存在
+                    if os.path.exists(output_path):
+                        print(f"確認輸出目錄已建立: {output_path}")
+                        # 列出目錄內容
+                        try:
+                            files = os.listdir(output_path)
+                            print(f"輸出目錄包含 {len(files)} 個檔案")
+                        except:
+                            pass
+                    else:
+                        print("警告：輸出目錄不存在")
+                        vp_analyze_success = False
+                        vp_analyze_error = "輸出目錄未建立"
+                else:
+                    vp_analyze_error = f"vp_analyze_logs.py 執行失敗 (return code: {result.returncode})\nSTDERR: {result.stderr}\nSTDOUT: {result.stdout}"
+                    print(vp_analyze_error)
+            else:
+                vp_analyze_error = f"找不到 vp_analyze_logs.py: {vp_script_path}"
+                print(vp_analyze_error)
+                
+        except subprocess.TimeoutExpired:
+            vp_analyze_error = "vp_analyze_logs.py 執行超時 (超過 300 秒)"
+            print(vp_analyze_error)
+        except FileNotFoundError:
+            vp_analyze_error = "找不到 python3.12 命令，請確認已安裝 Python 3.12"
+            print(vp_analyze_error)
+        except Exception as e:
+            vp_analyze_error = f"執行 vp_analyze_logs.py 時發生錯誤: {str(e)}"
+            print(vp_analyze_error)
+            import traceback
+            traceback.print_exc()
+        
+        # 將分析輸出路徑加入結果中
+        results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
+        results['vp_analyze_success'] = vp_analyze_success
+        results['vp_analyze_error'] = vp_analyze_error
+        
+        # 使用新的 cache
+        analysis_cache.set(analysis_id, results)
+        
         # Return results
         return jsonify({
             'analysis_id': analysis_id,
@@ -3483,7 +3821,11 @@ def analyze():
             'logs': results['logs'],
             'analysis_time': results['analysis_time'],
             'used_grep': results['used_grep'],
-            'zip_files_extracted': results.get('zip_files_extracted', 0)
+            'zip_files_extracted': results.get('zip_files_extracted', 0),
+            'anr_subject_count': results.get('anr_subject_count', 0),
+            'vp_analyze_output_path': results.get('vp_analyze_output_path'),
+            'vp_analyze_success': results.get('vp_analyze_success', False),
+            'vp_analyze_error': results.get('vp_analyze_error')
         })
         
     except Exception as e:
@@ -3494,6 +3836,11 @@ def analyze():
         
 @main_page_bp.route('/export/<format>/<analysis_id>')
 def export(format, analysis_id):
+    # 使用 LimitedCache 的 get 方法
+    data = analysis_cache.get(analysis_id)
+
+    if data is None:
+        return jsonify({'error': 'Analysis not found or expired'}), 404
 
     if format == 'json':
         # Create JSON file
@@ -3768,10 +4115,79 @@ def export(format, analysis_id):
     
     else:
         return jsonify({'error': 'Invalid format'}), 400
+
+@main_page_bp.route('/view-analysis-report')
+def view_analysis_report():
+    """查看 vp_analyze 生成的分析報告"""
+    file_path = request.args.get('path')
+
+    if not file_path:
+        return """
+        <html>
+        <body style="font-family: Arial; padding: 20px;">
+            <h2>錯誤：未提供檔案路徑</h2>
+            <p>請從分析結果頁面點擊「查看詳細分析報告」按鈕。</p>
+            <button onclick="window.history.back()">返回</button>
+        </body>
+        </html>
+        """, 400
+    
+    if not file_path:
+        return "No file path provided", 400
+    
+    # Security check - prevent directory traversal
+    if '..' in file_path:
+        return "Invalid file path", 403
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        return f"File not found: {file_path}", 404
+    
+    # Check if it's a file
+    if not os.path.isfile(file_path):
+        # 如果是目錄，尋找 index.html
+        index_path = os.path.join(file_path, 'index.html')
+        if os.path.exists(index_path) and os.path.isfile(index_path):
+            file_path = index_path
+        else:
+            return "Not a file", 400
+    
+    try:
+        # 根據檔案類型返回適當的內容
+        if file_path.endswith('.html'):
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            # 修改 HTML 中的相對路徑，使其通過我們的路由
+            base_dir = os.path.dirname(file_path)
+            
+            # 替換相對路徑的連結
+            content = re.sub(
+                r'(href|src)="(?!http|https|//|#)([^"]+)"',
+                lambda m: f'{m.group(1)}="/view-file?path={quote(os.path.join(base_dir, m.group(2)))}"',
+                content
+            )
+            
+            return Response(content, mimetype='text/html; charset=utf-8')
+        
+        elif file_path.endswith('.css'):
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            return Response(content, mimetype='text/css; charset=utf-8')
+        
+        elif file_path.endswith('.js'):
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            return Response(content, mimetype='application/javascript; charset=utf-8')
+        
+        else:
+            # 其他檔案類型
+            return send_file(file_path)
+            
+    except Exception as e:
+        return f"Error reading file: {str(e)}", 500
         
 @main_page_bp.route('/')
 def index():
     """Main page"""
     return HTML_TEMPLATE
-
-    
