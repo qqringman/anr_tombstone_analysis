@@ -2997,6 +2997,26 @@ class ExecutiveSummaryGenerator:
     
     def _format_executive_summary(self, summary_data: Dict) -> str:
         """格式化執行摘要"""
+        # 使用 get 方法提供預設值，避免 KeyError
+        root_cause = summary_data.get('root_cause', '未知原因')
+        timeline = summary_data.get('timeline', {'hotfix': '未知', 'complete': '未知'})
+        action_items = summary_data.get('action_items', [])
+        resources_needed = summary_data.get('resources_needed', {
+            'developers': 0,
+            'testers': 0, 
+            'hours': 0,
+            'additional_tools': [],
+            'budget': '未定'
+        })
+        risk_assessment = summary_data.get('risk_assessment', [])
+        impact = summary_data.get('impact', {
+            'user_experience': 'unknown',
+            'revenue_impact': 'unknown',
+            'affected_users': '未知',
+            'estimated_loss': 0,
+            'brand_reputation': 'unknown'
+        })
+        
         html = f'''
         <div class="executive-summary">
             <h1>ANR 問題執行摘要</h1>
@@ -3006,32 +3026,36 @@ class ExecutiveSummaryGenerator:
                 <div class="impact-grid">
                     <div class="impact-item">
                         <span class="label">用戶體驗影響</span>
-                        <span class="value {summary_data['impact']['user_experience']}">{summary_data['impact']['user_experience'].upper()}</span>
+                        <span class="value {impact.get('user_experience', 'unknown')}">{impact.get('user_experience', 'unknown').upper()}</span>
                     </div>
                     <div class="impact-item">
                         <span class="label">收入影響</span>
-                        <span class="value {summary_data['impact']['revenue_impact']}">{summary_data['impact']['revenue_impact'].upper()}</span>
+                        <span class="value {impact.get('revenue_impact', 'unknown')}">{impact.get('revenue_impact', 'unknown').upper()}</span>
                     </div>
                     <div class="impact-item">
                         <span class="label">受影響用戶</span>
-                        <span class="value">{summary_data['impact']['affected_users']}</span>
+                        <span class="value">{impact.get('affected_users', '未知')}</span>
                     </div>
                 </div>
             </div>
             
             <div class="summary-section root-cause">
                 <h2>問題原因（簡化版）</h2>
-                <p>{summary_data['root_cause']}</p>
+                <p>{root_cause}</p>
             </div>
             
             <div class="summary-section timeline">
                 <h2>修復時間線</h2>
                 <ul>
-                    <li>緊急修復: {summary_data['timeline']['hotfix']}</li>
-                    <li>完整解決: {summary_data['timeline']['complete']}</li>
+                    <li>緊急修復: {timeline.get('hotfix', '未知')}</li>
+                    <li>完整解決: {timeline.get('complete', '未知')}</li>
                 </ul>
             </div>
-            
+        '''
+        
+        # 處理 action_items
+        if action_items:
+            html += '''
             <div class="summary-section actions">
                 <h2>行動計劃</h2>
                 <table class="action-table">
@@ -3044,95 +3068,177 @@ class ExecutiveSummaryGenerator:
                         </tr>
                     </thead>
                     <tbody>
-                        {''.join(f"""
-                        <tr>
-                            <td class="priority-{action['priority']}">{action['priority']}</td>
-                            <td>{action['action']}</td>
-                            <td>{action['owner']}</td>
-                            <td>{action['deadline']}</td>
-                        </tr>
-                        """ for action in summary_data['action_items'])}
+            '''
+            
+            for action in action_items:
+                html += f'''
+                    <tr>
+                        <td class="priority-{action.get('priority', 0)}">{action.get('priority', 0)}</td>
+                        <td>{action.get('action', '')}</td>
+                        <td>{action.get('owner', '')}</td>
+                        <td>{action.get('deadline', '')}</td>
+                    </tr>
+                '''
+            
+            html += '''
                     </tbody>
                 </table>
             </div>
-            
+            '''
+        
+        html += f'''
             <div class="summary-section resources">
                 <h2>所需資源</h2>
                 <ul>
-                    <li>開發人員: {summary_data['resources_needed']['developers']} 人</li>
-                    <li>測試人員: {summary_data['resources_needed']['testers']} 人</li>
-                    <li>預估工時: {summary_data['resources_needed']['hours']} 小時</li>
-                    <li>額外工具: {', '.join(summary_data['resources_needed']['additional_tools'])}</li>
+                    <li>開發人員: {resources_needed.get('developers', 0)} 人</li>
+                    <li>測試人員: {resources_needed.get('testers', 0)} 人</li>
+                    <li>預估工時: {resources_needed.get('hours', 0)} 小時</li>
+                    <li>額外工具: {', '.join(resources_needed.get('additional_tools', []))}</li>
+                    <li>預算: {resources_needed.get('budget', '視具體工具而定')}</li>
                 </ul>
             </div>
-            
+        '''
+        
+        # 風險評估部分
+        if risk_assessment:
+            html += '''
             <div class="summary-section risks">
                 <h2>風險評估</h2>
                 <div class="risk-matrix">
-                    {self._generate_risk_matrix(summary_data['risk_assessment'])}
+            '''
+            html += self._generate_risk_matrix(risk_assessment)
+            html += '''
                 </div>
             </div>
-            
+            '''
+        
+        html += '''
             <style>
-                .executive-summary {{
+                .executive-summary {
                     font-family: Arial, sans-serif;
                     max-width: 800px;
                     margin: 0 auto;
                     padding: 20px;
-                }}
+                }
                 
-                .summary-section {{
+                .summary-section {
                     margin-bottom: 30px;
                     padding: 20px;
                     background: #f5f5f5;
                     border-radius: 8px;
-                }}
+                }
                 
-                .impact-grid {{
+                .impact-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                     gap: 20px;
-                }}
+                }
                 
-                .impact-item {{
+                .impact-item {
                     text-align: center;
-                }}
+                }
                 
-                .value.severe, .value.critical {{
+                .value.severe, .value.critical {
                     color: #ff0000;
                     font-weight: bold;
-                }}
+                }
                 
-                .value.high {{
+                .value.high {
                     color: #ff8800;
                     font-weight: bold;
-                }}
+                }
                 
-                .value.medium {{
+                .value.medium {
                     color: #ffaa00;
-                }}
+                }
                 
-                .action-table {{
+                .value.unknown {
+                    color: #999999;
+                }
+                
+                .action-table {
                     width: 100%;
                     border-collapse: collapse;
-                }}
+                }
                 
-                .action-table th, .action-table td {{
+                .action-table th, .action-table td {
                     padding: 10px;
                     border: 1px solid #ddd;
                     text-align: left;
-                }}
+                }
                 
-                .priority-1 {{
+                .priority-1 {
                     background-color: #ffcccc;
                     font-weight: bold;
-                }}
+                }
                 
-                .risk-matrix {{
+                .priority-2 {
+                    background-color: #ffe6cc;
+                }
+                
+                .priority-3 {
+                    background-color: #fff9cc;
+                }
+                
+                .risk-matrix {
                     display: grid;
                     grid-template-columns: 100px repeat(3, 1fr);
                     gap: 5px;
-                }}
+                    margin-top: 15px;
+                }
+                
+                .risk-header {
+                    font-weight: bold;
+                    padding: 5px;
+                    background: #e0e0e0;
+                    text-align: center;
+                }
+                
+                .risk-cell {
+                    padding: 10px;
+                    border: 1px solid #ddd;
+                    text-align: center;
+                    font-size: 14px;
+                }
+                
+                .risk-high-high {
+                    background-color: #ff4444;
+                    color: white;
+                }
+                
+                .risk-high-medium {
+                    background-color: #ff8844;
+                    color: white;
+                }
+                
+                .risk-high-low {
+                    background-color: #ffaa44;
+                }
+                
+                .risk-medium-high {
+                    background-color: #ff8844;
+                    color: white;
+                }
+                
+                .risk-medium-medium {
+                    background-color: #ffaa44;
+                }
+                
+                .risk-medium-low {
+                    background-color: #ffdd44;
+                }
+                
+                .risk-low-high {
+                    background-color: #ffaa44;
+                }
+                
+                .risk-low-medium {
+                    background-color: #ffdd44;
+                }
+                
+                .risk-low-low {
+                    background-color: #44ff44;
+                }
             </style>
         </div>
         '''

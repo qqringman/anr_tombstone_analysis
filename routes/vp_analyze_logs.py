@@ -616,6 +616,9 @@ class ANRAnalyzer(BaseAnalyzer):
             return analyzer.generate()
         except Exception as e:
             # 如果報告生成失敗，返回基本信息
+            import traceback
+            error_trace = traceback.format_exc()
+            
             basic_report = [
                 "🎯 ANR 分析報告",
                 "=" * 60,
@@ -625,6 +628,9 @@ class ANRAnalyzer(BaseAnalyzer):
                 "",
                 "❌ 詳細分析生成失敗",
                 f"錯誤信息: {str(e)}",
+                "",
+                "錯誤詳情:",
+                error_trace,
                 "",
                 "基本信息:",
                 f"- 線程總數: {len(anr_info.all_threads)}",
@@ -658,10 +664,26 @@ class ANRReportGenerator:
     
     def generate(self) -> str:
         """生成報告"""
-        if self.output_format == 'html':
-            return self._generate_html_report()
-        else:
-            return self._generate_text_report()
+        try:
+            if self.output_format == 'html':
+                return self._generate_html_report()
+            else:
+                return self._generate_text_report()
+        except Exception as e:
+            # 確保總是返回一些內容
+            error_msg = f"報告生成失敗: {str(e)}\n"
+            error_msg += f"ANR 類型: {self.anr_info.anr_type.value}\n"
+            error_msg += f"進程: {self.anr_info.process_name}\n"
+            error_msg += f"線程數: {len(self.anr_info.all_threads)}\n"
+            
+            # 嘗試至少生成基本的文字報告
+            try:
+                self.report_lines = [error_msg]
+                self._add_summary()
+                self._add_basic_info()
+                return "\n".join(self.report_lines)
+            except:
+                return error_msg
 
     def _generate_text_report(self) -> str:
         self._add_summary()
@@ -755,195 +777,409 @@ class ANRReportGenerator:
             box-sizing: border-box;
         }
         
+        :root {
+            --primary-color: #10a37f;
+            --primary-hover: #0d8f6f;
+            --background: #ffffff;
+            --surface: #f7f7f8;
+            --border: #e5e5e5;
+            --text-primary: #2d2d2d;
+            --text-secondary: #666666;
+            --text-muted: #999999;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            --radius: 8px;
+            --transition: all 0.2s ease;
+            --anr-color: #dc3545;
+            --anr-bg: #fff5f5;
+            --anr-bg-hover: #fee0e0;
+            --anr-border: #feb2b2;
+            --tombstone-color: #6f42c1;
+            --tombstone-bg: #f7f3ff;
+            --tombstone-bg-hover: #ebe0ff;
+            --tombstone-border: #d6bcfa;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: #1a1a1a;
+                --surface: #2a2a2a;
+                --border: #404040;
+                --text-primary: #ffffff;
+                --text-secondary: #c5c5c5;
+                --text-muted: #8e8e8e;
+                --anr-bg: #3a1f23;
+                --anr-bg-hover: #4a2833;
+                --anr-border: #9b2c2c;
+                --tombstone-bg: #2d2440;
+                --tombstone-bg-hover: #3d3050;
+                --tombstone-border: #553c9a;
+            }
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
             line-height: 1.6;
+            min-height: 100vh;
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0 20px;
         }
         
-        .report-header {
-            background: white;
-            border-radius: 8px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        /* Header */
+        .header {
+            padding: 40px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 32px;
         }
         
-        .report-header h1 {
+        .header h1 {
             font-size: 32px;
-            margin-bottom: 10px;
-            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
         }
         
-        .report-meta {
-            display: flex;
-            gap: 20px;
-            font-size: 14px;
-            color: #666;
+        .header .subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
         }
         
-        .report-meta span {
-            background: #f0f0f0;
-            padding: 4px 12px;
-            border-radius: 4px;
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 40px;
         }
         
-        .section {
-            background: white;
-            border-radius: 8px;
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: var(--transition);
         }
         
-        .section h2 {
-            font-size: 20px;
-            margin-bottom: 15px;
-            color: #2d3748;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary-color);
         }
         
-        /* 堆疊追蹤樣式 */
-        .backtrace {
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            padding: 15px;
-            overflow-x: auto;
+        .stat-card .label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
         }
         
-        .stack-frame {
-            padding: 4px 0;
-            transition: background-color 0.2s;
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--primary-color);
         }
         
-        .stack-frame:hover {
-            background-color: #e9ecef;
+        /* Main Content */
+        .main-content {
+            margin-bottom: 40px;
         }
         
-        .frame-number {
-            color: #6c757d;
-            margin-right: 10px;
-            font-weight: bold;
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
         }
         
-        .frame-link {
-            color: #0066cc;
+        .section-header h2 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        /* File Browser */
+        .file-browser {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        
+        .file-item, .folder-item {
+            border-bottom: 1px solid var(--border);
+            transition: var(--transition);
+        }
+        
+        .file-item:last-child, .folder-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-item:hover {
+            box-shadow: inset 0 0 0 1px var(--border);
+        }
+        
+        /* ANR 和 Tombstone 檔案的不同顏色 - 增強版 */
+        .anr-item {
+            background-color: var(--anr-bg);
+            border-left: 4px solid var(--anr-color);
+            position: relative;
+        }
+        
+        .anr-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                rgba(220, 53, 69, 0.1) 0%, 
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .anr-item:hover {
+            background-color: var(--anr-bg-hover);
+            border-left-width: 6px;
+        }
+        
+        .anr-item:hover::before {
+            opacity: 1;
+        }
+        
+        .tombstone-item {
+            background-color: var(--tombstone-bg);
+            border-left: 4px solid var(--tombstone-color);
+            position: relative;
+        }
+        
+        .tombstone-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                rgba(111, 66, 193, 0.1) 0%, 
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .tombstone-item:hover {
+            background-color: var(--tombstone-bg-hover);
+            border-left-width: 6px;
+        }
+        
+        .tombstone-item:hover::before {
+            opacity: 1;
+        }
+        
+        .file-content {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .file-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+        }
+        
+        .anr-item .file-icon {
+            color: var(--anr-color);
+        }
+        
+        .tombstone-item .file-icon {
+            color: var(--tombstone-color);
+        }
+        
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .file-name {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
             text-decoration: none;
-            cursor: pointer;
-            transition: all 0.2s;
+            display: block;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: var(--transition);
         }
         
-        .frame-link:hover {
-            color: #0052a3;
+        .file-name:hover {
+            color: var(--primary-color);
+        }
+        
+        .file-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+        }
+        
+        .file-type {
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+        }
+        
+        .file-type-anr {
+            background: var(--anr-color);
+            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+        }
+        
+        .file-type-tombstone {
+            background: var(--tombstone-color);
+            box-shadow: 0 2px 4px rgba(111, 66, 193, 0.2);
+        }
+        
+        .source-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: var(--transition);
+        }
+        
+        .source-link:hover {
+            color: var(--primary-color);
             text-decoration: underline;
         }
         
-        .frame-link::before {
-            content: "🔗 ";
-            font-size: 12px;
-            opacity: 0;
-            transition: opacity 0.2s;
+        /* Folder */
+        .folder-header {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            user-select: none;
+            transition: var(--transition);
         }
         
-        .stack-frame:hover .frame-link::before {
-            opacity: 1;
+        .folder-header:hover {
+            background: var(--background);
         }
         
-        /* 代碼塊樣式 */
-        .code-block {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 15px;
-            border-radius: 4px;
-            overflow-x: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
+        .folder-arrow {
+            color: var(--text-secondary);
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .folder-arrow.open {
+            transform: rotate(180deg);
+        }
+        
+        .folder-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        
+        .folder-name {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        
+        .folder-count {
             font-size: 13px;
+            color: var(--text-muted);
         }
         
-        .code-block .source-link {
-            color: #9cdcfe;
-            text-decoration: none;
-            border-bottom: 1px dotted transparent;
-            transition: all 0.2s;
+        .folder-content {
+            background: var(--background);
+            border-top: 1px solid var(--border);
+            padding-left: 20px;
         }
         
-        .code-block .source-link:hover {
-            color: #c8e1ff;
-            border-bottom-color: #c8e1ff;
+        /* Features */
+        .features {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 32px;
         }
         
-        /* 標記樣式 */
-        .highlight {
-            background-color: #fff3cd;
-            padding: 2px 4px;
-            border-radius: 2px;
+        .features h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
         }
         
-        .critical {
-            background-color: #f8d7da;
-            color: #721c24;
+        .features ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 12px;
         }
         
-        .warning {
-            background-color: #fff3cd;
-            color: #856404;
+        .features li {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
         }
         
-        .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
+        .features li::before {
+            content: "✓";
+            color: var(--primary-color);
+            font-weight: bold;
+            flex-shrink: 0;
         }
         
-        .success {
-            background-color: #d4edda;
-            color: #155724;
+        /* Footer */
+        .footer {
+            padding: 32px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
         }
         
-        /* 行號提示 */
-        .line-tooltip {
-            position: absolute;
-            background: #333;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            pointer-events: none;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        
-        .line-tooltip.show {
-            opacity: 1;
-        }
-        
-        /* 響應式設計 */
+        /* Responsive */
         @media (max-width: 768px) {
-            .container {
-                padding: 10px;
+            .header h1 {
+                font-size: 24px;
             }
             
-            .report-meta {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .features ul {
+                grid-template-columns: 1fr;
+            }
+            
+            .file-meta {
                 flex-wrap: wrap;
-                gap: 10px;
-            }
-            
-            .section {
-                padding: 15px;
+                gap: 8px;
             }
         }
         '''
-    
+
     def _get_report_javascript(self) -> str:
         """獲取報告的 JavaScript"""
         return '''
