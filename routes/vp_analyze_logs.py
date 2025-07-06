@@ -1548,12 +1548,22 @@ class ANRReportGenerator:
         )
         
         # 顯示 ASCII 圖
-        if dep_analysis['visualization']:
-            self.report_lines.append("")
-            self.report_lines.append(dep_analysis['visualization'])
+        if dep_analysis.get('visualization'):
+            viz = dep_analysis['visualization']
+            # 檢查是否真的包含圖形元素（如 → 或其他圖形字符）
+            if any(char in viz for char in ['→', '←', '↔', '─', '│', '┌', '└', '├', '┤']):
+                self.report_lines.append("\n\n線程依賴關係圖:")
+                self.report_lines.append(viz)
+            else:
+                # 如果只是文本，直接顯示
+                self.report_lines.append(viz)
+                self.report_lines.append("\n\n  ℹ️ 未生成依賴關係視覺化圖表")
+        else:
+            # 如果沒有視覺化，顯示基本信息
+            self.report_lines.append("  ℹ️ 未生成依賴關係圖")
         
-        # 顯示死鎖詳情
-        if dep_analysis['deadlock_cycles']:
+        # 顯示死鎖詳情（如果有的話）- 這部分保持不變
+        if dep_analysis.get('deadlock_cycles'):
             self.report_lines.append("\n🔴 死鎖詳細分析:")
             for i, cycle in enumerate(dep_analysis['deadlock_cycles'], 1):
                 self.report_lines.append(f"  死鎖循環 {i}:")
@@ -1564,9 +1574,11 @@ class ANRReportGenerator:
                     )
                     if thread_info.get('waiting_on'):
                         self.report_lines.append(f"      等待: {thread_info['waiting_on']}")
+        else:
+            self.report_lines.append("  ✅ 未檢測到死鎖")
         
-        # 顯示阻塞鏈
-        if dep_analysis['blocking_chains']:
+        # 確保顯示阻塞鏈
+        if dep_analysis.get('blocking_chains'):
             self.report_lines.append("\n🟡 主要阻塞鏈:")
             for chain in dep_analysis['blocking_chains'][:3]:
                 self.report_lines.append(
@@ -1574,9 +1586,11 @@ class ANRReportGenerator:
                     f"阻塞了 {chain['impact']} 個線程"
                 )
                 self.report_lines.append(f"    嚴重性: {chain['severity']}")
+        else:
+            self.report_lines.append("\n  ℹ️ 未發現明顯的阻塞鏈")
         
-        # 顯示關鍵路徑
-        if dep_analysis['critical_paths']:
+        # 確保顯示關鍵路徑
+        if dep_analysis.get('critical_paths'):
             self.report_lines.append("\n🔵 關鍵阻塞路徑:")
             for path_info in dep_analysis['critical_paths'][:3]:
                 path_str = " → ".join(path_info['path'][:5])
@@ -1586,6 +1600,8 @@ class ANRReportGenerator:
                     f"  • {path_info['type']}: {path_str}"
                 )
                 self.report_lines.append(f"    嚴重性: {path_info['severity']}")
+        else:
+            self.report_lines.append("\n  ℹ️ 未發現關鍵阻塞路徑")
 
     def _add_performance_bottleneck(self):
         """添加性能瓶頸自動識別"""
@@ -4840,12 +4856,21 @@ class LogAnalyzerSystem:
         os.makedirs(output_dir, exist_ok=True)
         
         output_file = os.path.join(output_dir, file_info['name'] + '.analyzed.txt')
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(result)
         
         # 複製原始檔案
         original_copy = os.path.join(output_dir, file_info['name'])
         shutil.copy2(file_info['path'], original_copy)
+        
+        # 在報告開頭加入原始檔案連結
+        original_link = f'''
+    🔗 查看原始檔案: {file_info['name']}
+    {'=' * 60}
+
+    '''
+        
+        # 寫入分析結果（加上連結）
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(original_link + result)
         
         # 更新索引
         self._update_index(index_data, file_info['rel_path'], output_file, original_copy)
@@ -4883,7 +4908,7 @@ class LogAnalyzerSystem:
         print(f"\n📝 已生成索引檔案: {index_file}")
     
     def _generate_html_index(self, index_data: Dict) -> str:
-        """生成 HTML 索引內容 - ChatGPT 風格"""
+        """生成 HTML 索引內容 - Dark ChatGPT 風格"""
         def render_tree(data, prefix=""):
             html_str = ""
             for name, value in sorted(data.items()):
@@ -4895,42 +4920,48 @@ class LogAnalyzerSystem:
                     # 檢查是否有 HTML 版本
                     is_html = analyzed_rel.endswith('.html')
                     file_type = 'anr' if 'anr' in name.lower() else 'tombstone'
-                    icon = '🔴' if file_type == 'anr' else '💥'
+                    icon = '🟠' if file_type == 'anr' else '💥'
                     
                     # 直接連結到原始檔案
                     html_str += f'''
                     <div class="file-item {file_type}-item">
-                        <div class="file-content">
-                            <span class="file-icon">{icon}</span>
-                            <div class="file-info">
-                                <a href="{html.escape(analyzed_rel)}" target="_blank" class="file-name">
-                                    {html.escape(name)}
-                                    {' 📄' if is_html else ''}
-                                </a>
-                                <div class="file-meta">
-                                    <span class="file-type file-type-{file_type}">{file_type.upper()}</span>
-                                    <a href="{html.escape(original_rel)}" target="_blank" class="source-link">
-                                        查看原始檔案
-                                    </a>
+                        <a href="{html.escape(analyzed_rel)}" class="file-link">
+                            <div class="file-content">
+                                <span class="file-icon">{icon}</span>
+                                <div class="file-info">
+                                    <div class="file-name">
+                                        {html.escape(name)}
+                                    </div>
+                                    <div class="file-meta">
+                                        <span class="file-type file-type-{file_type}">{file_type.upper()}</span>
+                                        <span class="file-size">點擊查看分析</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </a>
+                        <a href="{html.escape(original_rel)}" target="_blank" class="source-link" title="查看原始檔案">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
+                                <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
+                            </svg>
+                        </a>
                     </div>
                     '''
                 elif isinstance(value, dict):
                     # 目錄項目
                     folder_id = f"folder-{prefix}-{name}".replace('/', '-').replace(' ', '-')
+                    file_count = _count_files(value)
                     html_str += f'''
                     <div class="folder-item">
                         <div class="folder-header" onclick="toggleFolder('{folder_id}')">
-                            <svg class="folder-arrow open" id="arrow-{folder_id}" width="20" height="20" viewBox="0 0 20 20">
-                                <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+                            <svg class="folder-arrow" id="arrow-{folder_id}" width="16" height="16" viewBox="0 0 16 16">
+                                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                             </svg>
                             <span class="folder-icon">📁</span>
                             <span class="folder-name">{html.escape(name)}</span>
-                            <span class="folder-count">{_count_files(value)} 個檔案</span>
+                            <span class="folder-count">{file_count}</span>
                         </div>
-                        <div class="folder-content" id="{folder_id}" style="display: block;">
+                        <div class="folder-content" id="{folder_id}">
                             {render_tree(value, prefix + '/' + name)}
                         </div>
                     </div>
@@ -4953,7 +4984,7 @@ class LogAnalyzerSystem:
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Android Log 分析報告 - 智能分析系統</title>
+        <title>Android Log 分析報告</title>
         <style>
             * {{
                 margin: 0;
@@ -4962,657 +4993,365 @@ class LogAnalyzerSystem:
             }}
             
             :root {{
-                --primary-color: #10a37f;
-                --primary-hover: #0d8f6f;
-                --background: #f8f9fa;
-                --surface: #ffffff;
-                --border: #e9ecef;
-                --text-primary: #212529;
-                --text-secondary: #6c757d;
-                --text-muted: #adb5bd;
-                --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
-                --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-                --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-                --radius: 12px;
-                --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                
-                /* ANR 相關顏色 */
-                --anr-primary: #e74c3c;
-                --anr-light: #fff5f5;
-                --anr-medium: #fee0e0;
-                --anr-dark: #c0392b;
-                --anr-gradient: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-                
-                /* Tombstone 相關顏色 */
-                --tombstone-primary: #8e44ad;
-                --tombstone-light: #f8f3ff;
-                --tombstone-medium: #e8d5ff;
-                --tombstone-dark: #6c3483;
-                --tombstone-gradient: linear-gradient(135deg, #8e44ad 0%, #6c3483 100%);
-            }}
-            
-            @media (prefers-color-scheme: dark) {{
-                :root {{
-                    --background: #0d1117;
-                    --surface: #161b22;
-                    --border: #30363d;
-                    --text-primary: #f0f6fc;
-                    --text-secondary: #8b949e;
-                    --text-muted: #6e7681;
-                    --anr-light: #2d1f1f;
-                    --anr-medium: #3d2828;
-                    --tombstone-light: #2a1f3d;
-                    --tombstone-medium: #3a2d4d;
-                }}
+                --bg-primary: #212121;
+                --bg-secondary: #2a2a2a;
+                --bg-hover: #343434;
+                --text-primary: #ececec;
+                --text-secondary: #a0a0a0;
+                --text-muted: #6e6e6e;
+                --border: #424242;
+                --accent: #10a37f;
+                --accent-hover: #0e8e6f;
+                --anr-color: #ff9800;        /* 改為橘色，更柔和 */
+                --tombstone-color: #ab47bc;
+                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                --radius: 8px;
             }}
             
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-                background: var(--background);
+                background: var(--bg-primary);
                 color: var(--text-primary);
                 line-height: 1.6;
                 min-height: 100vh;
             }}
             
-            /* 添加背景圖案 */
-            body::before {{
-                content: '';
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background-image: 
-                    radial-gradient(circle at 20% 80%, rgba(233, 30, 99, 0.03) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 20%, rgba(156, 39, 176, 0.03) 0%, transparent 50%),
-                    radial-gradient(circle at 40% 40%, rgba(33, 150, 243, 0.03) 0%, transparent 50%);
-                pointer-events: none;
-                z-index: -1;
-            }}
-            
             .container {{
-                max-width: 1200px;
+                max-width: 1000px;
                 margin: 0 auto;
-                padding: 0 20px;
+                padding: 20px;
             }}
             
-            /* Header - 增強版 */
+            /* Header */
             .header {{
+                text-align: center;
                 padding: 60px 0 40px;
-                position: relative;
-                overflow: hidden;
-            }}
-            
-            .header::before {{
-                content: '';
-                position: absolute;
-                top: -50%;
-                left: -50%;
-                width: 200%;
-                height: 200%;
-                background: linear-gradient(45deg, 
-                    rgba(231, 76, 60, 0.05) 0%, 
-                    rgba(142, 68, 173, 0.05) 50%, 
-                    rgba(52, 152, 219, 0.05) 100%);
-                animation: gradientShift 15s ease infinite;
-                z-index: -1;
-            }}
-            
-            @keyframes gradientShift {{
-                0%, 100% {{ transform: rotate(0deg) scale(1); }}
-                50% {{ transform: rotate(180deg) scale(1.5); }}
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 40px;
             }}
             
             .header h1 {{
-                font-size: 48px;
-                font-weight: 700;
+                font-size: 32px;
+                font-weight: 600;
                 margin-bottom: 12px;
-                background: linear-gradient(135deg, #e74c3c 0%, #8e44ad 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                letter-spacing: -0.5px;
+                color: var(--text-primary);
             }}
             
             .header .subtitle {{
-                font-size: 18px;
+                font-size: 16px;
                 color: var(--text-secondary);
-                margin-bottom: 32px;
-                opacity: 0.9;
             }}
             
-            /* Stats Grid - 動態卡片 */
-            .stats-grid {{
+            /* Stats */
+            .stats {{
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-                gap: 20px;
-                margin-bottom: 48px;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+                margin: 40px 0;
             }}
             
             .stat-card {{
-                background: var(--surface);
+                background: var(--bg-secondary);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
-                padding: 28px;
-                position: relative;
-                overflow: hidden;
-                transition: var(--transition);
-                cursor: pointer;
-            }}
-            
-            .stat-card::before {{
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 4px;
-                background: var(--primary-color);
-                transform: scaleX(0);
-                transform-origin: left;
-                transition: transform 0.3s ease;
+                padding: 20px;
+                text-align: center;
+                transition: all 0.2s ease;
             }}
             
             .stat-card:hover {{
-                transform: translateY(-4px);
-                box-shadow: var(--shadow-lg);
-                border-color: transparent;
+                border-color: var(--accent);
+                transform: translateY(-2px);
             }}
             
-            .stat-card:hover::before {{
-                transform: scaleX(1);
+            .stat-value {{
+                font-size: 28px;
+                font-weight: 600;
+                color: var(--accent);
             }}
             
-            .stat-card .label {{
+            .stat-label {{
                 font-size: 14px;
                 color: var(--text-secondary);
-                margin-bottom: 8px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                font-weight: 600;
+                margin-top: 4px;
             }}
             
-            .stat-card .value {{
-                font-size: 36px;
-                font-weight: 700;
-                background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }}
-            
-            /* Features Section - 改進版 */
-            .features {{
-                background: var(--surface);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                padding: 32px;
-                margin-bottom: 48px;
-                position: relative;
-                overflow: hidden;
-            }}
-            
-            .features::before {{
-                content: '🚀';
-                position: absolute;
-                right: -20px;
-                top: -20px;
-                font-size: 120px;
-                opacity: 0.05;
-                transform: rotate(15deg);
-            }}
-            
-            .features h3 {{
-                font-size: 24px;
-                font-weight: 700;
-                margin-bottom: 24px;
-                color: var(--text-primary);
-            }}
-            
-            .features ul {{
-                list-style: none;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-                gap: 16px;
-            }}
-            
-            .features li {{
-                display: flex;
-                align-items: flex-start;
-                gap: 12px;
-                font-size: 15px;
-                color: var(--text-secondary);
-                padding: 8px 0;
-                transition: var(--transition);
-            }}
-            
-            .features li:hover {{
-                color: var(--text-primary);
-                transform: translateX(4px);
-            }}
-            
-            .features li::before {{
-                content: "✨";
-                color: var(--primary-color);
-                font-weight: bold;
-                flex-shrink: 0;
-                animation: sparkle 2s ease infinite;
-            }}
-            
-            @keyframes sparkle {{
-                0%, 100% {{ opacity: 1; transform: scale(1); }}
-                50% {{ opacity: 0.6; transform: scale(0.8); }}
-            }}
-            
-            /* File Browser - 全新設計 */
+            /* File Browser */
             .file-browser {{
-                background: var(--surface);
+                background: var(--bg-secondary);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
                 overflow: hidden;
-                box-shadow: var(--shadow-sm);
             }}
             
-            /* ANR 和 Tombstone 項目 - 增強版 */
+            /* File Item */
             .file-item {{
-                position: relative;
                 border-bottom: 1px solid var(--border);
-                transition: var(--transition);
-                overflow: hidden;
+                position: relative;
+                transition: background 0.2s ease;
             }}
             
             .file-item:last-child {{
                 border-bottom: none;
             }}
             
-            /* ANR 項目樣式 */
-            .anr-item {{
-                background: linear-gradient(to right, var(--anr-light) 0%, transparent 100%);
+            .file-item:hover {{
+                background: var(--bg-hover);
             }}
             
-            .anr-item::before {{
-                content: '';
-                position: absolute;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                width: 4px;
-                background: var(--anr-gradient);
-                transition: width 0.3s ease;
+            .file-link {{
+                display: block;
+                text-decoration: none;
+                color: inherit;
             }}
             
-            .anr-item:hover {{
-                background: linear-gradient(to right, var(--anr-medium) 0%, var(--anr-light) 100%);
-                transform: translateX(8px);
-            }}
-            
-            .anr-item:hover::before {{
-                width: 8px;
-            }}
-            
-            /* Tombstone 項目樣式 */
-            .tombstone-item {{
-                background: linear-gradient(to right, var(--tombstone-light) 0%, transparent 100%);
-            }}
-            
-            .tombstone-item::before {{
-                content: '';
-                position: absolute;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                width: 4px;
-                background: var(--tombstone-gradient);
-                transition: width 0.3s ease;
-            }}
-            
-            .tombstone-item:hover {{
-                background: linear-gradient(to right, var(--tombstone-medium) 0%, var(--tombstone-light) 100%);
-                transform: translateX(8px);
-            }}
-            
-            .tombstone-item:hover::before {{
-                width: 8px;
-            }}
-            
-            /* 檔案內容區域 */
             .file-content {{
-                padding: 20px 24px;
+                padding: 16px 20px;
                 display: flex;
                 align-items: center;
-                gap: 16px;
-                position: relative;
-                z-index: 1;
+                gap: 12px;
             }}
             
-            /* 檔案圖標 - 動態效果 */
             .file-icon {{
-                font-size: 32px;
+                font-size: 24px;
                 flex-shrink: 0;
-                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-                transition: var(--transition);
-                animation: pulse 2s ease infinite;
             }}
             
-            @keyframes pulse {{
-                0%, 100% {{ transform: scale(1); }}
-                50% {{ transform: scale(1.05); }}
-            }}
-            
-            .file-item:hover .file-icon {{
-                transform: scale(1.1) rotate(5deg);
-            }}
-            
-            .anr-item .file-icon {{
-                color: var(--anr-primary);
-            }}
-            
-            .tombstone-item .file-icon {{
-                color: var(--tombstone-primary);
-            }}
-            
-            /* 檔案資訊 */
             .file-info {{
                 flex: 1;
                 min-width: 0;
             }}
             
             .file-name {{
-                font-size: 16px;
-                font-weight: 600;
+                font-size: 14px;
                 color: var(--text-primary);
-                text-decoration: none;
-                display: block;
-                margin-bottom: 6px;
-                transition: var(--transition);
-                position: relative;
+                margin-bottom: 4px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }}
             
-            .file-name::after {{
-                content: '→';
-                position: absolute;
-                right: 0;
-                opacity: 0;
-                transform: translateX(-10px);
-                transition: var(--transition);
-            }}
-            
-            .file-item:hover .file-name::after {{
-                opacity: 1;
-                transform: translateX(0);
-            }}
-            
-            .file-name:hover {{
-                color: var(--primary-color);
-            }}
-            
-            /* 檔案 Meta 資訊 */
             .file-meta {{
                 display: flex;
                 align-items: center;
-                gap: 16px;
-                font-size: 14px;
+                gap: 12px;
+                font-size: 12px;
+                color: var(--text-secondary);
             }}
             
             .file-type {{
-                padding: 4px 12px;
-                border-radius: 20px;
-                font-weight: 600;
-                font-size: 12px;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-weight: 500;
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
-                color: white;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                transition: var(--transition);
-            }}
-            
-            .file-item:hover .file-type {{
-                transform: scale(1.05);
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+                font-size: 11px;
             }}
             
             .file-type-anr {{
-                background: var(--anr-gradient);
+                background: rgba(255, 152, 0, 0.15);  /* 橘色背景，透明度更低 */
+                color: var(--anr-color);
             }}
             
             .file-type-tombstone {{
-                background: var(--tombstone-gradient);
+                background: rgba(171, 71, 188, 0.2);
+                color: var(--tombstone-color);
             }}
             
             .source-link {{
+                position: absolute;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
                 color: var(--text-secondary);
-                text-decoration: none;
-                transition: var(--transition);
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
+                padding: 8px;
+                border-radius: 4px;
+                transition: all 0.2s ease;
+                opacity: 0;
             }}
             
-            .source-link::before {{
-                content: '📄';
-                font-size: 16px;
-                opacity: 0.7;
+            .file-item:hover .source-link {{
+                opacity: 1;
             }}
             
             .source-link:hover {{
-                color: var(--primary-color);
-                transform: translateY(-2px);
+                color: var(--text-primary);
+                background: var(--bg-hover);
             }}
             
-            /* Folder 樣式 */
+            /* Folder */
             .folder-item {{
                 border-bottom: 1px solid var(--border);
-                transition: var(--transition);
             }}
             
             .folder-header {{
-                padding: 20px 24px;
+                padding: 16px 20px;
                 display: flex;
                 align-items: center;
-                gap: 16px;
+                gap: 12px;
                 cursor: pointer;
                 user-select: none;
-                transition: var(--transition);
-                position: relative;
+                transition: background 0.2s ease;
             }}
             
             .folder-header:hover {{
-                background: rgba(0, 0, 0, 0.02);
+                background: var(--bg-hover);
             }}
             
             .folder-arrow {{
                 color: var(--text-secondary);
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                transition: transform 0.2s ease;
                 flex-shrink: 0;
             }}
             
             .folder-arrow.open {{
-                transform: rotate(180deg);
+                transform: rotate(90deg);
             }}
             
             .folder-icon {{
-                font-size: 24px;
+                font-size: 20px;
                 flex-shrink: 0;
-                transition: var(--transition);
-            }}
-            
-            .folder-header:hover .folder-icon {{
-                transform: scale(1.1);
             }}
             
             .folder-name {{
-                font-size: 16px;
-                font-weight: 600;
+                font-size: 14px;
                 color: var(--text-primary);
                 flex: 1;
             }}
             
             .folder-count {{
-                font-size: 14px;
+                font-size: 12px;
                 color: var(--text-muted);
-                background: var(--background);
-                padding: 4px 12px;
-                border-radius: 20px;
-                font-weight: 500;
+                background: var(--bg-primary);
+                padding: 2px 8px;
+                border-radius: 12px;
             }}
             
             .folder-content {{
-                background: rgba(0, 0, 0, 0.02);
-                border-top: 1px solid var(--border);
-                padding-left: 24px;
-                animation: slideDown 0.3s ease;
+                background: rgba(0, 0, 0, 0.2);
             }}
             
-            @keyframes slideDown {{
-                from {{
-                    opacity: 0;
-                    transform: translateY(-10px);
-                }}
-                to {{
-                    opacity: 1;
-                    transform: translateY(0);
-                }}
+            .folder-content .file-item {{
+                margin-left: 32px;
             }}
             
-            /* Section Header - 新增 */
-            .section-header {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 32px;
-                padding-bottom: 16px;
-                border-bottom: 2px solid var(--border);
-            }}
-            
-            .section-header h2 {{
-                font-size: 28px;
-                font-weight: 700;
-                color: var(--text-primary);
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }}
-            
-            /* Footer - 改進版 */
+            /* Footer */
             .footer {{
-                padding: 48px 0;
-                border-top: 1px solid var(--border);
                 text-align: center;
+                padding: 40px 0;
                 color: var(--text-secondary);
                 font-size: 14px;
-                position: relative;
-            }}
-            
-            .footer::before {{
-                content: '🚀';
-                position: absolute;
-                left: 50%;
-                top: -20px;
-                transform: translateX(-50%);
-                background: var(--background);
-                padding: 0 20px;
-                font-size: 32px;
-            }}
-            
-            /* Loading Animation */
-            @keyframes loading {{
-                0% {{ transform: rotate(0deg); }}
-                100% {{ transform: rotate(360deg); }}
             }}
             
             /* Responsive */
             @media (max-width: 768px) {{
-                .header h1 {{
-                    font-size: 32px;
+                .container {{
+                    padding: 16px;
                 }}
                 
-                .stats-grid {{
+                .header {{
+                    padding: 40px 0 30px;
+                }}
+                
+                .header h1 {{
+                    font-size: 24px;
+                }}
+                
+                .stats {{
                     grid-template-columns: repeat(2, 1fr);
                     gap: 12px;
                 }}
                 
-                .features ul {{
-                    grid-template-columns: 1fr;
-                }}
-                
                 .file-content {{
-                    padding: 16px 20px;
+                    padding: 14px 16px;
                 }}
                 
-                .file-icon {{
-                    font-size: 24px;
+                .source-link {{
+                    opacity: 1;
+                    right: 16px;
                 }}
             }}
-            
-            /* Dark mode adjustments */
-            @media (prefers-color-scheme: dark) {{
-                .file-item:hover {{
-                    background-color: rgba(255, 255, 255, 0.05);
-                }}
-                
-                .folder-header:hover {{
-                    background: rgba(255, 255, 255, 0.03);
-                }}
-                
-                .stat-card {{
-                    background: rgba(255, 255, 255, 0.05);
-                    border-color: rgba(255, 255, 255, 0.1);
-                }}
+
+            /* Controls */
+            .controls {{
+                display: flex;
+                gap: 12px;
+                margin-bottom: 20px;
             }}
-        </style>        
+
+            .control-btn {{
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 16px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                color: var(--text-primary);
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }}
+
+            .control-btn:hover {{
+                background: var(--bg-hover);
+                border-color: var(--accent);
+            }}
+
+            .control-btn:active {{
+                transform: scale(0.98);
+            }}
+
+            .control-btn svg {{
+                flex-shrink: 0;
+            }}
+
+        </style>
     </head>
     <body>
         <div class="container">
             <header class="header">
                 <h1>Android Log 分析報告</h1>
-                <p class="subtitle">基於物件導向設計的智能分析系統，深度解析 ANR 和 Tombstone 問題</p>
-                
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="label">ANR 檔案</div>
-                        <div class="value">{self.stats['anr_count']}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="label">Tombstone 檔案</div>
-                        <div class="value">{self.stats['tombstone_count']}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="label">總檔案數</div>
-                        <div class="value">{self.stats['anr_count'] + self.stats['tombstone_count']}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="label">分析時間</div>
-                        <div class="value">{self.stats['total_time']:.1f}s</div>
-                    </div>
-                </div>
+                <p class="subtitle">智能分析系統 • 深度解析 ANR 和 Tombstone 問題</p>
             </header>
             
-            <div class="features">
-                <h3>🚀 智能分析特點</h3>
-                <ul>
-                    <li>完整的調用鏈分析，展現問題來龍去脈</li>
-                    <li>深度 Binder IPC 阻塞和服務交互分析</li>
-                    <li>基於已知模式庫的自動問題匹配</li>
-                    <li>事件時序分析和根本原因定位</li>
-                    <li>系統健康度評分和性能瓶頸識別</li>
-                    <li>Watchdog、StrictMode、GC 綜合分析</li>
-                    <li>支援所有 Android 版本 (4.x - 14)</li>
-                    <li>提供針對性的解決方案和預防措施</li>
-                </ul>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value">{self.stats['anr_count']}</div>
+                    <div class="stat-label">ANR 檔案</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{self.stats['tombstone_count']}</div>
+                    <div class="stat-label">Tombstone 檔案</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{self.stats['anr_count'] + self.stats['tombstone_count']}</div>
+                    <div class="stat-label">總檔案數</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{self.stats['total_time']:.1f}s</div>
+                    <div class="stat-label">分析時間</div>
+                </div>
             </div>
-            
-            <main class="main-content">
-                <div class="section-header">
-                    <h2>📁 分析結果</h2>
-                </div>
-                
-                <div class="file-browser">
-                    {render_tree(index_data)}
-                </div>
+            <div class="controls">
+                <button onclick="expandAll()" class="control-btn">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    全部展開
+                </button>
+                <button onclick="collapseAll()" class="control-btn">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    全部收合
+                </button>
+            </div>            
+            <main class="file-browser">
+                {render_tree(index_data)}
             </main>
             
             <footer class="footer">
-                <p>生成時間: {time.strftime('%Y-%m-%d %H:%M:%S')} | Android Log Analyzer v5</p>
+                <p>生成時間: {time.strftime('%Y-%m-%d %H:%M:%S')} • Android Log Analyzer v5</p>
             </footer>
         </div>
         
@@ -5630,7 +5369,36 @@ class LogAnalyzerSystem:
                 }}
             }}
             
-            // 不再自動展開，因為現在預設就是展開的
+            function expandAll() {{
+                const folders = document.querySelectorAll('.folder-content');
+                const arrows = document.querySelectorAll('.folder-arrow');
+                
+                folders.forEach(folder => {{
+                    folder.style.display = 'block';
+                }});
+                
+                arrows.forEach(arrow => {{
+                    arrow.classList.add('open');
+                }});
+            }}
+            
+            function collapseAll() {{
+                const folders = document.querySelectorAll('.folder-content');
+                const arrows = document.querySelectorAll('.folder-arrow');
+                
+                folders.forEach(folder => {{
+                    folder.style.display = 'none';
+                }});
+                
+                arrows.forEach(arrow => {{
+                    arrow.classList.remove('open');
+                }});
+            }}
+            
+            // 預設全部展開
+            document.addEventListener('DOMContentLoaded', function() {{
+                expandAll();
+            }});
         </script>
     </body>
     </html>"""
