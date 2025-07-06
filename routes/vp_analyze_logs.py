@@ -18,7 +18,12 @@ from typing import List, Dict, Optional, Tuple, Set
 from enum import Enum
 import traceback
 
-from vp_analyze_logs_base import SourceLink, SourceLinker, ANRTimeouts,ThreadInfo,ANRType,CrashSignal,ThreadState,ANRInfo,TombstoneInfo
+# 導入基礎類別
+from vp_analyze_logs_base import (
+    SourceLink, SourceLinker, ANRTimeouts, ThreadInfo, 
+    ANRType, CrashSignal, ThreadState, ANRInfo, TombstoneInfo
+)
+
 from vp_analyze_logs_ext import TimelineAnalyzer,CrossProcessAnalyzer,MLAnomalyDetector,RootCausePredictor,RiskAssessmentEngine,TrendAnalyzer,SystemMetricsIntegrator,SourceCodeAnalyzer,CodeFixGenerator,ConfigurationOptimizer,ComparativeAnalyzer,ParallelAnalyzer,IncrementalAnalyzer,VisualizationGenerator,ExecutiveSummaryGenerator
 
 # ============= 工具函數 =============
@@ -136,14 +141,34 @@ class ANRAnalyzer(BaseAnalyzer):
     def analyze(self, file_path: str) -> str:
         """分析 ANR 檔案"""
         try:
+            print(f"開始分析檔案: {file_path}")
+            
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
+            
+            print(f"檔案大小: {len(content)} 字符")
             
             # 解析 ANR 資訊
             anr_info = self._parse_anr_info(content)
             
-            # 創建智能分析引擎
-            intelligent_engine = IntelligentAnalysisEngine()
+            print(f"解析結果 - 進程名: {anr_info.process_name}, PID: {anr_info.pid}")
+            print(f"ANR 類型: {anr_info.anr_type.value}")
+            print(f"線程數量: {len(anr_info.all_threads)}")
+            
+            # 創建智能分析引擎 - 修正這裡
+            try:
+                from vp_analyze_logs_ext import (
+                    TimelineAnalyzer, CrossProcessAnalyzer, MLAnomalyDetector,
+                    RootCausePredictor, RiskAssessmentEngine, TrendAnalyzer,
+                    SystemMetricsIntegrator, SourceCodeAnalyzer, CodeFixGenerator,
+                    ConfigurationOptimizer, ComparativeAnalyzer, ParallelAnalyzer,
+                    IncrementalAnalyzer, VisualizationGenerator, ExecutiveSummaryGenerator
+                )
+                
+                intelligent_engine = IntelligentAnalysisEngine()
+            except Exception as e:
+                print(f"創建智能分析引擎失敗: {e}")
+                intelligent_engine = None
             
             # 生成分析報告
             report = self._generate_report(anr_info, content, intelligent_engine)
@@ -151,7 +176,9 @@ class ANRAnalyzer(BaseAnalyzer):
             return report
             
         except Exception as e:
-            return f"❌ 分析 ANR 檔案時發生錯誤: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"❌ 分析 ANR 檔案時發生錯誤: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            return error_msg
     
     def _parse_anr_info(self, content: str) -> ANRInfo:
         """解析 ANR 資訊"""
@@ -225,28 +252,81 @@ class ANRAnalyzer(BaseAnalyzer):
         info = {}
         
         # 嘗試多種模式提取進程名稱和 PID
-        for pattern in self.patterns['anr_trigger_patterns']:
-            match = re.search(pattern, content)
+        patterns = [
+            # 標準 ANR 格式
+            r'ANR in\s+([^\s,]+).*?(?:PID:\s*(\d+))?',
+            r'Process:\s*([^\s,]+).*?(?:PID:\s*(\d+))?',
+            r'Cmd line:\s*([^\s]+)',
+            r'ProcessRecord\{[^}]+\s+(\d+):([^/]+)',
+            # Subject 行格式
+            r'Subject:\s*ANR.*?Process:\s*([^\s]+)',
+            # 新格式
+            r'pid:\s*(\d+),.*?name:\s*([^\s]+)',
+            # Executing service
+            r'executing service\s+([^/]+)/([^\s]+)',
+            # Input dispatching
+            r'Input event dispatching timed out.*?([^\s]+)\s+\(server\)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, content, re.MULTILINE)
             if match:
                 groups = match.groups()
-                if len(groups) >= 1:
-                    if 'Cmd line' in pattern:
+                if len(groups) >= 2:
+                    # 根據模式處理不同的匹配結果
+                    if pattern.startswith(r'pid:'):
+                        info['pid'] = groups[0]
+                        info['process_name'] = groups[1]
+                    elif pattern.startswith(r'ProcessRecord'):
+                        info['pid'] = groups[0]
+                        info['process_name'] = groups[1]
+                    elif pattern.startswith(r'executing service'):
                         info['process_name'] = groups[0]
-                    elif 'ANR in' in pattern and len(groups) >= 2:
-                        info['process_name'] = groups[0]
-                        info['pid'] = groups[1]
-                    elif len(groups) >= 2 and groups[0].isdigit():
-                        info['timeout'] = groups[0]
-                        info['reason'] = groups[1]
                     else:
                         info['process_name'] = groups[0]
-                break
+                        if len(groups) > 1 and groups[1]:
+                            info['pid'] = groups[1]
+                elif len(groups) == 1:
+                    info['process_name'] = groups[0]
+                
+                # 如果找到進程名，就跳出循環
+                if 'process_name' in info:
+                    break
+        
+        # 如果還是沒有找到，嘗試從內容中提取
+        if 'process_name' not in info:
+            # 嘗試找包名格式 (com.example.app)
+            package_match = re.search(r'(com\.[a-zA-Z0-9._]+)', content)
+            if package_match:
+                info['process_name'] = package_match.group(1)
         
         # 提取時間戳
-        timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)', content)
-        if timestamp_match:
-            info['timestamp'] = timestamp_match.group(1)
+        timestamp_patterns = [
+            r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
+            r'(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
+            r'Time:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
+        ]
         
+        for pattern in timestamp_patterns:
+            timestamp_match = re.search(pattern, content)
+            if timestamp_match:
+                info['timestamp'] = timestamp_match.group(1)
+                break
+        
+        # 提取原因
+        reason_patterns = [
+            r'Reason:\s*(.+?)(?:\n|$)',
+            r'Input event dispatching timed out.*?\.\s*(.+?)(?:\n|$)',
+            r'executing service\s+(.+?)(?:\n|$)',
+        ]
+        
+        for pattern in reason_patterns:
+            reason_match = re.search(pattern, content)
+            if reason_match:
+                info['reason'] = reason_match.group(1).strip()
+                break
+        
+        print(f"提取的進程資訊: {info}")
         return info
     
     def _extract_timeout_info(self, content: str) -> Dict:
@@ -529,10 +609,36 @@ class ANRAnalyzer(BaseAnalyzer):
         
         return memory_info if memory_info else None
     
-    def _generate_report(self, anr_info: ANRInfo, content: str, intelligent_engine) -> str:
+    def _generate_report(self, anr_info: ANRInfo, content: str, intelligent_engine=None) -> str:
         """生成分析報告"""
-        analyzer = ANRReportGenerator(anr_info, content, intelligent_engine)
-        return analyzer.generate()
+        try:
+            analyzer = ANRReportGenerator(anr_info, content, intelligent_engine)
+            return analyzer.generate()
+        except Exception as e:
+            # 如果報告生成失敗，返回基本信息
+            basic_report = [
+                "🎯 ANR 分析報告",
+                "=" * 60,
+                f"📊 ANR 類型: {anr_info.anr_type.value}",
+                f"📱 進程名稱: {anr_info.process_name}",
+                f"🆔 進程 ID: {anr_info.pid}",
+                "",
+                "❌ 詳細分析生成失敗",
+                f"錯誤信息: {str(e)}",
+                "",
+                "基本信息:",
+                f"- 線程總數: {len(anr_info.all_threads)}",
+                f"- 主線程狀態: {anr_info.main_thread.state.value if anr_info.main_thread else 'Unknown'}",
+            ]
+            
+            if anr_info.cpu_usage:
+                basic_report.append(f"- CPU 使用率: {anr_info.cpu_usage.get('total', 'N/A')}%")
+            
+            if anr_info.memory_info:
+                available_mb = anr_info.memory_info.get('available', 0) / 1024
+                basic_report.append(f"- 可用記憶體: {available_mb:.1f} MB")
+            
+            return "\n".join(basic_report)
 
 class ANRReportGenerator:
     """ANR 報告生成器"""
@@ -2749,7 +2855,225 @@ class ANRReportGenerator:
                     return match.group(1)
         
         return None
-    
+
+    def _add_html_timeline_analysis(self):
+        """添加 HTML 格式的時間線分析"""
+        # 延遲導入避免循環引入
+        from vp_analyze_logs_ext import TimelineAnalyzer, VisualizationGenerator
+        
+        timeline_analyzer = TimelineAnalyzer()
+        timeline_data = timeline_analyzer.analyze_timeline(self.content, self.anr_info)
+        
+        # 生成時間線視覺化
+        viz_generator = VisualizationGenerator()
+        timeline_viz = viz_generator.generate_timeline_visualization(timeline_data)
+        
+        content = f'''
+        <div class="timeline-analysis">
+            <h3>事件時間線分析</h3>
+            {timeline_viz}
+            
+            <div class="timeline-findings">
+                <h4>關鍵發現</h4>
+                <ul>
+                    {''.join(f"<li>{rec}</li>" for rec in timeline_data.get('recommendations', []))}
+                </ul>
+            </div>
+            
+            <div class="critical-period">
+                <h4>關鍵時期</h4>
+                {self._format_critical_period(timeline_data.get('critical_period'))}
+            </div>
+        </div>
+        '''
+        
+        self.html_generator.add_section('時間線分析', content, 'timeline-section')
+
+    def _add_html_anomaly_detection(self):
+        """添加 HTML 格式的異常檢測"""
+        from vp_analyze_logs_ext import MLAnomalyDetector
+        
+        detector = MLAnomalyDetector()
+        anomalies = detector.detect_anomalies(self.anr_info)
+        
+        if anomalies:
+            anomaly_html = '''
+            <div class="anomaly-list">
+            '''
+            
+            for anomaly in anomalies:
+                severity_class = 'high' if anomaly['score'] > 0.8 else 'medium'
+                anomaly_html += f'''
+                <div class="anomaly-item {severity_class}">
+                    <h4>{anomaly['type'].replace('_', ' ').title()}</h4>
+                    <div class="anomaly-score">異常分數: {anomaly['score']:.2f}</div>
+                    <div class="anomaly-explanation">{anomaly['explanation']}</div>
+                </div>
+                '''
+            
+            anomaly_html += '</div>'
+            
+            self.html_generator.add_section('AI 異常檢測', anomaly_html, 'anomaly-section')
+
+    def _add_html_risk_assessment(self):
+        """添加 HTML 格式的風險評估"""
+        from vp_analyze_logs_ext import RiskAssessmentEngine
+        
+        risk_engine = RiskAssessmentEngine()
+        
+        # 準備系統狀態數據
+        system_state = {
+            'thread_count': len(self.anr_info.all_threads),
+            'blocked_threads': sum(1 for t in self.anr_info.all_threads if t.state == ThreadState.BLOCKED),
+            'cpu_usage': self.anr_info.cpu_usage.get('total', 0) if self.anr_info.cpu_usage else 0,
+            'memory_available_mb': self.anr_info.memory_info.get('available', 0) / 1024 if self.anr_info.memory_info else 0
+        }
+        
+        risk_assessment = risk_engine.assess_anr_risk(system_state)
+        
+        risk_html = f'''
+        <div class="risk-assessment">
+            <div class="overall-risk risk-{risk_assessment['risk_level']}">
+                <h3>整體風險等級: {risk_assessment['risk_level'].upper()}</h3>
+                <div class="risk-score">風險分數: {risk_assessment['overall_risk']:.2f}</div>
+                <div class="anr-probability">預測 ANR 概率: {risk_assessment['predicted_anr_probability']:.1%}</div>
+            </div>
+            
+            <div class="risk-factors">
+                <h4>風險因素分析</h4>
+                {self._format_risk_factors(risk_assessment['factors'])}
+            </div>
+            
+            <div class="preventive-actions">
+                <h4>預防措施</h4>
+                {self._format_preventive_actions(risk_assessment['recommendations'])}
+            </div>
+        </div>
+        '''
+        
+        self.html_generator.add_section('風險評估', risk_html, 'risk-section')
+
+    def _add_html_code_fix_suggestions(self):
+        """添加 HTML 格式的代碼修復建議"""
+        from vp_analyze_logs_ext import CodeFixGenerator
+        
+        fix_generator = CodeFixGenerator()
+        
+        # 基於分析結果生成修復建議
+        fix_suggestions = []
+        
+        if self.anr_info.main_thread:
+            for frame in self.anr_info.main_thread.backtrace[:5]:
+                if 'File' in frame or 'SQLite' in frame:
+                    fix_suggestions.extend(
+                        fix_generator.generate_fix_suggestions('main_thread_io', {'stack_frame': frame})
+                    )
+                    break
+                elif 'SharedPreferences' in frame and 'commit' in frame:
+                    fix_suggestions.extend(
+                        fix_generator.generate_fix_suggestions('shared_preferences_commit', {})
+                    )
+                    break
+        
+        if fix_suggestions:
+            fix_html = '<div class="code-fixes">'
+            
+            for i, suggestion in enumerate(fix_suggestions[:3]):  # 最多顯示3個
+                fix_html += f'''
+                <div class="fix-suggestion">
+                    <h4>{suggestion['title']}</h4>
+                    <div class="difficulty-{suggestion['difficulty']}">
+                        難度: {suggestion['difficulty']} | 影響: {suggestion['impact']}
+                    </div>
+                    
+                    <div class="code-comparison">
+                        <div class="code-before">
+                            <h5>修改前:</h5>
+                            <pre><code>{html.escape(suggestion['before'])}</code></pre>
+                        </div>
+                        <div class="code-after">
+                            <h5>修改後:</h5>
+                            <pre><code>{html.escape(suggestion['after'])}</code></pre>
+                        </div>
+                    </div>
+                    
+                    <div class="fix-explanation">
+                        <p>{suggestion['explanation']}</p>
+                    </div>
+                </div>
+                '''
+            
+            fix_html += '</div>'
+            
+            self.html_generator.add_section('代碼修復建議', fix_html, 'fix-section')
+
+    def _generate_executive_summary(self) -> str:
+        """生成執行摘要"""
+        from vp_analyze_logs_ext import ExecutiveSummaryGenerator
+        
+        summary_generator = ExecutiveSummaryGenerator()
+        
+        # 準備分析結果
+        analysis_results = {
+            'anr_type': self.anr_info.anr_type.value,
+            'severity': self._assess_severity(),
+            'root_cause': self._quick_root_cause(),
+            'frequency': 1,  # 實際應從歷史數據獲取
+            'fix_complexity': 'medium'  # 實際應根據問題類型評估
+        }
+        
+        return summary_generator.generate_summary(analysis_results)
+
+    def _format_critical_period(self, critical_period: Optional[Dict]) -> str:
+        """格式化關鍵時期"""
+        if not critical_period:
+            return '<p>未識別到明顯的關鍵時期</p>'
+        
+        return f'''
+        <div class="critical-period-details">
+            <p>時間範圍: {critical_period['start']} - {critical_period['end']}</p>
+            <p>事件數量: {critical_period['event_count']}</p>
+            <p>平均嚴重性: {critical_period['avg_severity']:.1f}/10</p>
+        </div>
+        '''
+
+    def _format_risk_factors(self, factors: Dict) -> str:
+        """格式化風險因素"""
+        html = '<div class="factor-grid">'
+        
+        for factor_name, factor_data in factors.items():
+            if isinstance(factor_data, dict) and 'score' in factor_data:
+                risk_class = factor_data['risk_level']
+                html += f'''
+                <div class="factor-item risk-{risk_class}">
+                    <h5>{factor_name.replace('_', ' ').title()}</h5>
+                    <div class="factor-score">{factor_data['score']:.2f}</div>
+                    <div class="factor-details">{factor_data.get('details', '')}</div>
+                </div>
+                '''
+        
+        html += '</div>'
+        return html
+
+    def _format_preventive_actions(self, actions: List[Dict]) -> str:
+        """格式化預防措施"""
+        if not actions:
+            return '<p>暫無特定預防措施建議</p>'
+        
+        html = '<ul class="action-list">'
+        
+        for action in actions:
+            priority_class = f"priority-{action['priority']}"
+            html += f'''
+            <li class="{priority_class}">
+                <strong>{action['action']}</strong>
+                <p>{action['description']}</p>
+            </li>
+            '''
+        
+        html += '</ul>'
+        return html
+        
 # ============= Tombstone 分析器 =============
 class TombstoneAnalyzer(BaseAnalyzer):
     """Tombstone 分析器"""
@@ -4214,11 +4538,9 @@ class LogAnalyzerSystem:
                     file_type = 'anr' if 'anr' in name.lower() else 'tombstone'
                     icon = '🔴' if file_type == 'anr' else '💥'
                     
-                    # 生成帶行號的原始檔案連結
-                    numbered_rel = original_rel + '.numbered.html'
-                    
+                    # 直接連結到原始檔案
                     html_str += f'''
-                    <div class="file-item">
+                    <div class="file-item {file_type}-item">
                         <div class="file-content">
                             <span class="file-icon">{icon}</span>
                             <div class="file-info">
@@ -4227,9 +4549,9 @@ class LogAnalyzerSystem:
                                     {' 📄' if is_html else ''}
                                 </a>
                                 <div class="file-meta">
-                                    <span class="file-type">{file_type.upper()}</span>
-                                    <a href="{html.escape(numbered_rel)}" target="_blank" class="source-link">
-                                        查看原始檔案（帶行號）
+                                    <span class="file-type file-type-{file_type}">{file_type.upper()}</span>
+                                    <a href="{html.escape(original_rel)}" target="_blank" class="source-link">
+                                        查看原始檔案
                                     </a>
                                 </div>
                             </div>
@@ -4242,14 +4564,14 @@ class LogAnalyzerSystem:
                     html_str += f'''
                     <div class="folder-item">
                         <div class="folder-header" onclick="toggleFolder('{folder_id}')">
-                            <svg class="folder-arrow" id="arrow-{folder_id}" width="20" height="20" viewBox="0 0 20 20">
+                            <svg class="folder-arrow open" id="arrow-{folder_id}" width="20" height="20" viewBox="0 0 20 20">
                                 <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
                             </svg>
                             <span class="folder-icon">📁</span>
                             <span class="folder-name">{html.escape(name)}</span>
                             <span class="folder-count">{_count_files(value)} 個檔案</span>
                         </div>
-                        <div class="folder-content" id="{folder_id}" style="display: none;">
+                        <div class="folder-content" id="{folder_id}" style="display: block;">
                             {render_tree(value, prefix + '/' + name)}
                         </div>
                     </div>
@@ -4294,6 +4616,10 @@ class LogAnalyzerSystem:
                 --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
                 --radius: 8px;
                 --transition: all 0.2s ease;
+                --anr-color: #dc3545;
+                --anr-bg: #f8d7da;
+                --tombstone-color: #6f42c1;
+                --tombstone-bg: #e2d5f1;
             }}
             
             @media (prefers-color-scheme: dark) {{
@@ -4304,6 +4630,8 @@ class LogAnalyzerSystem:
                     --text-primary: #ffffff;
                     --text-secondary: #c5c5c5;
                     --text-muted: #8e8e8e;
+                    --anr-bg: #3a1f23;
+                    --tombstone-bg: #2d2440;
                 }}
             }}
             
@@ -4413,6 +4741,15 @@ class LogAnalyzerSystem:
                 background: var(--background);
             }}
             
+            /* ANR 和 Tombstone 檔案的不同顏色 */
+            .anr-item {{
+                background-color: var(--anr-bg);
+            }}
+            
+            .tombstone-item {{
+                background-color: var(--tombstone-bg);
+            }}
+            
             .file-content {{
                 padding: 16px 20px;
                 display: flex;
@@ -4455,11 +4792,18 @@ class LogAnalyzerSystem:
             }}
             
             .file-type {{
-                background: var(--primary-color);
-                color: white;
                 padding: 2px 8px;
                 border-radius: 4px;
                 font-weight: 500;
+                color: white;
+            }}
+            
+            .file-type-anr {{
+                background: var(--anr-color);
+            }}
+            
+            .file-type-tombstone {{
+                background: var(--tombstone-color);
             }}
             
             .source-link {{
@@ -4644,7 +4988,7 @@ class LogAnalyzerSystem:
                 const folder = document.getElementById(folderId);
                 const arrow = document.getElementById('arrow-' + folderId);
                 
-                if (folder.style.display === 'none') {{
+                if (folder.style.display === 'none' || folder.style.display === '') {{
                     folder.style.display = 'block';
                     arrow.classList.add('open');
                 }} else {{
@@ -4653,13 +4997,7 @@ class LogAnalyzerSystem:
                 }}
             }}
             
-            // 自動展開第一層資料夾
-            document.addEventListener('DOMContentLoaded', function() {{
-                const firstLevelFolders = document.querySelectorAll('.file-browser > .folder-item > .folder-header');
-                firstLevelFolders.forEach(header => {{
-                    header.click();
-                }});
-            }});
+            // 不再自動展開，因為現在預設就是展開的
         </script>
     </body>
     </html>"""
@@ -4691,29 +5029,9 @@ class IntelligentAnalysisEngine:
         self.analysis_patterns = self._init_analysis_patterns()
         self.known_issues_db = self._init_known_issues()
         
-        # 初始化所有分析器
-        self.binder_analyzer = BinderCallChainAnalyzer()
-        self.dependency_analyzer = ThreadDependencyAnalyzer()
-        self.bottleneck_detector = PerformanceBottleneckDetector()
-        self.timeline_analyzer = TimelineAnalyzer()
-        self.cross_process_analyzer = CrossProcessAnalyzer()
-        self.anomaly_detector = MLAnomalyDetector()
-        self.root_cause_predictor = RootCausePredictor()
-        self.risk_engine = RiskAssessmentEngine()
-        self.trend_analyzer = TrendAnalyzer()
-        self.system_metrics_integrator = SystemMetricsIntegrator()
-        self.source_analyzer = SourceCodeAnalyzer()
-        self.fix_generator = CodeFixGenerator()
-        self.config_optimizer = ConfigurationOptimizer()
-        self.comparative_analyzer = ComparativeAnalyzer()
-        self.parallel_analyzer = ParallelAnalyzer()
-        self.incremental_analyzer = IncrementalAnalyzer()
-        
-        # 視覺化生成器
-        self.viz_generator = VisualizationGenerator()
-        
-        # 報告生成器
-        self.summary_generator = ExecutiveSummaryGenerator()
+        # 延遲初始化分析器，避免循環引用
+        self._analyzers_initialized = False
+        self._init_analyzers_lazy()
             
     def _get_health_recommendation(self, score: int) -> str:
         """根據健康分數提供建議"""
@@ -4774,6 +5092,28 @@ class IntelligentAnalysisEngine:
                         '查看是否有 Window focus 切換問題'
                     ]
                 }
+            },
+            'tombstone_crash_patterns': {
+                'null_pointer': {
+                    'signatures': ['fault addr 0x0', 'signal 11', 'SIGSEGV'],
+                    'root_cause': '空指針解引用',
+                    'severity': 'high',
+                    'solutions': [
+                        '檢查指針初始化',
+                        '添加空指針檢查',
+                        '使用智能指針'
+                    ]
+                },
+                'memory_corruption': {
+                    'signatures': ['malloc', 'free', 'heap corruption'],
+                    'root_cause': '記憶體損壞',
+                    'severity': 'critical',
+                    'solutions': [
+                        '使用 AddressSanitizer',
+                        '檢查緩衝區溢出',
+                        '避免 use-after-free'
+                    ]
+                }
             }
         }
     
@@ -4824,6 +5164,66 @@ class IntelligentAnalysisEngine:
                 ]
             }
         }
+    
+    def _init_analyzers_lazy(self):
+        """延遲初始化分析器"""
+        if self._analyzers_initialized:
+            return
+            
+        try:
+            # 延遲導入
+            from vp_analyze_logs_ext import (
+                BinderCallChainAnalyzer, ThreadDependencyAnalyzer,
+                PerformanceBottleneckDetector, TimelineAnalyzer,
+                CrossProcessAnalyzer, MLAnomalyDetector, RootCausePredictor,
+                RiskAssessmentEngine, TrendAnalyzer, SystemMetricsIntegrator,
+                SourceCodeAnalyzer, CodeFixGenerator, ConfigurationOptimizer,
+                ComparativeAnalyzer, ParallelAnalyzer, IncrementalAnalyzer,
+                VisualizationGenerator, ExecutiveSummaryGenerator
+            )
+            
+            # 初始化所有分析器
+            self.binder_analyzer = BinderCallChainAnalyzer()
+            self.dependency_analyzer = ThreadDependencyAnalyzer()
+            self.bottleneck_detector = PerformanceBottleneckDetector()
+            self.timeline_analyzer = TimelineAnalyzer()
+            self.cross_process_analyzer = CrossProcessAnalyzer()
+            self.anomaly_detector = MLAnomalyDetector()
+            self.root_cause_predictor = RootCausePredictor()
+            self.risk_engine = RiskAssessmentEngine()
+            self.trend_analyzer = TrendAnalyzer()
+            self.system_metrics_integrator = SystemMetricsIntegrator()
+            self.source_analyzer = SourceCodeAnalyzer()
+            self.fix_generator = CodeFixGenerator()
+            self.config_optimizer = ConfigurationOptimizer()
+            self.comparative_analyzer = ComparativeAnalyzer()
+            self.parallel_analyzer = ParallelAnalyzer()
+            self.incremental_analyzer = IncrementalAnalyzer()
+            self.viz_generator = VisualizationGenerator()
+            self.summary_generator = ExecutiveSummaryGenerator()
+            
+            self._analyzers_initialized = True
+        except Exception as e:
+            print(f"警告: 無法初始化所有分析器 - {e}")
+            # 設置空的分析器以避免錯誤
+            self.binder_analyzer = None
+            self.dependency_analyzer = None
+            self.bottleneck_detector = None
+            self.timeline_analyzer = None
+            self.cross_process_analyzer = None
+            self.anomaly_detector = None
+            self.root_cause_predictor = None
+            self.risk_engine = None
+            self.trend_analyzer = None
+            self.system_metrics_integrator = None
+            self.source_analyzer = None
+            self.fix_generator = None
+            self.config_optimizer = None
+            self.comparative_analyzer = None
+            self.parallel_analyzer = None
+            self.incremental_analyzer = None
+            self.viz_generator = None
+            self.summary_generator = None
     
     def analyze_call_chain(self, backtrace: List[str]) -> Dict:
         """分析調用鏈，找出問題的完整脈絡"""
@@ -4948,79 +5348,45 @@ class IntelligentAnalysisEngine:
         # 將堆疊轉為字串便於匹配
         stack_str = '\n'.join(anr_info.main_thread.backtrace)
         
-        # 檢查通用模式（不是設備特定的）
+        # 檢查分析模式
         for category, patterns in self.analysis_patterns.items():
             for pattern_name, pattern_info in patterns.items():
-                # 只檢查模式，不檢查特定設備
-                if 'patterns' in pattern_info:  # 新的結構
-                    match_count = sum(1 for pattern in pattern_info['patterns']
-                                    if re.search(pattern, stack_str, re.IGNORECASE))
-                    
-                    if match_count > 0:
-                        matches.append({
-                            'pattern': pattern_name,
-                            'confidence': match_count / len(pattern_info['patterns']),
-                            'description': pattern_info.get('description', ''),
-                            'workarounds': pattern_info.get('workarounds', [])
-                        })
+                match_count = sum(1 for sig in pattern_info['signatures']
+                                if re.search(sig, stack_str, re.IGNORECASE))
+                
+                if match_count > 0:
+                    confidence = match_count / len(pattern_info['signatures'])
+                    matches.append({
+                        'pattern': pattern_name,
+                        'confidence': confidence,
+                        'root_cause': pattern_info['root_cause'],
+                        'severity': pattern_info['severity'],
+                        'solutions': pattern_info['solutions']
+                    })
+        
+        # 檢查已知問題
+        for issue_name, issue_info in self.known_issues_db.items():
+            if 'patterns' in issue_info:
+                match_count = sum(1 for pattern in issue_info['patterns']
+                                if re.search(pattern, stack_str, re.IGNORECASE))
+                
+                if match_count > 0:
+                    confidence = match_count / len(issue_info['patterns'])
+                    matches.append({
+                        'pattern': issue_name,
+                        'confidence': confidence,
+                        'description': issue_info.get('description', ''),
+                        'workarounds': issue_info.get('workarounds', [])
+                    })
         
         return sorted(matches, key=lambda x: x['confidence'], reverse=True)
-    
-    def _init_analysis_patterns(self) -> Dict:
-        """初始化分析模式庫 - 只包含通用模式"""
-        return {
-            'binder_patterns': {
-                'binder_timeout': {
-                    'signatures': [
-                        'BinderProxy.transactNative',
-                        'transact.*timed out',
-                        'Binder.*block'
-                    ],
-                    'description': 'Binder IPC 超時',
-                    'common_causes': [
-                        '目標服務繁忙',
-                        '系統資源不足',
-                        '死鎖或循環等待'
-                    ]
-                }
-            },
-            'thread_patterns': {
-                'main_thread_blocked': {
-                    'signatures': [
-                        'main.*BLOCKED',
-                        'tid=1.*waiting',
-                        'main.*Native'
-                    ],
-                    'description': '主線程阻塞',
-                    'common_causes': [
-                        '同步操作在主線程',
-                        'I/O 操作在主線程',
-                        '等待其他線程或服務'
-                    ]
-                }
-            },
-            'system_patterns': {
-                'high_cpu_usage': {
-                    'signatures': [
-                        'CPU.*9[0-9]%',
-                        'load average.*[4-9]\\.',
-                    ],
-                    'description': '高 CPU 使用率',
-                    'common_causes': [
-                        '無限循環',
-                        '過度的計算',
-                        '頻繁的 GC'
-                    ]
-                }
-            }
-        }
 
     def analyze_crash_pattern(self, tombstone_info: TombstoneInfo) -> Dict:
         """分析崩潰模式 - 專門為 Tombstone"""
         analysis = {
             'crash_flow': [],
-            'memory_context': [],
-            'crash_signature': [],
+            'memory_context': {},
+            'crash_signature': '',
             'similar_crashes': []
         }
         
@@ -5263,6 +5629,9 @@ class IntelligentAnalysisEngine:
                         deadlock_info['type'] = 'priority_inversion'
                     break
         
+        # 儲存結果供後續使用
+        self._last_deadlock_cycles = deadlock_info.get('cycles', [])
+        
         return deadlock_info
 
     def _tarjan_scc(self, graph: Dict[str, str]) -> List[List[str]]:
@@ -5477,7 +5846,8 @@ class IntelligentAnalysisEngine:
                 'severity': 'security',
                 'suggestion': '檢查緩衝區大小和字串操作安全性'
             }
-
+        return None
+    
 class HTMLReportGenerator:
     """HTML 報告生成器基類"""
     

@@ -16,11 +16,16 @@ import time
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, TYPE_CHECKING
 from enum import Enum
 import traceback
 
+# 導入基礎類別
 from vp_analyze_logs_base import ANRInfo, ThreadInfo, ThreadState
+
+# 使用 TYPE_CHECKING 避免循環引入
+if TYPE_CHECKING:
+    from vp_analyze_logs import ANRAnalyzer, TombstoneAnalyzer
 
 class TimelineAnalyzer:
     """時間軸分析器 - 重建事件發生的完整時序"""
@@ -1761,12 +1766,169 @@ class SystemMetricsIntegrator:
     """系統指標整合器"""
     
     def __init__(self):
+        # 延遲初始化 metric_parsers，避免引用還未定義的方法
+        self.metric_parsers = {}
+        self._init_parsers()
+    
+    def _init_parsers(self):
+        """初始化解析器"""
         self.metric_parsers = {
             'dumpsys': self._parse_dumpsys,
             'systrace': self._parse_systrace,
             'battery': self._parse_battery_stats,
             'network': self._parse_network_stats
         }
+    
+    # 添加缺失的方法
+    def _parse_dumpsys(self, content: str) -> Dict:
+        """解析 dumpsys 內容"""
+        dumpsys_data = {
+            'meminfo': {},
+            'cpuinfo': {},
+            'activity': {},
+            'window': {},
+            'power': {}
+        }
+        
+        try:
+            # 解析各個部分
+            dumpsys_data['meminfo'] = self._parse_meminfo(content)
+            dumpsys_data['cpuinfo'] = self._parse_cpuinfo(content)
+            dumpsys_data['activity'] = self._parse_activity_manager(content)
+            dumpsys_data['window'] = self._parse_window_manager(content)
+            dumpsys_data['power'] = self._parse_power_manager(content)
+        except Exception as e:
+            print(f"Error parsing dumpsys: {e}")
+        
+        return dumpsys_data
+    
+    def _parse_systrace(self, content: str) -> Dict:
+        """解析 systrace 內容"""
+        systrace_data = {
+            'cpu_frequency': {},
+            'scheduler_latency': {},
+            'binder_transactions': [],
+            'frame_drops': 0
+        }
+        
+        try:
+            # CPU 頻率信息
+            cpu_freq_matches = re.findall(r'cpu_frequency:\s*(\d+)\s+cpu_id=(\d+)', content)
+            for freq, cpu_id in cpu_freq_matches:
+                if cpu_id not in systrace_data['cpu_frequency']:
+                    systrace_data['cpu_frequency'][cpu_id] = []
+                systrace_data['cpu_frequency'][cpu_id].append(int(freq))
+            
+            # Binder 事務
+            binder_matches = re.findall(r'binder_transaction:.*?from\s+(\d+):(\d+)\s+to\s+(\d+):(\d+)', content)
+            for match in binder_matches:
+                systrace_data['binder_transactions'].append({
+                    'from_pid': match[0],
+                    'from_tid': match[1],
+                    'to_pid': match[2],
+                    'to_tid': match[3]
+                })
+            
+            # 幀丟失
+            frame_drop_match = re.search(r'Dropped\s+(\d+)\s+frames', content)
+            if frame_drop_match:
+                systrace_data['frame_drops'] = int(frame_drop_match.group(1))
+                
+        except Exception as e:
+            print(f"Error parsing systrace: {e}")
+        
+        return systrace_data
+    
+    def _parse_battery_stats(self, content: str) -> Dict:
+        """解析電池統計"""
+        battery_data = {
+            'level': 0,
+            'temperature': 0,
+            'voltage': 0,
+            'charging': False,
+            'screen_on_time': 0,
+            'wake_locks': []
+        }
+        
+        try:
+            # 電池電量
+            level_match = re.search(r'Battery\s+level:\s*(\d+)', content)
+            if level_match:
+                battery_data['level'] = int(level_match.group(1))
+            
+            # 溫度
+            temp_match = re.search(r'temperature:\s*(\d+)', content)
+            if temp_match:
+                battery_data['temperature'] = int(temp_match.group(1)) / 10  # 通常是十分之一度
+            
+            # 電壓
+            voltage_match = re.search(r'voltage:\s*(\d+)', content)
+            if voltage_match:
+                battery_data['voltage'] = int(voltage_match.group(1))
+            
+            # 充電狀態
+            if 'status=charging' in content.lower() or 'plugged=' in content:
+                battery_data['charging'] = True
+            
+            # Wake locks
+            wake_lock_matches = re.findall(r'Wake lock\s+([^:]+):\s+(\d+)ms', content)
+            for name, duration in wake_lock_matches:
+                battery_data['wake_locks'].append({
+                    'name': name.strip(),
+                    'duration_ms': int(duration)
+                })
+                
+        except Exception as e:
+            print(f"Error parsing battery stats: {e}")
+        
+        return battery_data
+    
+    def _parse_network_stats(self, content: str) -> Dict:
+        """解析網路統計"""
+        network_data = {
+            'type': 'unknown',
+            'connected': False,
+            'signal_strength': 0,
+            'mobile_data': {},
+            'wifi_data': {}
+        }
+        
+        try:
+            # 網路類型
+            if 'WIFI' in content or 'wifi' in content:
+                network_data['type'] = 'wifi'
+            elif 'MOBILE' in content or 'mobile' in content:
+                network_data['type'] = 'mobile'
+            
+            # 連接狀態
+            if 'CONNECTED' in content or 'connected=true' in content:
+                network_data['connected'] = True
+            
+            # 信號強度
+            signal_match = re.search(r'(?:rssi|signal)[=:\s]+(-?\d+)', content)
+            if signal_match:
+                network_data['signal_strength'] = int(signal_match.group(1))
+            
+            # 移動數據使用
+            mobile_rx_match = re.search(r'Mobile\s+RX\s+bytes:\s*(\d+)', content)
+            mobile_tx_match = re.search(r'Mobile\s+TX\s+bytes:\s*(\d+)', content)
+            if mobile_rx_match:
+                network_data['mobile_data']['rx_bytes'] = int(mobile_rx_match.group(1))
+            if mobile_tx_match:
+                network_data['mobile_data']['tx_bytes'] = int(mobile_tx_match.group(1))
+            
+            # WiFi 數據使用
+            wifi_rx_match = re.search(r'(?:Wifi|WIFI)\s+RX\s+bytes:\s*(\d+)', content)
+            wifi_tx_match = re.search(r'(?:Wifi|WIFI)\s+TX\s+bytes:\s*(\d+)', content)
+            if wifi_rx_match:
+                network_data['wifi_data']['rx_bytes'] = int(wifi_rx_match.group(1))
+            if wifi_tx_match:
+                network_data['wifi_data']['tx_bytes'] = int(wifi_tx_match.group(1))
+                
+        except Exception as e:
+            print(f"Error parsing network stats: {e}")
+        
+        return network_data
     
     def integrate_metrics(self, anr_timestamp: str, log_directory: str) -> Dict:
         """整合 ANR 發生時的系統指標"""
@@ -3422,12 +3584,14 @@ class ParallelAnalyzer:
     def _analyze_file_async(self, file_path: str) -> Dict:
         """異步分析單個檔案"""
         try:
-            # 判斷檔案類型
+            # 執行完整分析
+            print(f"執行完整分析: {file_path}")
             file_type = self._determine_file_type(file_path)
             
-            # 創建分析器
+            # 延遲導入
+            from vp_analyze_logs_factory import AnalyzerFactory
             analyzer = AnalyzerFactory.create_analyzer(file_type)
-            
+
             # 執行分析
             result = analyzer.analyze(file_path)
             
@@ -3491,6 +3655,33 @@ class ParallelAnalyzer:
         
         return merged
 
+    def _analyze_file_async(self, file_path: str) -> Dict:
+        """異步分析單個檔案"""
+        try:
+            # 判斷檔案類型
+            file_type = self._determine_file_type(file_path)
+            
+            # 延遲導入避免循環引入
+            from vp_analyze_logs_factory import AnalyzerFactory
+            
+            # 創建分析器
+            analyzer = AnalyzerFactory.create_analyzer(file_type)
+            
+            # 執行分析
+            result = analyzer.analyze(file_path)
+            
+            return {
+                'file': file_path,
+                'type': file_type,
+                'result': result,
+                'status': 'success'
+            }
+        except Exception as e:
+            return {
+                'file': file_path,
+                'error': str(e),
+                'status': 'failed'
+            }
 
 class IncrementalAnalyzer:
     """增量分析器"""
@@ -3559,6 +3750,9 @@ class IncrementalAnalyzer:
         # 執行完整分析
         print(f"執行完整分析: {file_path}")
         file_type = self._determine_file_type(file_path)
+        
+        # 延遲導入
+        from vp_analyze_logs_factory import AnalyzerFactory
         analyzer = AnalyzerFactory.create_analyzer(file_type)
         
         # 分析並解析結果
