@@ -20,11 +20,10 @@ import traceback
 
 # 導入基礎類別
 from vp_analyze_logs_base import (
-    SourceLink, SourceLinker, ANRTimeouts, ThreadInfo, 
-    ANRType, CrashSignal, ThreadState, ANRInfo, TombstoneInfo
+    SourceLink, SourceLinker, ANRTimeouts, ThreadInfo, ANRType, CrashSignal, ThreadState, ANRInfo, TombstoneInfo
 )
 
-from vp_analyze_logs_ext import TimelineAnalyzer,CrossProcessAnalyzer,MLAnomalyDetector,RootCausePredictor,RiskAssessmentEngine,TrendAnalyzer,SystemMetricsIntegrator,SourceCodeAnalyzer,CodeFixGenerator,ConfigurationOptimizer,ComparativeAnalyzer,ParallelAnalyzer,IncrementalAnalyzer,VisualizationGenerator,ExecutiveSummaryGenerator
+from vp_analyze_logs_ext import PerformanceBottleneckDetector, BinderCallChainAnalyzer, ThreadDependencyAnalyzer, TimelineAnalyzer,CrossProcessAnalyzer,MLAnomalyDetector,RootCausePredictor,RiskAssessmentEngine,TrendAnalyzer,SystemMetricsIntegrator,SourceCodeAnalyzer,CodeFixGenerator,ConfigurationOptimizer,ComparativeAnalyzer,ParallelAnalyzer,IncrementalAnalyzer,VisualizationGenerator,ExecutiveSummaryGenerator
 
 # ============= 工具函數 =============
 
@@ -251,12 +250,48 @@ class ANRAnalyzer(BaseAnalyzer):
         """提取進程資訊"""
         info = {}
         
-        # 嘗試多種模式提取進程名稱和 PID
+        # 特別處理您的日誌格式
+        # 1. 提取 PID 和時間戳
+        pid_patterns = [
+            r'----- pid (\d+) at ([\d-]+\s+[\d:.]+[\+\-]\d+)',  # 完整格式
+            r'----- dumping pid:\s*(\d+)',  # dumping 格式
+        ]
+        
+        for pattern in pid_patterns:
+            match = re.search(pattern, content)
+            if match:
+                info['pid'] = match.group(1)
+                if len(match.groups()) > 1:  # 如果有時間戳
+                    timestamp = match.group(2)
+                    # 移除時區，保留主要時間
+                    info['timestamp'] = re.sub(r'[\+\-]\d+$', '', timestamp).strip()
+                break
+        
+        # 2. 提取進程名（從 Cmd line）
+        cmdline_match = re.search(r'Cmd line:\s*([^\s\n]+)', content)
+        if cmdline_match:
+            info['process_name'] = cmdline_match.group(1)
+        
+        # 3. 提取 Build fingerprint
+        fingerprint_match = re.search(r"Build fingerprint:\s*'([^']+)'", content)
+        if fingerprint_match:
+            info['build_fingerprint'] = fingerprint_match.group(1)
+        
+        # 4. 提取 ABI
+        abi_match = re.search(r"ABI:\s*'([^']+)'", content)
+        if abi_match:
+            info['abi'] = abi_match.group(1)
+        
+        # 如果上面的特殊處理已經找到了基本資訊，可以返回
+        if 'pid' in info and 'process_name' in info:
+            print(f"提取的進程資訊: {info}")
+            return info
+        
+        # 否則嘗試其他標準格式
         patterns = [
             # 標準 ANR 格式
             r'ANR in\s+([^\s,]+).*?(?:PID:\s*(\d+))?',
             r'Process:\s*([^\s,]+).*?(?:PID:\s*(\d+))?',
-            r'Cmd line:\s*([^\s]+)',
             r'ProcessRecord\{[^}]+\s+(\d+):([^/]+)',
             # Subject 行格式
             r'Subject:\s*ANR.*?Process:\s*([^\s]+)',
@@ -300,18 +335,19 @@ class ANRAnalyzer(BaseAnalyzer):
             if package_match:
                 info['process_name'] = package_match.group(1)
         
-        # 提取時間戳
-        timestamp_patterns = [
-            r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
-            r'(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
-            r'Time:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
-        ]
-        
-        for pattern in timestamp_patterns:
-            timestamp_match = re.search(pattern, content)
-            if timestamp_match:
-                info['timestamp'] = timestamp_match.group(1)
-                break
+        # 提取時間戳（如果還沒有）
+        if 'timestamp' not in info:
+            timestamp_patterns = [
+                r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
+                r'(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
+                r'Time:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
+            ]
+            
+            for pattern in timestamp_patterns:
+                timestamp_match = re.search(pattern, content)
+                if timestamp_match:
+                    info['timestamp'] = timestamp_match.group(1)
+                    break
         
         # 提取原因
         reason_patterns = [
@@ -391,6 +427,60 @@ class ANRAnalyzer(BaseAnalyzer):
     
     def _try_parse_thread(self, line: str, idx: int, lines: List[str]) -> Optional[ThreadInfo]:
         """嘗試解析線程資訊"""
+        # 您的日誌格式: "GmsDynamite" prio=5 tid=46 Waiting
+        thread_match = re.match(r'"([^"]+)"\s+prio=(\d+)\s+tid=(\d+)\s+(\w+)', line)
+        if thread_match:
+            name = thread_match.group(1)
+            prio = thread_match.group(2)
+            tid = thread_match.group(3)
+            state_str = thread_match.group(4)
+            
+            thread_info = ThreadInfo(
+                name=name,
+                tid=tid,
+                prio=prio,
+                state=self._parse_thread_state(state_str)
+            )
+            
+            # 從後續行提取 sysTid 和其他資訊
+            for i in range(idx + 1, min(idx + 5, len(lines))):
+                next_line = lines[i]
+                
+                # 提取 sysTid
+                systid_match = re.search(r'sysTid=(\d+)', next_line)
+                if systid_match:
+                    thread_info.sysTid = systid_match.group(1)
+                
+                # 提取 state (更詳細的狀態)
+                state_match = re.search(r'\|\s+state=([A-Z])', next_line)
+                if state_match:
+                    # 如果有更詳細的狀態，更新它
+                    detailed_state = self._parse_thread_state(state_match.group(1))
+                    if detailed_state != ThreadState.UNKNOWN:
+                        thread_info.state = detailed_state
+                
+                # 提取 utm 和 stm
+                utm_match = re.search(r'utm=(\d+)', next_line)
+                stm_match = re.search(r'stm=(\d+)', next_line)
+                if utm_match:
+                    thread_info.utm = utm_match.group(1)
+                if stm_match:
+                    thread_info.stm = stm_match.group(1)
+                
+                # 提取 schedstat
+                schedstat_match = re.search(r'schedstat=\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\)', next_line)
+                if schedstat_match:
+                    runtime = int(schedstat_match.group(1)) / 1000000  # 轉換為毫秒
+                    waittime = int(schedstat_match.group(2)) / 1000000
+                    thread_info.schedstat = f"運行:{runtime:.1f}ms 等待:{waittime:.1f}ms"
+                
+                # 如果遇到下一個線程，停止
+                if re.match(r'"[^"]+".*tid=\d+', next_line):
+                    break
+            
+            return thread_info
+        
+        # 嘗試其他格式
         for pattern in self.patterns['thread_patterns']:
             match = re.search(pattern, line)
             if match:
@@ -2396,15 +2486,29 @@ class ANRReportGenerator:
         known_patterns = self.intelligent_engine.match_known_patterns(self.anr_info)
         if known_patterns:
             self.report_lines.append("\n🎯 匹配的已知問題模式:")
-            for pattern in known_patterns[:3]:  # 顯示前3個最匹配的
-                self.report_lines.append(
-                    f"\n  📌 {pattern['root_cause']} "
-                    f"(信心度: {pattern['confidence']*100:.0f}%)"
-                )
-                self.report_lines.append(f"     嚴重性: {pattern['severity']}")
-                self.report_lines.append("     解決方案:")
-                for solution in pattern['solutions']:
-                    self.report_lines.append(f"       • {solution}")
+            for pattern in known_patterns[:3]:
+                # 處理兩種不同的模式格式
+                if 'root_cause' in pattern:
+                    # analysis_patterns 格式
+                    self.report_lines.append(
+                        f"\n  📌 {pattern['root_cause']} "
+                        f"(信心度: {pattern['confidence']*100:.0f}%)"
+                    )
+                    self.report_lines.append(f"     嚴重性: {pattern.get('severity', '未知')}")
+                    self.report_lines.append("     解決方案:")
+                    solutions = pattern.get('solutions', [])
+                    for solution in solutions:
+                        self.report_lines.append(f"       • {solution}")
+                else:
+                    # known_issues_db 格式
+                    self.report_lines.append(
+                        f"\n  📌 {pattern.get('description', '已知問題')} "
+                        f"(信心度: {pattern['confidence']*100:.0f}%)"
+                    )
+                    if 'workarounds' in pattern:
+                        self.report_lines.append("     處理方法:")
+                        for workaround in pattern['workarounds']:
+                            self.report_lines.append(f"       • {workaround}")
         
         # 時序分析
         self._add_timeline_analysis()
@@ -2549,6 +2653,10 @@ class ANRReportGenerator:
         """總結線程資訊"""
         summary_parts = [f"{thread.name} (tid={thread.tid}"]
         
+        # 添加系統線程 ID
+        if thread.sysTid:
+            summary_parts.append(f"sysTid={thread.sysTid}")
+        
         # 添加優先級
         if thread.prio and thread.prio != "N/A":
             summary_parts.append(f"prio={thread.prio}")
@@ -2574,7 +2682,7 @@ class ANRReportGenerator:
             else:
                 extra_info.append(f"持有 {len(thread.held_locks)} 個鎖")
         
-        # 添加 CPU 時間資訊（如果有）
+        # 添加 CPU 時間資訊
         if thread.schedstat:
             extra_info.append(thread.schedstat)
         elif thread.utm and thread.stm:
@@ -4856,33 +4964,45 @@ class LogAnalyzerSystem:
             :root {{
                 --primary-color: #10a37f;
                 --primary-hover: #0d8f6f;
-                --background: #ffffff;
-                --surface: #f7f7f8;
-                --border: #e5e5e5;
-                --text-primary: #2d2d2d;
-                --text-secondary: #666666;
-                --text-muted: #999999;
-                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-                --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-                --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-                --radius: 8px;
-                --transition: all 0.2s ease;
-                --anr-color: #dc3545;
-                --anr-bg: #f8d7da;
-                --tombstone-color: #6f42c1;
-                --tombstone-bg: #e2d5f1;
+                --background: #f8f9fa;
+                --surface: #ffffff;
+                --border: #e9ecef;
+                --text-primary: #212529;
+                --text-secondary: #6c757d;
+                --text-muted: #adb5bd;
+                --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+                --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+                --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+                --radius: 12px;
+                --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                
+                /* ANR 相關顏色 */
+                --anr-primary: #e74c3c;
+                --anr-light: #fff5f5;
+                --anr-medium: #fee0e0;
+                --anr-dark: #c0392b;
+                --anr-gradient: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                
+                /* Tombstone 相關顏色 */
+                --tombstone-primary: #8e44ad;
+                --tombstone-light: #f8f3ff;
+                --tombstone-medium: #e8d5ff;
+                --tombstone-dark: #6c3483;
+                --tombstone-gradient: linear-gradient(135deg, #8e44ad 0%, #6c3483 100%);
             }}
             
             @media (prefers-color-scheme: dark) {{
                 :root {{
-                    --background: #1a1a1a;
-                    --surface: #2a2a2a;
-                    --border: #404040;
-                    --text-primary: #ffffff;
-                    --text-secondary: #c5c5c5;
-                    --text-muted: #8e8e8e;
-                    --anr-bg: #3a1f23;
-                    --tombstone-bg: #2d2440;
+                    --background: #0d1117;
+                    --surface: #161b22;
+                    --border: #30363d;
+                    --text-primary: #f0f6fc;
+                    --text-secondary: #8b949e;
+                    --text-muted: #6e7681;
+                    --anr-light: #2d1f1f;
+                    --anr-medium: #3d2828;
+                    --tombstone-light: #2a1f3d;
+                    --tombstone-medium: #3a2d4d;
                 }}
             }}
             
@@ -4894,198 +5014,415 @@ class LogAnalyzerSystem:
                 min-height: 100vh;
             }}
             
+            /* 添加背景圖案 */
+            body::before {{
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-image: 
+                    radial-gradient(circle at 20% 80%, rgba(233, 30, 99, 0.03) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 20%, rgba(156, 39, 176, 0.03) 0%, transparent 50%),
+                    radial-gradient(circle at 40% 40%, rgba(33, 150, 243, 0.03) 0%, transparent 50%);
+                pointer-events: none;
+                z-index: -1;
+            }}
+            
             .container {{
                 max-width: 1200px;
                 margin: 0 auto;
                 padding: 0 20px;
             }}
             
-            /* Header */
+            /* Header - 增強版 */
             .header {{
-                padding: 40px 0;
-                border-bottom: 1px solid var(--border);
-                margin-bottom: 32px;
+                padding: 60px 0 40px;
+                position: relative;
+                overflow: hidden;
+            }}
+            
+            .header::before {{
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: linear-gradient(45deg, 
+                    rgba(231, 76, 60, 0.05) 0%, 
+                    rgba(142, 68, 173, 0.05) 50%, 
+                    rgba(52, 152, 219, 0.05) 100%);
+                animation: gradientShift 15s ease infinite;
+                z-index: -1;
+            }}
+            
+            @keyframes gradientShift {{
+                0%, 100% {{ transform: rotate(0deg) scale(1); }}
+                50% {{ transform: rotate(180deg) scale(1.5); }}
             }}
             
             .header h1 {{
-                font-size: 32px;
-                font-weight: 600;
-                margin-bottom: 8px;
-                color: var(--text-primary);
+                font-size: 48px;
+                font-weight: 700;
+                margin-bottom: 12px;
+                background: linear-gradient(135deg, #e74c3c 0%, #8e44ad 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                letter-spacing: -0.5px;
             }}
             
             .header .subtitle {{
-                font-size: 16px;
+                font-size: 18px;
                 color: var(--text-secondary);
-                margin-bottom: 24px;
+                margin-bottom: 32px;
+                opacity: 0.9;
             }}
             
-            /* Stats Grid */
+            /* Stats Grid - 動態卡片 */
             .stats-grid {{
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 16px;
-                margin-bottom: 40px;
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                gap: 20px;
+                margin-bottom: 48px;
             }}
             
             .stat-card {{
                 background: var(--surface);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
-                padding: 20px;
+                padding: 28px;
+                position: relative;
+                overflow: hidden;
                 transition: var(--transition);
+                cursor: pointer;
+            }}
+            
+            .stat-card::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: var(--primary-color);
+                transform: scaleX(0);
+                transform-origin: left;
+                transition: transform 0.3s ease;
             }}
             
             .stat-card:hover {{
-                box-shadow: var(--shadow-md);
-                border-color: var(--primary-color);
+                transform: translateY(-4px);
+                box-shadow: var(--shadow-lg);
+                border-color: transparent;
+            }}
+            
+            .stat-card:hover::before {{
+                transform: scaleX(1);
             }}
             
             .stat-card .label {{
                 font-size: 14px;
                 color: var(--text-secondary);
-                margin-bottom: 4px;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-weight: 600;
             }}
             
             .stat-card .value {{
-                font-size: 28px;
-                font-weight: 600;
-                color: var(--primary-color);
+                font-size: 36px;
+                font-weight: 700;
+                background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
             }}
             
-            /* Main Content */
-            .main-content {{
-                margin-bottom: 40px;
+            /* Features Section - 改進版 */
+            .features {{
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 32px;
+                margin-bottom: 48px;
+                position: relative;
+                overflow: hidden;
             }}
             
-            .section-header {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 24px;
+            .features::before {{
+                content: '🚀';
+                position: absolute;
+                right: -20px;
+                top: -20px;
+                font-size: 120px;
+                opacity: 0.05;
+                transform: rotate(15deg);
             }}
             
-            .section-header h2 {{
+            .features h3 {{
                 font-size: 24px;
-                font-weight: 600;
+                font-weight: 700;
+                margin-bottom: 24px;
                 color: var(--text-primary);
             }}
             
-            /* File Browser */
+            .features ul {{
+                list-style: none;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                gap: 16px;
+            }}
+            
+            .features li {{
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                font-size: 15px;
+                color: var(--text-secondary);
+                padding: 8px 0;
+                transition: var(--transition);
+            }}
+            
+            .features li:hover {{
+                color: var(--text-primary);
+                transform: translateX(4px);
+            }}
+            
+            .features li::before {{
+                content: "✨";
+                color: var(--primary-color);
+                font-weight: bold;
+                flex-shrink: 0;
+                animation: sparkle 2s ease infinite;
+            }}
+            
+            @keyframes sparkle {{
+                0%, 100% {{ opacity: 1; transform: scale(1); }}
+                50% {{ opacity: 0.6; transform: scale(0.8); }}
+            }}
+            
+            /* File Browser - 全新設計 */
             .file-browser {{
                 background: var(--surface);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
                 overflow: hidden;
+                box-shadow: var(--shadow-sm);
             }}
             
-            .file-item, .folder-item {{
+            /* ANR 和 Tombstone 項目 - 增強版 */
+            .file-item {{
+                position: relative;
                 border-bottom: 1px solid var(--border);
                 transition: var(--transition);
+                overflow: hidden;
             }}
             
-            .file-item:last-child, .folder-item:last-child {{
+            .file-item:last-child {{
                 border-bottom: none;
             }}
             
-            .file-item:hover {{
-                background: var(--background);
-            }}
-            
-            /* ANR 和 Tombstone 檔案的不同顏色 */
+            /* ANR 項目樣式 */
             .anr-item {{
-                background-color: var(--anr-bg);
+                background: linear-gradient(to right, var(--anr-light) 0%, transparent 100%);
             }}
             
+            .anr-item::before {{
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 4px;
+                background: var(--anr-gradient);
+                transition: width 0.3s ease;
+            }}
+            
+            .anr-item:hover {{
+                background: linear-gradient(to right, var(--anr-medium) 0%, var(--anr-light) 100%);
+                transform: translateX(8px);
+            }}
+            
+            .anr-item:hover::before {{
+                width: 8px;
+            }}
+            
+            /* Tombstone 項目樣式 */
             .tombstone-item {{
-                background-color: var(--tombstone-bg);
+                background: linear-gradient(to right, var(--tombstone-light) 0%, transparent 100%);
             }}
             
+            .tombstone-item::before {{
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 4px;
+                background: var(--tombstone-gradient);
+                transition: width 0.3s ease;
+            }}
+            
+            .tombstone-item:hover {{
+                background: linear-gradient(to right, var(--tombstone-medium) 0%, var(--tombstone-light) 100%);
+                transform: translateX(8px);
+            }}
+            
+            .tombstone-item:hover::before {{
+                width: 8px;
+            }}
+            
+            /* 檔案內容區域 */
             .file-content {{
-                padding: 16px 20px;
+                padding: 20px 24px;
                 display: flex;
                 align-items: center;
-                gap: 12px;
+                gap: 16px;
+                position: relative;
+                z-index: 1;
             }}
             
+            /* 檔案圖標 - 動態效果 */
             .file-icon {{
-                font-size: 20px;
+                font-size: 32px;
                 flex-shrink: 0;
+                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+                transition: var(--transition);
+                animation: pulse 2s ease infinite;
             }}
             
+            @keyframes pulse {{
+                0%, 100% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.05); }}
+            }}
+            
+            .file-item:hover .file-icon {{
+                transform: scale(1.1) rotate(5deg);
+            }}
+            
+            .anr-item .file-icon {{
+                color: var(--anr-primary);
+            }}
+            
+            .tombstone-item .file-icon {{
+                color: var(--tombstone-primary);
+            }}
+            
+            /* 檔案資訊 */
             .file-info {{
                 flex: 1;
                 min-width: 0;
             }}
             
             .file-name {{
-                font-size: 15px;
-                font-weight: 500;
+                font-size: 16px;
+                font-weight: 600;
                 color: var(--text-primary);
                 text-decoration: none;
                 display: block;
-                margin-bottom: 4px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                margin-bottom: 6px;
                 transition: var(--transition);
+                position: relative;
+            }}
+            
+            .file-name::after {{
+                content: '→';
+                position: absolute;
+                right: 0;
+                opacity: 0;
+                transform: translateX(-10px);
+                transition: var(--transition);
+            }}
+            
+            .file-item:hover .file-name::after {{
+                opacity: 1;
+                transform: translateX(0);
             }}
             
             .file-name:hover {{
                 color: var(--primary-color);
             }}
             
+            /* 檔案 Meta 資訊 */
             .file-meta {{
                 display: flex;
                 align-items: center;
-                gap: 12px;
-                font-size: 13px;
+                gap: 16px;
+                font-size: 14px;
             }}
             
             .file-type {{
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-weight: 500;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 600;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
                 color: white;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: var(--transition);
+            }}
+            
+            .file-item:hover .file-type {{
+                transform: scale(1.05);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
             }}
             
             .file-type-anr {{
-                background: var(--anr-color);
+                background: var(--anr-gradient);
             }}
             
             .file-type-tombstone {{
-                background: var(--tombstone-color);
+                background: var(--tombstone-gradient);
             }}
             
             .source-link {{
                 color: var(--text-secondary);
                 text-decoration: none;
                 transition: var(--transition);
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }}
+            
+            .source-link::before {{
+                content: '📄';
+                font-size: 16px;
+                opacity: 0.7;
             }}
             
             .source-link:hover {{
                 color: var(--primary-color);
-                text-decoration: underline;
+                transform: translateY(-2px);
             }}
             
-            /* Folder */
-            .folder-header {{
-                padding: 16px 20px;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                cursor: pointer;
-                user-select: none;
+            /* Folder 樣式 */
+            .folder-item {{
+                border-bottom: 1px solid var(--border);
                 transition: var(--transition);
             }}
             
+            .folder-header {{
+                padding: 20px 24px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                cursor: pointer;
+                user-select: none;
+                transition: var(--transition);
+                position: relative;
+            }}
+            
             .folder-header:hover {{
-                background: var(--background);
+                background: rgba(0, 0, 0, 0.02);
             }}
             
             .folder-arrow {{
                 color: var(--text-secondary);
-                transition: transform 0.2s ease;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 flex-shrink: 0;
             }}
             
@@ -5094,90 +5431,135 @@ class LogAnalyzerSystem:
             }}
             
             .folder-icon {{
-                font-size: 20px;
+                font-size: 24px;
                 flex-shrink: 0;
+                transition: var(--transition);
+            }}
+            
+            .folder-header:hover .folder-icon {{
+                transform: scale(1.1);
             }}
             
             .folder-name {{
-                font-size: 15px;
-                font-weight: 500;
+                font-size: 16px;
+                font-weight: 600;
                 color: var(--text-primary);
                 flex: 1;
             }}
             
             .folder-count {{
-                font-size: 13px;
+                font-size: 14px;
                 color: var(--text-muted);
+                background: var(--background);
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 500;
             }}
             
             .folder-content {{
-                background: var(--background);
+                background: rgba(0, 0, 0, 0.02);
                 border-top: 1px solid var(--border);
-                padding-left: 20px;
+                padding-left: 24px;
+                animation: slideDown 0.3s ease;
             }}
             
-            /* Features */
-            .features {{
-                background: var(--surface);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                padding: 24px;
+            @keyframes slideDown {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
+            }}
+            
+            /* Section Header - 新增 */
+            .section-header {{
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
                 margin-bottom: 32px;
+                padding-bottom: 16px;
+                border-bottom: 2px solid var(--border);
             }}
             
-            .features h3 {{
-                font-size: 18px;
-                font-weight: 600;
-                margin-bottom: 16px;
+            .section-header h2 {{
+                font-size: 28px;
+                font-weight: 700;
                 color: var(--text-primary);
-            }}
-            
-            .features ul {{
-                list-style: none;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                display: flex;
+                align-items: center;
                 gap: 12px;
             }}
             
-            .features li {{
-                display: flex;
-                align-items: flex-start;
-                gap: 8px;
-                font-size: 14px;
-                color: var(--text-secondary);
-            }}
-            
-            .features li::before {{
-                content: "✓";
-                color: var(--primary-color);
-                font-weight: bold;
-                flex-shrink: 0;
-            }}
-            
-            /* Footer */
+            /* Footer - 改進版 */
             .footer {{
-                padding: 32px 0;
+                padding: 48px 0;
                 border-top: 1px solid var(--border);
                 text-align: center;
                 color: var(--text-secondary);
                 font-size: 14px;
+                position: relative;
+            }}
+            
+            .footer::before {{
+                content: '🚀';
+                position: absolute;
+                left: 50%;
+                top: -20px;
+                transform: translateX(-50%);
+                background: var(--background);
+                padding: 0 20px;
+                font-size: 32px;
+            }}
+            
+            /* Loading Animation */
+            @keyframes loading {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
             }}
             
             /* Responsive */
             @media (max-width: 768px) {{
                 .header h1 {{
-                    font-size: 24px;
+                    font-size: 32px;
                 }}
                 
                 .stats-grid {{
                     grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
                 }}
                 
                 .features ul {{
                     grid-template-columns: 1fr;
                 }}
+                
+                .file-content {{
+                    padding: 16px 20px;
+                }}
+                
+                .file-icon {{
+                    font-size: 24px;
+                }}
             }}
-        </style>
+            
+            /* Dark mode adjustments */
+            @media (prefers-color-scheme: dark) {{
+                .file-item:hover {{
+                    background-color: rgba(255, 255, 255, 0.05);
+                }}
+                
+                .folder-header:hover {{
+                    background: rgba(255, 255, 255, 0.03);
+                }}
+                
+                .stat-card {{
+                    background: rgba(255, 255, 255, 0.05);
+                    border-color: rgba(255, 255, 255, 0.1);
+                }}
+            }}
+        </style>        
     </head>
     <body>
         <div class="container">
@@ -6162,688 +6544,6 @@ class HTMLReportGenerator:
         """生成完整的 HTML"""
         return ''.join(self.html_parts)
                             
-class BinderCallChainAnalyzer:
-    """Binder 調用鏈分析器"""
-    
-    def __init__(self):
-        self.binder_services = {
-            'WindowManagerService': {
-                'methods': ['getWindowInsets', 'addWindow', 'removeWindow', 'relayoutWindow'],
-                'avg_latency_ms': 50,
-                'timeout_ms': 5000
-            },
-            'ActivityManagerService': {
-                'methods': ['startActivity', 'bindService', 'getRunningTasks', 'broadcastIntent'],
-                'avg_latency_ms': 100,
-                'timeout_ms': 10000
-            },
-            'PackageManagerService': {
-                'methods': ['getPackageInfo', 'queryIntentActivities', 'getApplicationInfo'],
-                'avg_latency_ms': 200,
-                'timeout_ms': 20000
-            }
-        }
-    
-    def analyze_binder_chain(self, backtrace: List[str]) -> Dict:
-        """分析 Binder 調用鏈"""
-        chain_info = {
-            'call_sequence': [],
-            'total_latency': 0,
-            'bottlenecks': [],
-            'cross_process_calls': 0,
-            'recommendation': ''
-        }
-        
-        # 解析調用序列
-        for i, frame in enumerate(backtrace):
-            if self._is_binder_call(frame):
-                call_detail = self._extract_binder_detail(frame, backtrace[i:i+5])
-                chain_info['call_sequence'].append(call_detail)
-                chain_info['cross_process_calls'] += 1
-                
-                # 檢測瓶頸
-                if call_detail.get('estimated_latency', 0) > 1000:  # 超過1秒
-                    chain_info['bottlenecks'].append({
-                        'service': call_detail['service'],
-                        'method': call_detail['method'],
-                        'latency': call_detail['estimated_latency'],
-                        'reason': self._analyze_bottleneck_reason(call_detail)
-                    })
-        
-        # 計算總延遲
-        chain_info['total_latency'] = sum(
-            call.get('estimated_latency', 0) for call in chain_info['call_sequence']
-        )
-        
-        # 生成建議
-        chain_info['recommendation'] = self._generate_binder_recommendation(chain_info)
-        
-        return chain_info
-    
-    def _is_binder_call(self, frame: str) -> bool:
-        """檢查是否為 Binder 調用"""
-        binder_indicators = [
-            'BinderProxy', 'Binder.transact', 'IPCThreadState',
-            'IInterface', 'AIDL', 'onTransact'
-        ]
-        return any(indicator in frame for indicator in binder_indicators)
-    
-    def _extract_binder_detail(self, frame: str, context: List[str]) -> Dict:
-        """提取 Binder 調用詳情"""
-        detail = {
-            'frame': frame,
-            'service': 'Unknown',
-            'method': 'Unknown',
-            'transaction_code': None,
-            'estimated_latency': 100  # 預設 100ms
-        }
-        
-        # 識別服務
-        for service_name, service_info in self.binder_services.items():
-            if service_name in ''.join(context):
-                detail['service'] = service_name
-                detail['estimated_latency'] = service_info['avg_latency_ms']
-                
-                # 識別方法
-                for method in service_info['methods']:
-                    if method in ''.join(context):
-                        detail['method'] = method
-                        break
-                break
-        
-        # 提取事務碼
-        transaction_match = re.search(r'code=(\d+)', frame)
-        if transaction_match:
-            detail['transaction_code'] = int(transaction_match.group(1))
-        
-        return detail
-    
-    def _analyze_bottleneck_reason(self, call_detail: Dict) -> str:
-        """分析瓶頸原因"""
-        service = call_detail.get('service', 'Unknown')
-        
-        if service == 'WindowManagerService':
-            return 'WindowManager 可能因為大量窗口操作或動畫導致延遲'
-        elif service == 'ActivityManagerService':
-            return 'ActivityManager 可能因為進程啟動或服務綁定導致延遲'
-        elif service == 'PackageManagerService':
-            return 'PackageManager 可能因為包掃描或權限檢查導致延遲'
-        
-        return '跨進程通信延遲'
-    
-    def _generate_binder_recommendation(self, chain_info: Dict) -> str:
-        """生成 Binder 優化建議"""
-        recommendations = []
-        
-        if chain_info['cross_process_calls'] > 5:
-            recommendations.append('減少跨進程調用次數，考慮批量操作')
-        
-        if chain_info['total_latency'] > 3000:
-            recommendations.append('總延遲超過 3 秒，建議使用異步調用')
-        
-        for bottleneck in chain_info['bottlenecks']:
-            if bottleneck['service'] == 'WindowManagerService':
-                recommendations.append('優化 UI 更新邏輯，避免頻繁的窗口操作')
-            elif bottleneck['service'] == 'PackageManagerService':
-                recommendations.append('快取包資訊，避免重複查詢')
-        
-        return ' | '.join(recommendations) if recommendations else '無特殊優化建議'
-
-class ThreadDependencyAnalyzer:
-    """線程依賴關係分析器"""
-    
-    def __init__(self):
-        self.dependency_graph = {}
-        self.thread_states = {}
-    
-    def analyze_thread_dependencies(self, threads: List[ThreadInfo]) -> Dict:
-        """分析線程間的依賴關係"""
-        analysis = {
-            'dependency_graph': {},
-            'deadlock_cycles': [],
-            'blocking_chains': [],
-            'critical_paths': [],
-            'visualization': ''
-        }
-        
-        # 建立依賴圖
-        for thread in threads:
-            self._build_dependency_graph(thread)
-        
-        # 檢測死鎖循環
-        analysis['deadlock_cycles'] = self._detect_deadlock_cycles()
-        
-        # 找出阻塞鏈
-        analysis['blocking_chains'] = self._find_blocking_chains()
-        
-        # 識別關鍵路徑
-        analysis['critical_paths'] = self._identify_critical_paths()
-        
-        # 生成視覺化
-        analysis['visualization'] = self._generate_ascii_graph()
-        
-        analysis['dependency_graph'] = self.dependency_graph
-        
-        return analysis
-    
-    def _build_dependency_graph(self, thread: ThreadInfo):
-        """建立線程依賴圖"""
-        thread_id = thread.tid
-        self.thread_states[thread_id] = {
-            'name': thread.name,
-            'state': thread.state,
-            'priority': thread.prio,
-            'waiting_on': [],
-            'holding': thread.held_locks.copy()
-        }
-        
-        # 解析等待關係
-        if thread.waiting_info:
-            match = re.search(r'held by (?:thread\s+)?(\d+)', thread.waiting_info)
-            if match:
-                holder_tid = match.group(1)
-                self.thread_states[thread_id]['waiting_on'].append(holder_tid)
-                
-                if holder_tid not in self.dependency_graph:
-                    self.dependency_graph[holder_tid] = []
-                self.dependency_graph[holder_tid].append(thread_id)
-    
-    def _detect_deadlock_cycles(self) -> List[List[str]]:
-        """使用 DFS 檢測死鎖循環"""
-        visited = set()
-        rec_stack = set()
-        cycles = []
-        
-        def dfs(node, path):
-            visited.add(node)
-            rec_stack.add(node)
-            path.append(node)
-            
-            if node in self.dependency_graph:
-                for neighbor in self.dependency_graph[node]:
-                    if neighbor not in visited:
-                        result = dfs(neighbor, path.copy())
-                        if result:
-                            cycles.extend(result)
-                    elif neighbor in rec_stack:
-                        # 找到循環
-                        cycle_start = path.index(neighbor)
-                        cycle = path[cycle_start:] + [neighbor]
-                        cycles.append(cycle)
-            
-            rec_stack.remove(node)
-            return cycles
-        
-        for node in self.dependency_graph:
-            if node not in visited:
-                dfs(node, [])
-        
-        return cycles
-    
-    def _find_blocking_chains(self) -> List[Dict]:
-        """找出阻塞鏈"""
-        chains = []
-        
-        for tid, deps in self.dependency_graph.items():
-            if len(deps) > 2:  # 多個線程被阻塞
-                chain = {
-                    'blocker': tid,
-                    'blocker_name': self.thread_states.get(tid, {}).get('name', 'Unknown'),
-                    'blocked_threads': deps,
-                    'impact': len(deps),
-                    'severity': 'high' if len(deps) > 5 else 'medium'
-                }
-                chains.append(chain)
-        
-        return sorted(chains, key=lambda x: x['impact'], reverse=True)
-    
-    def _identify_critical_paths(self) -> List[Dict]:
-        """識別關鍵路徑"""
-        critical_paths = []
-        
-        # 找出主線程相關的路徑
-        main_tid = '1'
-        if main_tid in self.thread_states:
-            if self.thread_states[main_tid]['waiting_on']:
-                path = self._trace_dependency_path(main_tid)
-                if path:
-                    critical_paths.append({
-                        'type': 'main_thread_blocked',
-                        'path': path,
-                        'severity': 'critical'
-                    })
-        
-        # 找出高優先級線程的阻塞路徑
-        for tid, state in self.thread_states.items():
-            if state.get('priority') and state['priority'].isdigit():
-                if int(state['priority']) <= 5 and state['waiting_on']:
-                    path = self._trace_dependency_path(tid)
-                    if path:
-                        critical_paths.append({
-                            'type': 'high_priority_blocked',
-                            'path': path,
-                            'severity': 'high'
-                        })
-        
-        return critical_paths
-    
-    def _trace_dependency_path(self, start_tid: str) -> List[str]:
-        """追蹤依賴路徑"""
-        path = [start_tid]
-        current = start_tid
-        visited = set()
-        
-        while current in self.thread_states and self.thread_states[current]['waiting_on']:
-            if current in visited:
-                break  # 避免無限循環
-            visited.add(current)
-            
-            next_tid = self.thread_states[current]['waiting_on'][0]
-            path.append(next_tid)
-            current = next_tid
-        
-        return path
-    
-    def _generate_ascii_graph(self) -> str:
-        """生成 ASCII 依賴關係圖"""
-        lines = ["線程依賴關係圖:", "=" * 60]
-        
-        # 顯示死鎖
-        if hasattr(self, '_last_deadlock_cycles') and self._last_deadlock_cycles:
-            lines.append("\n🔴 死鎖檢測:")
-            for i, cycle in enumerate(self._last_deadlock_cycles, 1):
-                cycle_str = " → ".join([
-                    f"{tid}({self.thread_states.get(tid, {}).get('name', 'Unknown')})"
-                    for tid in cycle
-                ])
-                lines.append(f"  循環 {i}: {cycle_str}")
-        
-        # 顯示阻塞鏈
-        lines.append("\n🟡 主要阻塞鏈:")
-        for tid, state in self.thread_states.items():
-            if tid in self.dependency_graph and self.dependency_graph[tid]:
-                blocker_info = f"{tid}({state['name']})"
-                blocked_count = len(self.dependency_graph[tid])
-                lines.append(f"  {blocker_info} 阻塞了 {blocked_count} 個線程")
-        
-        # 顯示關鍵路徑
-        lines.append("\n🔵 關鍵路徑:")
-        for tid, state in self.thread_states.items():
-            if state['waiting_on'] and (tid == '1' or state.get('name') == 'main'):
-                path = self._trace_dependency_path(tid)
-                path_str = " → ".join([
-                    f"{t}({self.thread_states.get(t, {}).get('name', 'Unknown')[:15]})"
-                    for t in path[:5]
-                ])
-                if len(path) > 5:
-                    path_str += f" → ... ({len(path)-5} more)"
-                lines.append(f"  主線程路徑: {path_str}")
-                break
-        
-        return "\n".join(lines)
-
-class PerformanceBottleneckDetector:
-    """性能瓶頸檢測器"""
-    
-    def __init__(self):
-        self.bottleneck_thresholds = {
-            'cpu_usage': 80,  # CPU 使用率閾值
-            'memory_available_mb': 100,  # 可用記憶體閾值
-            'thread_count': 150,  # 線程數閾值
-            'blocked_threads': 5,  # 阻塞線程數閾值
-            'gc_pause_ms': 500,  # GC 暫停時間閾值
-            'binder_calls': 10,  # Binder 調用數閾值
-            'lock_contention': 3,  # 鎖競爭閾值
-        }
-        
-        self.bottleneck_scores = {
-            'critical': 90,
-            'high': 70,
-            'medium': 50,
-            'low': 30
-        }
-    
-    def detect_bottlenecks(self, anr_info: ANRInfo, content: str) -> Dict:
-        """檢測性能瓶頸"""
-        bottlenecks = {
-            'cpu_bottlenecks': self._detect_cpu_bottlenecks(anr_info),
-            'memory_bottlenecks': self._detect_memory_bottlenecks(anr_info),
-            'thread_bottlenecks': self._detect_thread_bottlenecks(anr_info),
-            'io_bottlenecks': self._detect_io_bottlenecks(anr_info, content),
-            'lock_bottlenecks': self._detect_lock_bottlenecks(anr_info),
-            'gc_bottlenecks': self._detect_gc_bottlenecks(content),
-            'overall_score': 0,
-            'top_issues': [],
-            'recommendations': []
-        }
-        
-        # 計算整體分數
-        bottlenecks['overall_score'] = self._calculate_overall_score(bottlenecks)
-        
-        # 識別主要問題
-        bottlenecks['top_issues'] = self._identify_top_issues(bottlenecks)
-        
-        # 生成建議
-        bottlenecks['recommendations'] = self._generate_recommendations(bottlenecks)
-        
-        return bottlenecks
-    
-    def _detect_cpu_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
-        """檢測 CPU 瓶頸"""
-        bottlenecks = []
-        
-        if anr_info.cpu_usage:
-            total_cpu = anr_info.cpu_usage.get('total', 0)
-            
-            if total_cpu > self.bottleneck_thresholds['cpu_usage']:
-                bottlenecks.append({
-                    'type': 'high_cpu_usage',
-                    'severity': 'critical' if total_cpu > 95 else 'high',
-                    'value': total_cpu,
-                    'description': f'CPU 使用率過高: {total_cpu:.1f}%',
-                    'impact': '系統響應緩慢，可能導致 ANR',
-                    'solutions': [
-                        '檢查是否有無限循環或過度計算',
-                        '使用 CPU Profiler 分析熱點函數',
-                        '考慮將計算密集型任務移至背景線程',
-                        '優化算法複雜度'
-                    ]
-                })
-            
-            # 檢查 load average
-            load_1min = anr_info.cpu_usage.get('load_1min', 0)
-            if load_1min > 4.0:
-                bottlenecks.append({
-                    'type': 'high_load_average',
-                    'severity': 'high',
-                    'value': load_1min,
-                    'description': f'系統負載過高: {load_1min}',
-                    'impact': '系統調度延遲增加',
-                    'solutions': [
-                        '減少並發任務數量',
-                        '優化線程池大小',
-                        '檢查是否有失控的進程'
-                    ]
-                })
-        
-        return bottlenecks
-    
-    def _detect_memory_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
-        """檢測記憶體瓶頸"""
-        bottlenecks = []
-        
-        if anr_info.memory_info:
-            available_mb = anr_info.memory_info.get('available', float('inf')) / 1024
-            
-            if available_mb < self.bottleneck_thresholds['memory_available_mb']:
-                severity = 'critical' if available_mb < 50 else 'high'
-                bottlenecks.append({
-                    'type': 'low_memory',
-                    'severity': severity,
-                    'value': available_mb,
-                    'description': f'可用記憶體不足: {available_mb:.1f} MB',
-                    'impact': '頻繁 GC，應用可能被系統殺死',
-                    'solutions': [
-                        '優化記憶體使用，釋放不必要的資源',
-                        '使用 Memory Profiler 查找記憶體洩漏',
-                        '實施圖片和資源的快取策略',
-                        '考慮使用 largeHeap 選項'
-                    ]
-                })
-            
-            # 檢查記憶體使用率
-            used_percent = anr_info.memory_info.get('used_percent', 0)
-            if used_percent > 85:
-                bottlenecks.append({
-                    'type': 'high_memory_usage',
-                    'severity': 'medium',
-                    'value': used_percent,
-                    'description': f'記憶體使用率高: {used_percent:.1f}%',
-                    'impact': '系統可能開始回收背景應用',
-                    'solutions': [
-                        '檢查大對象分配',
-                        '優化數據結構',
-                        '使用弱引用或軟引用'
-                    ]
-                })
-        
-        return bottlenecks
-    
-    def _detect_thread_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
-        """檢測線程瓶頸"""
-        bottlenecks = []
-        
-        thread_count = len(anr_info.all_threads)
-        if thread_count > self.bottleneck_thresholds['thread_count']:
-            bottlenecks.append({
-                'type': 'excessive_threads',
-                'severity': 'high' if thread_count > 200 else 'medium',
-                'value': thread_count,
-                'description': f'線程數過多: {thread_count} 個',
-                'impact': '線程調度開銷大，記憶體消耗高',
-                'solutions': [
-                    '使用線程池而非創建新線程',
-                    '檢查是否有線程洩漏',
-                    '合併相似任務到同一線程',
-                    '使用 Kotlin 協程減少線程使用'
-                ]
-            })
-        
-        # 檢測阻塞線程
-        blocked_threads = [t for t in anr_info.all_threads if t.state == ThreadState.BLOCKED]
-        if len(blocked_threads) > self.bottleneck_thresholds['blocked_threads']:
-            bottlenecks.append({
-                'type': 'thread_contention',
-                'severity': 'critical' if len(blocked_threads) > 10 else 'high',
-                'value': len(blocked_threads),
-                'description': f'{len(blocked_threads)} 個線程處於阻塞狀態',
-                'impact': '嚴重的線程競爭，可能存在死鎖',
-                'solutions': [
-                    '優化鎖的粒度',
-                    '使用無鎖數據結構',
-                    '避免嵌套鎖',
-                    '使用讀寫鎖替代互斥鎖'
-                ]
-            })
-        
-        # 檢測主線程問題
-        if anr_info.main_thread and anr_info.main_thread.state == ThreadState.BLOCKED:
-            bottlenecks.append({
-                'type': 'main_thread_blocked',
-                'severity': 'critical',
-                'value': 1,
-                'description': '主線程被阻塞',
-                'impact': '直接導致 ANR',
-                'solutions': [
-                    '立即將阻塞操作移至背景線程',
-                    '使用 Handler 或 AsyncTask',
-                    '檢查主線程的同步操作'
-                ]
-            })
-        
-        return bottlenecks
-    
-    def _detect_io_bottlenecks(self, anr_info: ANRInfo, content: str) -> List[Dict]:
-        """檢測 I/O 瓶頸"""
-        bottlenecks = []
-        
-        # 檢查主線程 I/O
-        if anr_info.main_thread:
-            io_operations = []
-            for frame in anr_info.main_thread.backtrace[:10]:
-                if any(io in frame for io in ['File', 'SQLite', 'SharedPreferences', 'Socket']):
-                    io_operations.append(frame)
-            
-            if io_operations:
-                bottlenecks.append({
-                    'type': 'main_thread_io',
-                    'severity': 'critical',
-                    'value': len(io_operations),
-                    'description': f'主線程執行 I/O 操作',
-                    'impact': '阻塞 UI 響應',
-                    'operations': io_operations[:3],  # 顯示前3個
-                    'solutions': [
-                        '使用異步 I/O API',
-                        '將檔案操作移至 WorkManager',
-                        'SharedPreferences 使用 apply() 而非 commit()',
-                        '使用 Room 的異步查詢'
-                    ]
-                })
-        
-        # 檢查過多的 Binder IPC
-        binder_count = content.count('BinderProxy')
-        if binder_count > self.bottleneck_thresholds['binder_calls']:
-            bottlenecks.append({
-                'type': 'excessive_binder_calls',
-                'severity': 'high',
-                'value': binder_count,
-                'description': f'過多的 Binder IPC 調用: {binder_count} 次',
-                'impact': '跨進程通信開銷大',
-                'solutions': [
-                    '批量處理系統服務調用',
-                    '快取服務查詢結果',
-                    '使用本地廣播替代系統廣播',
-                    '減少跨進程通信頻率'
-                ]
-            })
-        
-        return bottlenecks
-    
-    def _detect_lock_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
-        """檢測鎖瓶頸"""
-        bottlenecks = []
-        
-        # 統計等待鎖的線程
-        waiting_threads = [t for t in anr_info.all_threads if t.waiting_locks]
-        
-        if len(waiting_threads) > self.bottleneck_thresholds['lock_contention']:
-            # 分析鎖的持有情況
-            lock_holders = {}
-            for thread in anr_info.all_threads:
-                for lock in thread.held_locks:
-                    if lock not in lock_holders:
-                        lock_holders[lock] = []
-                    lock_holders[lock].append(thread)
-            
-            bottlenecks.append({
-                'type': 'lock_contention',
-                'severity': 'high',
-                'value': len(waiting_threads),
-                'description': f'{len(waiting_threads)} 個線程在等待鎖',
-                'impact': '並發性能差，可能導致死鎖',
-                'lock_analysis': {
-                    'total_waiting': len(waiting_threads),
-                    'unique_locks': len(lock_holders),
-                    'hot_locks': [lock for lock, holders in lock_holders.items() if len(holders) > 1]
-                },
-                'solutions': [
-                    '減小同步塊的範圍',
-                    '使用細粒度鎖',
-                    '考慮使用 ConcurrentHashMap 等併發集合',
-                    '使用讀寫鎖分離讀寫操作'
-                ]
-            })
-        
-        return bottlenecks
-    
-    def _detect_gc_bottlenecks(self, content: str) -> List[Dict]:
-        """檢測 GC 瓶頸"""
-        bottlenecks = []
-        
-        # 解析 GC 暫停時間
-        gc_pauses = re.findall(r'paused\s+(\d+)ms', content)
-        if gc_pauses:
-            total_pause = sum(int(pause) for pause in gc_pauses)
-            max_pause = max(int(pause) for pause in gc_pauses)
-            
-            if total_pause > self.bottleneck_thresholds['gc_pause_ms']:
-                bottlenecks.append({
-                    'type': 'excessive_gc',
-                    'severity': 'high' if total_pause > 1000 else 'medium',
-                    'value': total_pause,
-                    'description': f'GC 暫停時間過長: 總計 {total_pause}ms, 最大 {max_pause}ms',
-                    'impact': 'UI 卡頓，響應延遲',
-                    'gc_stats': {
-                        'count': len(gc_pauses),
-                        'total_pause': total_pause,
-                        'max_pause': max_pause,
-                        'avg_pause': total_pause // len(gc_pauses) if gc_pauses else 0
-                    },
-                    'solutions': [
-                        '減少對象分配，特別是大對象',
-                        '使用對象池重用對象',
-                        '避免在循環中創建對象',
-                        '優化 Bitmap 使用和回收'
-                    ]
-                })
-        
-        return bottlenecks
-    
-    def _calculate_overall_score(self, bottlenecks: Dict) -> int:
-        """計算整體瓶頸分數"""
-        score = 100
-        
-        # 根據各類瓶頸扣分
-        for category, issues in bottlenecks.items():
-            if isinstance(issues, list):
-                for issue in issues:
-                    severity = issue.get('severity', 'low')
-                    if severity == 'critical':
-                        score -= 30
-                    elif severity == 'high':
-                        score -= 20
-                    elif severity == 'medium':
-                        score -= 10
-                    else:
-                        score -= 5
-        
-        return max(0, score)
-    
-    def _identify_top_issues(self, bottlenecks: Dict) -> List[Dict]:
-        """識別最主要的問題"""
-        all_issues = []
-        
-        for category, issues in bottlenecks.items():
-            if isinstance(issues, list):
-                for issue in issues:
-                    issue['category'] = category
-                    all_issues.append(issue)
-        
-        # 按嚴重性排序
-        severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
-        all_issues.sort(key=lambda x: severity_order.get(x.get('severity', 'low'), 3))
-        
-        return all_issues[:5]  # 返回前5個最嚴重的問題
-    
-    def _generate_recommendations(self, bottlenecks: Dict) -> List[str]:
-        """生成優化建議"""
-        recommendations = []
-        
-        # 基於整體分數
-        score = bottlenecks['overall_score']
-        if score < 30:
-            recommendations.append('🚨 系統存在嚴重性能問題，需要立即優化')
-        elif score < 60:
-            recommendations.append('⚠️ 系統性能不佳，建議進行全面優化')
-        elif score < 80:
-            recommendations.append('💡 系統有優化空間，建議針對性改進')
-        else:
-            recommendations.append('✅ 系統性能良好，繼續保持')
-        
-        # 基於具體問題
-        top_issues = bottlenecks.get('top_issues', [])
-        if any(issue['type'] == 'main_thread_blocked' for issue in top_issues):
-            recommendations.insert(0, '🔴 首要任務：解決主線程阻塞問題')
-        
-        if any(issue['type'] == 'excessive_gc' for issue in top_issues):
-            recommendations.append('♻️ 優先優化記憶體分配策略')
-        
-        if any(issue['type'] == 'thread_contention' for issue in top_issues):
-            recommendations.append('🔒 重點關注多線程同步問題')
-        
-        return recommendations
-            
-
 def main():
     """主函數"""
     if len(sys.argv) != 3:

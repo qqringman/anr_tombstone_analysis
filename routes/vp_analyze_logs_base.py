@@ -162,18 +162,17 @@ class ThreadInfo:
     tid: str
     prio: str = "N/A"
     state: ThreadState = ThreadState.UNKNOWN
-    sysTid: Optional[str] = None
     nice: Optional[str] = None
-    schedstat: Optional[str] = None
-    utm: Optional[str] = None
-    stm: Optional[str] = None
     core: Optional[str] = None
     handle: Optional[str] = None
     backtrace: List[str] = field(default_factory=list)
     waiting_info: Optional[str] = None
     held_locks: List[str] = field(default_factory=list)
     waiting_locks: List[str] = field(default_factory=list)
-
+    utm: Optional[str] = None  # 用戶態時間
+    stm: Optional[str] = None  # 系統態時間
+    schedstat: Optional[str] = None  # 調度統計
+    sysTid: Optional[str] = None  # 系統線程ID
 @dataclass
 class ANRInfo:
     """ANR 資訊"""

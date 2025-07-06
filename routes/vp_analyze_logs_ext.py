@@ -3976,3 +3976,938 @@ class IncrementalAnalyzer:
         self._save_cache()
         print("快取已清除")
 
+class BinderCallChainAnalyzer:
+    """Binder 調用鏈分析器"""
+    
+    def __init__(self):
+        self.binder_services = {
+            'WindowManagerService': {
+                'methods': ['getWindowInsets', 'addWindow', 'removeWindow', 'relayoutWindow'],
+                'avg_latency_ms': 50,
+                'timeout_ms': 5000
+            },
+            'ActivityManagerService': {
+                'methods': ['startActivity', 'bindService', 'getRunningTasks', 'broadcastIntent'],
+                'avg_latency_ms': 100,
+                'timeout_ms': 10000
+            },
+            'PackageManagerService': {
+                'methods': ['getPackageInfo', 'queryIntentActivities', 'getApplicationInfo'],
+                'avg_latency_ms': 200,
+                'timeout_ms': 20000
+            }
+        }
+    
+    def analyze_binder_chain(self, backtrace: List[str]) -> Dict:
+        """分析 Binder 調用鏈"""
+        chain_info = {
+            'call_sequence': [],
+            'total_latency': 0,
+            'bottlenecks': [],
+            'cross_process_calls': 0,
+            'recommendation': ''
+        }
+        
+        # 解析調用序列
+        for i, frame in enumerate(backtrace):
+            if self._is_binder_call(frame):
+                # 調試輸出
+                print(f"發現 Binder 調用: {frame}")
+                
+                call_detail = self._extract_binder_detail(frame, backtrace[i:i+5])
+                
+                # 調試輸出
+                print(f"解析結果: Service={call_detail['service']}, Method={call_detail['method']}")
+                
+                chain_info['call_sequence'].append(call_detail)
+                chain_info['cross_process_calls'] += 1
+                
+                # 檢測瓶頸
+                if call_detail.get('estimated_latency', 0) > 1000:  # 超過1秒
+                    chain_info['bottlenecks'].append({
+                        'service': call_detail['service'],
+                        'method': call_detail['method'],
+                        'latency': call_detail['estimated_latency'],
+                        'reason': self._analyze_bottleneck_reason(call_detail)
+                    })
+        
+        # 計算總延遲
+        chain_info['total_latency'] = sum(
+            call.get('estimated_latency', 0) for call in chain_info['call_sequence']
+        )
+        
+        # 生成建議
+        chain_info['recommendation'] = self._generate_binder_recommendation(chain_info)
+        
+        return chain_info
+    
+    def _is_binder_call(self, frame: str) -> bool:
+        """檢查是否為 Binder 調用"""
+        binder_indicators = [
+            'BinderProxy', 'Binder.transact', 'IPCThreadState',
+            'IInterface', 'AIDL', 'onTransact', 
+            '$Stub$Proxy',  # 新增：AIDL 生成的 Proxy 類
+            'android.os.Binder',  # 新增：Binder 基類
+            'execTransact',  # 新增：Binder 執行事務
+            'transactNative',  # 新增：Native 事務方法
+        ]
+        return any(indicator in frame for indicator in binder_indicators)
+    
+    def _extract_binder_detail(self, frame: str, context: List[str]) -> Dict:
+        """提取 Binder 調用詳情"""
+        detail = {
+            'frame': frame,
+            'service': 'Unknown',
+            'method': 'Unknown',
+            'transaction_code': None,
+            'estimated_latency': 100  # 預設 100ms
+        }
+        
+        # 將 context 合併為一個字串，方便搜尋
+        context_str = '\n'.join(context)
+        
+        # 1. 從介面類別名稱識別服務
+        interface_patterns = [
+            (r'android\.view\.IWindowManager', 'WindowManagerService'),
+            (r'android\.app\.IActivityManager', 'ActivityManagerService'),
+            (r'android\.content\.pm\.IPackageManager', 'PackageManagerService'),
+            (r'com\.android\.internal\.view\.IInputMethodManager', 'InputMethodManagerService'),
+            (r'android\.os\.IPowerManager', 'PowerManagerService'),
+            (r'android\.media\.IAudioService', 'AudioService'),
+            (r'android\.app\.INotificationManager', 'NotificationManagerService'),
+            (r'android\.net\.IConnectivityManager', 'ConnectivityService'),
+            (r'android\.content\.IContentProvider', 'ContentProviderService'),
+            (r'android\.view\.IWindowSession', 'WindowManagerService'),
+            (r'android\.view\.accessibility\.IAccessibilityManager', 'AccessibilityManagerService'),
+        ]
+        
+        for pattern, service_name in interface_patterns:
+            if re.search(pattern, context_str):
+                detail['service'] = service_name
+                # 設定預估延遲
+                if service_name in self.binder_services:
+                    detail['estimated_latency'] = self.binder_services[service_name]['avg_latency_ms']
+                break
+        
+        # 2. 提取方法名稱
+        # 從多種格式中提取方法名
+        method_patterns = [
+            # IInterface$Stub$Proxy.methodName 格式
+            r'(?:I\w+)\$Stub\$Proxy\.(\w+)',
+            # 標準方法調用格式
+            r'\.(\w+)\([^)]*\)\s*$',
+            # 簡單方法名
+            r'\.(\w+)$',
+        ]
+        
+        # 首先從當前 frame 提取
+        for pattern in method_patterns:
+            match = re.search(pattern, frame)
+            if match:
+                method_name = match.group(1)
+                # 過濾掉一些通用方法
+                if method_name not in ['transact', 'onTransact', 'transactNative', 'invoke', 'run']:
+                    detail['method'] = method_name
+                    break
+        
+        # 如果沒找到，從 context 中查找
+        if detail['method'] == 'Unknown':
+            for ctx_frame in context:
+                for pattern in method_patterns:
+                    match = re.search(pattern, ctx_frame)
+                    if match:
+                        method_name = match.group(1)
+                        if method_name not in ['transact', 'onTransact', 'transactNative', 'invoke', 'run']:
+                            detail['method'] = method_name
+                            break
+                if detail['method'] != 'Unknown':
+                    break
+        
+        # 3. 特殊處理某些已知的方法模式
+        if detail['service'] == 'Unknown' or detail['method'] == 'Unknown':
+            # WindowManager 相關
+            if 'getWindowInsets' in context_str:
+                detail['service'] = 'WindowManagerService'
+                detail['method'] = 'getWindowInsets'
+                detail['estimated_latency'] = 50
+            elif 'addWindow' in context_str:
+                detail['service'] = 'WindowManagerService'
+                detail['method'] = 'addWindow'
+                detail['estimated_latency'] = 100
+            elif 'removeWindow' in context_str:
+                detail['service'] = 'WindowManagerService'
+                detail['method'] = 'removeWindow'
+                detail['estimated_latency'] = 80
+            elif 'relayoutWindow' in context_str:
+                detail['service'] = 'WindowManagerService'
+                detail['method'] = 'relayoutWindow'
+                detail['estimated_latency'] = 60
+            # ActivityManager 相關
+            elif 'startActivity' in context_str:
+                detail['service'] = 'ActivityManagerService'
+                detail['method'] = 'startActivity'
+                detail['estimated_latency'] = 200
+            elif 'bindService' in context_str:
+                detail['service'] = 'ActivityManagerService'
+                detail['method'] = 'bindService'
+                detail['estimated_latency'] = 150
+            elif 'broadcastIntent' in context_str:
+                detail['service'] = 'ActivityManagerService'
+                detail['method'] = 'broadcastIntent'
+                detail['estimated_latency'] = 100
+            # PackageManager 相關
+            elif 'getPackageInfo' in context_str:
+                detail['service'] = 'PackageManagerService'
+                detail['method'] = 'getPackageInfo'
+                detail['estimated_latency'] = 200
+            elif 'queryIntentActivities' in context_str:
+                detail['service'] = 'PackageManagerService'
+                detail['method'] = 'queryIntentActivities'
+                detail['estimated_latency'] = 300
+        
+        # 4. 提取事務碼（如果有）
+        transaction_match = re.search(r'code[=:\s]+(\d+)', context_str)
+        if transaction_match:
+            detail['transaction_code'] = int(transaction_match.group(1))
+        
+        # 5. 如果還是 Unknown，嘗試從類名推測
+        if detail['service'] == 'Unknown':
+            # 從類路徑推測服務
+            class_patterns = [
+                (r'com\.android\.server\.wm\.', 'WindowManagerService'),
+                (r'com\.android\.server\.am\.', 'ActivityManagerService'),
+                (r'com\.android\.server\.pm\.', 'PackageManagerService'),
+                (r'com\.android\.server\.input\.', 'InputManagerService'),
+                (r'com\.android\.server\.power\.', 'PowerManagerService'),
+            ]
+            
+            for pattern, service_name in class_patterns:
+                if re.search(pattern, context_str):
+                    detail['service'] = service_name
+                    break
+        
+        return detail
+    
+    def _analyze_bottleneck_reason(self, call_detail: Dict) -> str:
+        """分析瓶頸原因"""
+        service = call_detail.get('service', 'Unknown')
+        
+        if service == 'WindowManagerService':
+            return 'WindowManager 可能因為大量窗口操作或動畫導致延遲'
+        elif service == 'ActivityManagerService':
+            return 'ActivityManager 可能因為進程啟動或服務綁定導致延遲'
+        elif service == 'PackageManagerService':
+            return 'PackageManager 可能因為包掃描或權限檢查導致延遲'
+        
+        return '跨進程通信延遲'
+    
+    def _generate_binder_recommendation(self, chain_info: Dict) -> str:
+        """生成 Binder 優化建議"""
+        recommendations = []
+        
+        if chain_info['cross_process_calls'] > 5:
+            recommendations.append('減少跨進程調用次數，考慮批量操作')
+        
+        if chain_info['total_latency'] > 3000:
+            recommendations.append('總延遲超過 3 秒，建議使用異步調用')
+        
+        for bottleneck in chain_info['bottlenecks']:
+            if bottleneck['service'] == 'WindowManagerService':
+                recommendations.append('優化 UI 更新邏輯，避免頻繁的窗口操作')
+            elif bottleneck['service'] == 'PackageManagerService':
+                recommendations.append('快取包資訊，避免重複查詢')
+        
+        return ' | '.join(recommendations) if recommendations else '無特殊優化建議'
+
+class ThreadDependencyAnalyzer:
+    """線程依賴關係分析器"""
+    
+    def __init__(self):
+        self.dependency_graph = {}
+        self.thread_states = {}
+        self.deadlock_cycles = []  # 儲存死鎖循環
+    
+    def analyze_thread_dependencies(self, threads: List[ThreadInfo]) -> Dict:
+        """分析線程間的依賴關係"""
+        analysis = {
+            'dependency_graph': {},
+            'deadlock_cycles': [],
+            'blocking_chains': [],
+            'critical_paths': [],
+            'visualization': ''
+        }
+        
+        # 重置狀態
+        self.dependency_graph = {}
+        self.thread_states = {}
+        self.deadlock_cycles = []
+        
+        # 建立依賴圖
+        for thread in threads:
+            self._build_dependency_graph(thread)
+        
+        # 檢測死鎖循環
+        self.deadlock_cycles = self._detect_deadlock_cycles()
+        analysis['deadlock_cycles'] = self.deadlock_cycles
+        
+        # 找出阻塞鏈
+        analysis['blocking_chains'] = self._find_blocking_chains()
+        
+        # 識別關鍵路徑
+        analysis['critical_paths'] = self._identify_critical_paths()
+        
+        # 生成視覺化
+        analysis['visualization'] = self._generate_ascii_graph()
+        
+        analysis['dependency_graph'] = self.dependency_graph
+        
+        return analysis
+    
+    def _build_dependency_graph(self, thread: ThreadInfo):
+        """建立線程依賴圖"""
+        thread_id = thread.tid
+        self.thread_states[thread_id] = {
+            'name': thread.name,
+            'state': thread.state,
+            'priority': thread.prio,
+            'waiting_on': [],
+            'holding': thread.held_locks.copy(),
+            'waiting_locks': thread.waiting_locks.copy()
+        }
+        
+        # 解析等待關係
+        if thread.waiting_info:
+            # 嘗試多種模式提取等待的線程ID
+            patterns = [
+                r'held by (?:thread\s+)?(\d+)',
+                r'held by tid=(\d+)',
+                r'heldby=(\d+)',
+                r'owner tid=(\d+)',
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, thread.waiting_info)
+                if match:
+                    holder_tid = match.group(1)
+                    self.thread_states[thread_id]['waiting_on'].append(holder_tid)
+                    
+                    if holder_tid not in self.dependency_graph:
+                        self.dependency_graph[holder_tid] = []
+                    self.dependency_graph[holder_tid].append(thread_id)
+                    break
+        
+        # 如果有等待的鎖但沒有明確的持有者信息，嘗試從其他線程找出持有者
+        if thread.waiting_locks and not self.thread_states[thread_id]['waiting_on']:
+            # 這個線程在等待鎖，標記它
+            self.thread_states[thread_id]['is_waiting'] = True
+    
+    def _detect_deadlock_cycles(self) -> List[List[Dict]]:
+        """使用 DFS 檢測死鎖循環"""
+        visited = set()
+        rec_stack = set()
+        cycles = []
+        
+        def dfs(node, path):
+            visited.add(node)
+            rec_stack.add(node)
+            path.append(node)
+            
+            if node in self.dependency_graph:
+                for neighbor in self.dependency_graph[node]:
+                    if neighbor not in visited:
+                        result = dfs(neighbor, path.copy())
+                        if result:
+                            cycles.extend(result)
+                    elif neighbor in rec_stack:
+                        # 找到循環
+                        cycle_start = path.index(neighbor)
+                        cycle = path[cycle_start:]
+                        
+                        # 轉換為詳細信息
+                        cycle_info = []
+                        for tid in cycle:
+                            if tid in self.thread_states:
+                                info = {
+                                    'tid': tid,
+                                    'name': self.thread_states[tid]['name'],
+                                    'state': self.thread_states[tid]['state'].value,
+                                    'waiting_on': self.thread_states[tid]['waiting_on']
+                                }
+                                cycle_info.append(info)
+                        
+                        if cycle_info:
+                            cycles.append(cycle_info)
+            
+            rec_stack.remove(node)
+            return cycles
+        
+        for node in self.dependency_graph:
+            if node not in visited:
+                dfs(node, [])
+        
+        # 去重
+        unique_cycles = []
+        for cycle in cycles:
+            # 將循環標準化（從最小的tid開始）
+            if cycle:
+                min_idx = min(range(len(cycle)), key=lambda i: cycle[i]['tid'])
+                normalized = cycle[min_idx:] + cycle[:min_idx]
+                
+                # 檢查是否已存在
+                is_duplicate = False
+                for existing in unique_cycles:
+                    if len(existing) == len(normalized):
+                        if all(existing[i]['tid'] == normalized[i]['tid'] for i in range(len(existing))):
+                            is_duplicate = True
+                            break
+                
+                if not is_duplicate:
+                    unique_cycles.append(normalized)
+        
+        return unique_cycles
+    
+    def _find_blocking_chains(self) -> List[Dict]:
+        """找出阻塞鏈"""
+        chains = []
+        
+        # 找出所有被阻塞的線程
+        blocked_threads = {}
+        for tid, deps in self.dependency_graph.items():
+            if len(deps) > 0:  # 這個線程阻塞了其他線程
+                blocked_threads[tid] = deps
+        
+        # 分析每個阻塞者
+        for blocker_tid, blocked_list in blocked_threads.items():
+            if blocker_tid in self.thread_states:
+                # 計算被阻塞線程的總優先級
+                total_priority = 0
+                high_priority_count = 0
+                
+                for blocked_tid in blocked_list:
+                    if blocked_tid in self.thread_states:
+                        prio = self.thread_states[blocked_tid].get('priority', 'N/A')
+                        if prio != 'N/A' and prio.isdigit():
+                            prio_int = int(prio)
+                            total_priority += prio_int
+                            if prio_int <= 5:  # 高優先級
+                                high_priority_count += 1
+                
+                severity = 'critical' if high_priority_count > 0 else 'high' if len(blocked_list) > 3 else 'medium'
+                
+                chain = {
+                    'blocker': blocker_tid,
+                    'blocker_name': self.thread_states[blocker_tid]['name'],
+                    'blocked_threads': blocked_list,
+                    'impact': len(blocked_list),
+                    'severity': severity,
+                    'high_priority_blocked': high_priority_count
+                }
+                chains.append(chain)
+        
+        return sorted(chains, key=lambda x: (x['high_priority_blocked'], x['impact']), reverse=True)
+    
+    def _identify_critical_paths(self) -> List[Dict]:
+        """識別關鍵路徑"""
+        critical_paths = []
+        
+        # 找出主線程相關的路徑
+        main_tid = '1'
+        if main_tid in self.thread_states and self.thread_states[main_tid]['waiting_on']:
+            path = self._trace_dependency_path(main_tid)
+            if len(path) > 1:
+                critical_paths.append({
+                    'type': 'main_thread_blocked',
+                    'path': path,
+                    'severity': 'critical',
+                    'description': '主線程被阻塞'
+                })
+        
+        # 找出高優先級線程的阻塞路徑
+        for tid, state in self.thread_states.items():
+            if tid != main_tid and state.get('priority') and state['priority'].isdigit():
+                if int(state['priority']) <= 5 and state['waiting_on']:
+                    path = self._trace_dependency_path(tid)
+                    if len(path) > 1:
+                        critical_paths.append({
+                            'type': 'high_priority_blocked',
+                            'path': path,
+                            'severity': 'high',
+                            'description': f"高優先級線程 {state['name']} 被阻塞"
+                        })
+        
+        # 找出最長的依賴鏈
+        longest_path = []
+        for tid in self.thread_states:
+            path = self._trace_dependency_path(tid)
+            if len(path) > len(longest_path):
+                longest_path = path
+        
+        if len(longest_path) > 3:
+            critical_paths.append({
+                'type': 'long_dependency_chain',
+                'path': longest_path,
+                'severity': 'medium',
+                'description': f"長依賴鏈 ({len(longest_path)} 層)"
+            })
+        
+        return critical_paths
+    
+    def _trace_dependency_path(self, start_tid: str) -> List[str]:
+        """追蹤依賴路徑"""
+        path = []
+        current = start_tid
+        visited = set()
+        
+        while current and current not in visited:
+            visited.add(current)
+            
+            if current in self.thread_states:
+                thread_info = f"{current}({self.thread_states[current]['name']})"
+                path.append(thread_info)
+                
+                waiting_on = self.thread_states[current]['waiting_on']
+                if waiting_on:
+                    current = waiting_on[0]
+                else:
+                    break
+            else:
+                break
+        
+        return path
+    
+    def _generate_ascii_graph(self) -> str:
+        """生成 ASCII 依賴關係圖"""
+        lines = ["線程依賴關係圖:", "=" * 60]
+        
+        # 顯示死鎖
+        if self.deadlock_cycles:
+            lines.append("\n🔴 死鎖檢測:")
+            for i, cycle in enumerate(self.deadlock_cycles, 1):
+                lines.append(f"\n  死鎖循環 {i}:")
+                
+                # 顯示循環
+                cycle_str = ""
+                for j, thread_info in enumerate(cycle):
+                    cycle_str += f"{thread_info['tid']}({thread_info['name']})"
+                    if j < len(cycle) - 1:
+                        cycle_str += " → "
+                    else:
+                        cycle_str += f" → {cycle[0]['tid']}({cycle[0]['name']})"
+                
+                lines.append(f"    {cycle_str}")
+                
+                # 顯示詳細信息
+                for thread_info in cycle:
+                    lines.append(f"    • 線程 {thread_info['tid']} ({thread_info['name']}) - {thread_info['state']}")
+        else:
+            lines.append("\n✅ 未檢測到死鎖")
+        
+        # 顯示阻塞鏈
+        blocking_chains = self._find_blocking_chains()
+        if blocking_chains:
+            lines.append("\n🟡 主要阻塞鏈:")
+            for chain in blocking_chains[:5]:  # 只顯示前5個
+                lines.append(f"\n  • {chain['blocker']}({chain['blocker_name']}) 阻塞了 {chain['impact']} 個線程")
+                if chain['high_priority_blocked'] > 0:
+                    lines.append(f"    ⚠️ 包含 {chain['high_priority_blocked']} 個高優先級線程")
+                
+                # 顯示被阻塞的線程
+                blocked_names = []
+                for blocked_tid in chain['blocked_threads'][:3]:  # 只顯示前3個
+                    if blocked_tid in self.thread_states:
+                        blocked_names.append(f"{blocked_tid}({self.thread_states[blocked_tid]['name']})")
+                
+                if blocked_names:
+                    lines.append(f"    被阻塞: {', '.join(blocked_names)}")
+                    if len(chain['blocked_threads']) > 3:
+                        lines.append(f"    ... 還有 {len(chain['blocked_threads']) - 3} 個線程")
+        
+        # 顯示關鍵路徑
+        critical_paths = self._identify_critical_paths()
+        if critical_paths:
+            lines.append("\n🔵 關鍵路徑:")
+            for path_info in critical_paths[:3]:
+                lines.append(f"\n  • {path_info['description']}:")
+                path_str = " → ".join(path_info['path'][:5])
+                if len(path_info['path']) > 5:
+                    path_str += f" → ... ({len(path_info['path'])-5} more)"
+                lines.append(f"    {path_str}")
+                lines.append(f"    嚴重性: {path_info['severity']}")
+        
+        # 如果什麼都沒有，顯示基本統計
+        if not self.deadlock_cycles and not blocking_chains and not critical_paths:
+            lines.append("\n📊 線程統計:")
+            
+            # 統計等待中的線程
+            waiting_count = sum(1 for state in self.thread_states.values() 
+                              if state['waiting_on'] or state.get('is_waiting'))
+            
+            lines.append(f"  • 總線程數: {len(self.thread_states)}")
+            lines.append(f"  • 等待中的線程: {waiting_count}")
+            
+            if self.dependency_graph:
+                lines.append(f"  • 存在依賴關係的線程: {len(self.dependency_graph)}")
+        
+        return "\n".join(lines)
+    
+class PerformanceBottleneckDetector:
+    """性能瓶頸檢測器"""
+    
+    def __init__(self):
+        self.bottleneck_thresholds = {
+            'cpu_usage': 80,  # CPU 使用率閾值
+            'memory_available_mb': 100,  # 可用記憶體閾值
+            'thread_count': 150,  # 線程數閾值
+            'blocked_threads': 5,  # 阻塞線程數閾值
+            'gc_pause_ms': 500,  # GC 暫停時間閾值
+            'binder_calls': 10,  # Binder 調用數閾值
+            'lock_contention': 3,  # 鎖競爭閾值
+        }
+        
+        self.bottleneck_scores = {
+            'critical': 90,
+            'high': 70,
+            'medium': 50,
+            'low': 30
+        }
+    
+    def detect_bottlenecks(self, anr_info: ANRInfo, content: str) -> Dict:
+        """檢測性能瓶頸"""
+        bottlenecks = {
+            'cpu_bottlenecks': self._detect_cpu_bottlenecks(anr_info),
+            'memory_bottlenecks': self._detect_memory_bottlenecks(anr_info),
+            'thread_bottlenecks': self._detect_thread_bottlenecks(anr_info),
+            'io_bottlenecks': self._detect_io_bottlenecks(anr_info, content),
+            'lock_bottlenecks': self._detect_lock_bottlenecks(anr_info),
+            'gc_bottlenecks': self._detect_gc_bottlenecks(content),
+            'overall_score': 0,
+            'top_issues': [],
+            'recommendations': []
+        }
+        
+        # 計算整體分數
+        bottlenecks['overall_score'] = self._calculate_overall_score(bottlenecks)
+        
+        # 識別主要問題
+        bottlenecks['top_issues'] = self._identify_top_issues(bottlenecks)
+        
+        # 生成建議
+        bottlenecks['recommendations'] = self._generate_recommendations(bottlenecks)
+        
+        return bottlenecks
+    
+    def _detect_cpu_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
+        """檢測 CPU 瓶頸"""
+        bottlenecks = []
+        
+        if anr_info.cpu_usage:
+            total_cpu = anr_info.cpu_usage.get('total', 0)
+            
+            if total_cpu > self.bottleneck_thresholds['cpu_usage']:
+                bottlenecks.append({
+                    'type': 'high_cpu_usage',
+                    'severity': 'critical' if total_cpu > 95 else 'high',
+                    'value': total_cpu,
+                    'description': f'CPU 使用率過高: {total_cpu:.1f}%',
+                    'impact': '系統響應緩慢，可能導致 ANR',
+                    'solutions': [
+                        '檢查是否有無限循環或過度計算',
+                        '使用 CPU Profiler 分析熱點函數',
+                        '考慮將計算密集型任務移至背景線程',
+                        '優化算法複雜度'
+                    ]
+                })
+            
+            # 檢查 load average
+            load_1min = anr_info.cpu_usage.get('load_1min', 0)
+            if load_1min > 4.0:
+                bottlenecks.append({
+                    'type': 'high_load_average',
+                    'severity': 'high',
+                    'value': load_1min,
+                    'description': f'系統負載過高: {load_1min}',
+                    'impact': '系統調度延遲增加',
+                    'solutions': [
+                        '減少並發任務數量',
+                        '優化線程池大小',
+                        '檢查是否有失控的進程'
+                    ]
+                })
+        
+        return bottlenecks
+    
+    def _detect_memory_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
+        """檢測記憶體瓶頸"""
+        bottlenecks = []
+        
+        if anr_info.memory_info:
+            available_mb = anr_info.memory_info.get('available', float('inf')) / 1024
+            
+            if available_mb < self.bottleneck_thresholds['memory_available_mb']:
+                severity = 'critical' if available_mb < 50 else 'high'
+                bottlenecks.append({
+                    'type': 'low_memory',
+                    'severity': severity,
+                    'value': available_mb,
+                    'description': f'可用記憶體不足: {available_mb:.1f} MB',
+                    'impact': '頻繁 GC，應用可能被系統殺死',
+                    'solutions': [
+                        '優化記憶體使用，釋放不必要的資源',
+                        '使用 Memory Profiler 查找記憶體洩漏',
+                        '實施圖片和資源的快取策略',
+                        '考慮使用 largeHeap 選項'
+                    ]
+                })
+            
+            # 檢查記憶體使用率
+            used_percent = anr_info.memory_info.get('used_percent', 0)
+            if used_percent > 85:
+                bottlenecks.append({
+                    'type': 'high_memory_usage',
+                    'severity': 'medium',
+                    'value': used_percent,
+                    'description': f'記憶體使用率高: {used_percent:.1f}%',
+                    'impact': '系統可能開始回收背景應用',
+                    'solutions': [
+                        '檢查大對象分配',
+                        '優化數據結構',
+                        '使用弱引用或軟引用'
+                    ]
+                })
+        
+        return bottlenecks
+    
+    def _detect_thread_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
+        """檢測線程瓶頸"""
+        bottlenecks = []
+        
+        thread_count = len(anr_info.all_threads)
+        if thread_count > self.bottleneck_thresholds['thread_count']:
+            bottlenecks.append({
+                'type': 'excessive_threads',
+                'severity': 'high' if thread_count > 200 else 'medium',
+                'value': thread_count,
+                'description': f'線程數過多: {thread_count} 個',
+                'impact': '線程調度開銷大，記憶體消耗高',
+                'solutions': [
+                    '使用線程池而非創建新線程',
+                    '檢查是否有線程洩漏',
+                    '合併相似任務到同一線程',
+                    '使用 Kotlin 協程減少線程使用'
+                ]
+            })
+        
+        # 檢測阻塞線程
+        blocked_threads = [t for t in anr_info.all_threads if t.state == ThreadState.BLOCKED]
+        if len(blocked_threads) > self.bottleneck_thresholds['blocked_threads']:
+            bottlenecks.append({
+                'type': 'thread_contention',
+                'severity': 'critical' if len(blocked_threads) > 10 else 'high',
+                'value': len(blocked_threads),
+                'description': f'{len(blocked_threads)} 個線程處於阻塞狀態',
+                'impact': '嚴重的線程競爭，可能存在死鎖',
+                'solutions': [
+                    '優化鎖的粒度',
+                    '使用無鎖數據結構',
+                    '避免嵌套鎖',
+                    '使用讀寫鎖替代互斥鎖'
+                ]
+            })
+        
+        # 檢測主線程問題
+        if anr_info.main_thread and anr_info.main_thread.state == ThreadState.BLOCKED:
+            bottlenecks.append({
+                'type': 'main_thread_blocked',
+                'severity': 'critical',
+                'value': 1,
+                'description': '主線程被阻塞',
+                'impact': '直接導致 ANR',
+                'solutions': [
+                    '立即將阻塞操作移至背景線程',
+                    '使用 Handler 或 AsyncTask',
+                    '檢查主線程的同步操作'
+                ]
+            })
+        
+        return bottlenecks
+    
+    def _detect_io_bottlenecks(self, anr_info: ANRInfo, content: str) -> List[Dict]:
+        """檢測 I/O 瓶頸"""
+        bottlenecks = []
+        
+        # 檢查主線程 I/O
+        if anr_info.main_thread:
+            io_operations = []
+            for frame in anr_info.main_thread.backtrace[:10]:
+                if any(io in frame for io in ['File', 'SQLite', 'SharedPreferences', 'Socket']):
+                    io_operations.append(frame)
+            
+            if io_operations:
+                bottlenecks.append({
+                    'type': 'main_thread_io',
+                    'severity': 'critical',
+                    'value': len(io_operations),
+                    'description': f'主線程執行 I/O 操作',
+                    'impact': '阻塞 UI 響應',
+                    'operations': io_operations[:3],  # 顯示前3個
+                    'solutions': [
+                        '使用異步 I/O API',
+                        '將檔案操作移至 WorkManager',
+                        'SharedPreferences 使用 apply() 而非 commit()',
+                        '使用 Room 的異步查詢'
+                    ]
+                })
+        
+        # 檢查過多的 Binder IPC
+        binder_count = content.count('BinderProxy')
+        if binder_count > self.bottleneck_thresholds['binder_calls']:
+            bottlenecks.append({
+                'type': 'excessive_binder_calls',
+                'severity': 'high',
+                'value': binder_count,
+                'description': f'過多的 Binder IPC 調用: {binder_count} 次',
+                'impact': '跨進程通信開銷大',
+                'solutions': [
+                    '批量處理系統服務調用',
+                    '快取服務查詢結果',
+                    '使用本地廣播替代系統廣播',
+                    '減少跨進程通信頻率'
+                ]
+            })
+        
+        return bottlenecks
+    
+    def _detect_lock_bottlenecks(self, anr_info: ANRInfo) -> List[Dict]:
+        """檢測鎖瓶頸"""
+        bottlenecks = []
+        
+        # 統計等待鎖的線程
+        waiting_threads = [t for t in anr_info.all_threads if t.waiting_locks]
+        
+        if len(waiting_threads) > self.bottleneck_thresholds['lock_contention']:
+            # 分析鎖的持有情況
+            lock_holders = {}
+            for thread in anr_info.all_threads:
+                for lock in thread.held_locks:
+                    if lock not in lock_holders:
+                        lock_holders[lock] = []
+                    lock_holders[lock].append(thread)
+            
+            bottlenecks.append({
+                'type': 'lock_contention',
+                'severity': 'high',
+                'value': len(waiting_threads),
+                'description': f'{len(waiting_threads)} 個線程在等待鎖',
+                'impact': '並發性能差，可能導致死鎖',
+                'lock_analysis': {
+                    'total_waiting': len(waiting_threads),
+                    'unique_locks': len(lock_holders),
+                    'hot_locks': [lock for lock, holders in lock_holders.items() if len(holders) > 1]
+                },
+                'solutions': [
+                    '減小同步塊的範圍',
+                    '使用細粒度鎖',
+                    '考慮使用 ConcurrentHashMap 等併發集合',
+                    '使用讀寫鎖分離讀寫操作'
+                ]
+            })
+        
+        return bottlenecks
+    
+    def _detect_gc_bottlenecks(self, content: str) -> List[Dict]:
+        """檢測 GC 瓶頸"""
+        bottlenecks = []
+        
+        # 解析 GC 暫停時間
+        gc_pauses = re.findall(r'paused\s+(\d+)ms', content)
+        if gc_pauses:
+            total_pause = sum(int(pause) for pause in gc_pauses)
+            max_pause = max(int(pause) for pause in gc_pauses)
+            
+            if total_pause > self.bottleneck_thresholds['gc_pause_ms']:
+                bottlenecks.append({
+                    'type': 'excessive_gc',
+                    'severity': 'high' if total_pause > 1000 else 'medium',
+                    'value': total_pause,
+                    'description': f'GC 暫停時間過長: 總計 {total_pause}ms, 最大 {max_pause}ms',
+                    'impact': 'UI 卡頓，響應延遲',
+                    'gc_stats': {
+                        'count': len(gc_pauses),
+                        'total_pause': total_pause,
+                        'max_pause': max_pause,
+                        'avg_pause': total_pause // len(gc_pauses) if gc_pauses else 0
+                    },
+                    'solutions': [
+                        '減少對象分配，特別是大對象',
+                        '使用對象池重用對象',
+                        '避免在循環中創建對象',
+                        '優化 Bitmap 使用和回收'
+                    ]
+                })
+        
+        return bottlenecks
+    
+    def _calculate_overall_score(self, bottlenecks: Dict) -> int:
+        """計算整體瓶頸分數"""
+        score = 100
+        
+        # 根據各類瓶頸扣分
+        for category, issues in bottlenecks.items():
+            if isinstance(issues, list):
+                for issue in issues:
+                    severity = issue.get('severity', 'low')
+                    if severity == 'critical':
+                        score -= 30
+                    elif severity == 'high':
+                        score -= 20
+                    elif severity == 'medium':
+                        score -= 10
+                    else:
+                        score -= 5
+        
+        return max(0, score)
+    
+    def _identify_top_issues(self, bottlenecks: Dict) -> List[Dict]:
+        """識別最主要的問題"""
+        all_issues = []
+        
+        for category, issues in bottlenecks.items():
+            if isinstance(issues, list):
+                for issue in issues:
+                    issue['category'] = category
+                    all_issues.append(issue)
+        
+        # 按嚴重性排序
+        severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+        all_issues.sort(key=lambda x: severity_order.get(x.get('severity', 'low'), 3))
+        
+        return all_issues[:5]  # 返回前5個最嚴重的問題
+    
+    def _generate_recommendations(self, bottlenecks: Dict) -> List[str]:
+        """生成優化建議"""
+        recommendations = []
+        
+        # 基於整體分數
+        score = bottlenecks['overall_score']
+        if score < 30:
+            recommendations.append('🚨 系統存在嚴重性能問題，需要立即優化')
+        elif score < 60:
+            recommendations.append('⚠️ 系統性能不佳，建議進行全面優化')
+        elif score < 80:
+            recommendations.append('💡 系統有優化空間，建議針對性改進')
+        else:
+            recommendations.append('✅ 系統性能良好，繼續保持')
+        
+        # 基於具體問題
+        top_issues = bottlenecks.get('top_issues', [])
+        if any(issue['type'] == 'main_thread_blocked' for issue in top_issues):
+            recommendations.insert(0, '🔴 首要任務：解決主線程阻塞問題')
+        
+        if any(issue['type'] == 'excessive_gc' for issue in top_issues):
+            recommendations.append('♻️ 優先優化記憶體分配策略')
+        
+        if any(issue['type'] == 'thread_contention' for issue in top_issues):
+            recommendations.append('🔒 重點關注多線程同步問題')
+        
+        return recommendations
+    
