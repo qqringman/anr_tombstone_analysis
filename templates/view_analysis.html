@@ -10,7 +10,15 @@
             padding: 0;
             box-sizing: border-box;
         }
-			
+
+        /* 面板內容容器 */
+        .panel-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: #0d0d0d;
+        }
+
 		/* 將分析報告中的樣式提升為全域樣式 */
 		.panel-content style {
 			display: block !important;
@@ -193,19 +201,32 @@
         
         /* 原始內容樣式 */
         .original-content {
-            padding: 20px;
+            flex: 1;
+            padding: 20px 20px 0 20px; /* 移除底部 padding */
+            margin: 0;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            line-height: 1.6em;
+            white-space: pre;
+            word-wrap: normal;
             color: #d4d4d4;
             background: transparent;
-            height: 100%;
-            overflow: auto;  /* 保持捲軸 */
-            margin: 0;
+            min-width: max-content;
         }
-        
+
+        /* 在最後一行後添加一些空間 */
+        .original-content::after {
+            content: '';
+            display: block;
+            height: 20px; /* 只在最後添加一點空間 */
+        }
+
+        .line-numbers::after {
+            content: '';
+            display: block;
+            height: 20px; /* 與內容對齊 */
+        }
+
         /* 分割條 */
         .resize-handle {
             width: 5px;
@@ -215,8 +236,8 @@
             transition: background 0.2s;
             flex-shrink: 0;
             /* 增加可點擊區域 */
-            margin: 0 -3px;
-            padding: 0 3px;
+            margin: 0 3px;
+            padding: 0 1px;
             z-index: 10;
         }
         
@@ -404,17 +425,78 @@
             margin: 0;
             padding: 2px 0;
         }
-        
-        /* 原始內容樣式 */
-        .original-content {
-            padding: 20px;
+
+        /* 原始內容容器 */
+        .original-content-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: auto;
+        }
+
+        /* 使用表格佈局 */
+        .content-table {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .content-row {
+            
+        }
+
+        .line-number-cell {
+            display: table-cell;
+            width: 60px;
+            min-width: 60px;
+            max-width: 80px;
+            padding: 0 5px 0 0; /* 減少 padding */
+            text-align: right;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            line-height: 1.6em;
+            color: #666;
+            user-select: none;
+            vertical-align: top;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+
+        .content-cell {
+            display: table-cell;
+            padding: 0 20px 0 10px; /* 調整左側 padding */
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6em;
+            white-space: pre;
+            color: #d4d4d4;
+            vertical-align: top;
+        }
+
+        /* 內容區域的內部容器 */
+        .content-inner {
+            display: flex;
+            position: relative;
+        }
+
+        /* 原始內容樣式 */
+        .original-content {
+            flex: 1;
+            padding: 20px;
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6em;
+            white-space: pre;
+            word-wrap: normal;
             color: #d4d4d4;
             background: transparent;
+            min-width: max-content;
         }
         
         /* 分析報告特定樣式 */
@@ -473,7 +555,189 @@
             padding: 2px 8px;
             border-radius: 4px;
             border: 1px solid #ff6b6b;
-        }        
+        }
+
+        /* 高亮樣式 */
+        .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; } /* 黃色 */
+        .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; } /* 綠色 */
+        .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; } /* 藍色 */
+        .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; } /* 橙色 */
+        .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; } /* 粉紅 */
+
+        /* 右鍵選單樣式 */
+        .context-menu {
+            position: fixed;
+            background: #2d2d2d;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 5px 0;
+            z-index: 10000;
+            display: none;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .context-menu-item {
+            padding: 8px 20px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .context-menu-item:hover {
+            background: #3a3a3a;
+        }
+
+        .context-menu-separator {
+            height: 1px;
+            background: #555;
+            margin: 5px 0;
+        }
+
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #666;
+            border-radius: 2px;
+        }
+
+        /* 行號樣式 */
+        .line-numbers {
+            position: sticky;
+            left: 0;
+            flex-shrink: 0;
+            width: 60px;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            padding: 20px 10px 0 0; /* 移除底部 padding */
+            margin: 0;
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6em;
+            color: #666;
+            user-select: none;
+            z-index: 10;
+            align-self: flex-start;
+        }
+
+        /* 行號項目 */
+        .line-number {
+            display: block;
+            position: relative;
+            padding-left: 10px; /* 減少左側 padding */
+            cursor: pointer;
+            height: 1.6em;
+            line-height: 1.6em;
+            box-sizing: border-box;
+            transition: background-color 0.2s ease;
+        }
+
+        /* 第一行和最後一行的特殊處理 */
+        .content-table::before,
+        .content-table::after {
+            content: '';
+            display: table-row;
+            height: 20px;
+        }
+
+        /* 確保第一行對齊 */
+        .line-numbers::before,
+        .original-content::before {
+            content: '';
+            display: block;
+            height: 20px; /* 與內容的 padding-top 相同 */
+        }
+
+        /* 當前行高亮 */
+        .line-number.current {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .with-line-numbers {
+            padding-left: 80px !important;
+            position: relative;
+        }
+
+        /* 高亮導航提示 */
+        .highlight-nav-hint {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #2d2d2d;
+            border: 1px solid #555;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #e0e0e0;
+            display: none;
+            z-index: 1000;
+        }
+
+        /* 書籤樣式 */
+        .line-number.bookmarked::before {
+            content: '●';
+            position: absolute;
+            left: 2px;
+            color: #00ff00;
+            font-size: 10px;
+        }
+
+        /* 行號懸停效果 */
+        .line-number:not(.bookmarked):hover::before {
+            content: '📌';
+            position: absolute;
+            left: 2px;
+            font-size: 10px;
+            opacity: 0.5;
+        }
+
+        .line-number.bookmarked:hover::before {
+            content: '✕';
+            color: #ff6666;
+            left: 2px;
+        }
+
+        /* 高亮控制按鈕 - 修正位置 */
+        .highlight-controls {
+            position: absolute;
+            top: 10px;
+            right: 100px;
+            display: flex;
+            gap: 5px;
+            z-index: 100;
+            background: #1a1a1a;
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        .highlight-control-btn {
+            width: 25px;
+            height: 25px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            cursor: pointer;
+            display: none;
+            position: relative;
+        }
+
+        .highlight-control-btn:hover::after {
+            content: '✕';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        #rightPanel {
+            padding-right: 6px;
+        }
     </style>    
 </head>
 <body>
@@ -598,7 +862,48 @@
             <span id="loadTime">載入時間: 計算中...</span>
         </div>
     </div>
-    
+    <!-- 右鍵選單 -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="highlightSelection(1)">
+            <div class="color-box" style="background: #ffff00;"></div>
+            <span>高亮 1 (黃色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightSelection(2)">
+            <div class="color-box" style="background: #00ff00;"></div>
+            <span>高亮 2 (綠色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightSelection(3)">
+            <div class="color-box" style="background: #00bfff;"></div>
+            <span>高亮 3 (藍色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightSelection(4)">
+            <div class="color-box" style="background: #ffa500;"></div>
+            <span>高亮 4 (橙色)</span>
+        </div>
+        <div class="context-menu-item" onclick="highlightSelection(5)">
+            <div class="color-box" style="background: #ffc0cb;"></div>
+            <span>高亮 5 (粉紅)</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="clearHighlight()">
+            <span>移除此高亮</span>
+        </div>
+        <div class="context-menu-item" onclick="clearAllHighlights()">
+            <span>清除所有高亮</span>
+        </div>
+    </div>
+    <!-- 高亮控制按鈕 -->
+    <div class="highlight-controls" id="highlightControls">
+        <div class="highlight-control-btn" id="highlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1)" title="清除黃色高亮"></div>
+        <div class="highlight-control-btn" id="highlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2)" title="清除綠色高亮"></div>
+        <div class="highlight-control-btn" id="highlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3)" title="清除藍色高亮"></div>
+        <div class="highlight-control-btn" id="highlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4)" title="清除橙色高亮"></div>
+        <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5)" title="清除粉紅高亮"></div>
+    </div>
+    <!-- 高亮導航提示 -->
+    <div class="highlight-nav-hint" id="highlightNavHint">
+        F2: 下一個高亮 | F3: 上一個高亮
+    </div>    
     <script>
         // 全域變數
         const filePath = {{ escaped_file_path | safe }};
@@ -621,7 +926,7 @@
             
             setupResizeHandler();
             setupKeyboardShortcuts();
-            
+
             // 點擊外部關閉匯出選單
             document.addEventListener('click', function(e) {
                 if (!e.target.closest('.export-menu') && !e.target.closest('.icon-btn')) {
@@ -691,42 +996,214 @@
                 updateStatus('載入原始檔案失敗');
             }
         }
-        
+
         // 顯示內容
         function displayContent(panel, content, type) {
             const contentEl = document.getElementById(panel + 'Content');
             
             if (type === 'analysis') {
-                // 保存原始 HTML 內容（重要！）
+                // 分析報告處理（保持原樣）
                 if (panel === 'left' && currentLeftType === 'analysis') {
                     analysisContent = content;
                 } else if (panel === 'right' && currentRightType === 'analysis') {
                     analysisContent = content;
                 }
                 
-                // 創建 iframe 顯示
                 contentEl.innerHTML = '';
-                
                 const iframe = document.createElement('iframe');
                 iframe.style.width = '100%';
                 iframe.style.height = '100%';
                 iframe.style.border = 'none';
                 iframe.srcdoc = content;
                 
+                iframe.onload = function() {
+                    setupIframeContextMenu(iframe);
+                };
+                
                 contentEl.appendChild(iframe);
                 
             } else {
-                // 原始檔案 - 純文字顯示
+                // 原始檔案處理 - 使用表格佈局
                 if (panel === 'left' && currentLeftType === 'original') {
                     originalContent = content;
                 } else if (panel === 'right' && currentRightType === 'original') {
                     originalContent = content;
                 }
                 
-                contentEl.innerHTML = `<pre class="original-content">${escapeHtml(content)}</pre>`;
+                const lines = content.split(/\r?\n/);
+                if (lines[lines.length - 1] === '') {
+                    lines.pop();
+                }
+                
+                // 建立包裝容器
+                const wrapper = document.createElement('div');
+                wrapper.className = 'original-content-wrapper';
+                wrapper.id = `${panel}ContentWrapper`;
+                
+                // 建立表格
+                const table = document.createElement('div');
+                table.className = 'content-table';
+                
+                // 建立表格內容
+                let tableHTML = '';
+                
+                // 添加頂部空白行
+                tableHTML += '<div style="height: 20px;"></div>';
+                
+                // 為每一行創建表格行
+                lines.forEach((line, index) => {
+                    const lineNum = index + 1;
+                    const escapedLine = escapeHtml(line);
+                    
+                    tableHTML += `
+                        <div class="content-row">
+                            <div class="line-number-cell">
+                                <span class="line-number" data-line="${lineNum}" data-panel="${panel}">${lineNum}</span>
+                            </div>
+                            <div class="content-cell">${escapedLine || ' '}</div>
+                        </div>
+                    `;
+                });
+                
+                // 添加底部空白行
+                tableHTML += '<div style="height: 20px;"></div>';
+                
+                table.innerHTML = tableHTML;
+                wrapper.appendChild(table);
+                
+                contentEl.innerHTML = '';
+                contentEl.appendChild(wrapper);
+                
+                // 設置行號事件
+                setupLineNumberHandlers(panel);
+                
+                // 設置內容行追蹤（需要修改）
+                setupContentLineTrackingForTable(panel);
+                
+                // 設置右鍵選單
+                setupContextMenuForTable(panel);
+                
+                updateStatus(`載入完成 - 共 ${lines.length} 行`);
             }
         }
-        
+
+        // 為表格佈局設置內容行追蹤
+        function setupContentLineTrackingForTable(panel) {
+            const rows = document.querySelectorAll(`#${panel}ContentWrapper .content-row`);
+            
+            rows.forEach((row, index) => {
+                const lineNum = index + 1;
+                const contentCell = row.querySelector('.content-cell');
+                const lineNumber = row.querySelector('.line-number');
+                
+                // 內容單元格滑鼠事件
+                contentCell.addEventListener('mouseenter', function() {
+                    currentFocusedLine = lineNum;
+                    currentFocusedPanel = panel;
+                    // 高亮當前行號
+                    highlightCurrentLineNumber(panel, lineNum);
+                });
+                
+                contentCell.addEventListener('mouseleave', function() {
+                    // 如果不是書籤，移除高亮
+                    if (!lineNumber.classList.contains('bookmarked')) {
+                        lineNumber.style.backgroundColor = '';
+                    }
+                });
+                
+                contentCell.addEventListener('click', function() {
+                    currentFocusedPanel = panel;
+                    currentFocusedLine = lineNum;
+                });
+            });
+        }
+
+        // 為表格佈局設置右鍵選單
+        function setupContextMenuForTable(panel) {
+            const contentCells = document.querySelectorAll(`#${panel}ContentWrapper .content-cell`);
+            
+            contentCells.forEach(cell => {
+                cell.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    
+                    const selection = window.getSelection();
+                    selectedText = selection.toString();
+                    
+                    if (selectedText) {
+                        selectedRange = selection.getRangeAt(0);
+                        showContextMenu(e.clientX, e.clientY);
+                    }
+                });
+            });
+        }
+
+        // 追蹤滑鼠所在的內容行
+        function setupContentLineTracking(panel) {
+            const contentEl = document.getElementById(`${panel}OriginalContent`);
+            const lineNumbersEl = document.getElementById(`${panel}LineNumbers`);
+            
+            if (!contentEl || !lineNumbersEl) return;
+            
+            // 獲取準確的行高
+            const lineNumbers = lineNumbersEl.querySelectorAll('.line-number');
+            if (lineNumbers.length === 0) return;
+            
+            const firstLineNumber = lineNumbers[0];
+            const lineHeight = firstLineNumber.getBoundingClientRect().height;
+            
+            let lastHighlightedLine = null;
+            
+            // 使用更精確的方法追蹤行號
+            contentEl.addEventListener('mousemove', function(e) {
+                const contentRect = contentEl.getBoundingClientRect();
+                const lineNumbersRect = lineNumbersEl.getBoundingClientRect();
+                
+                // 計算相對於第一行的偏移
+                const relativeY = e.clientY - lineNumbersRect.top;
+                
+                // 計算行號（從1開始）
+                let line = Math.floor(relativeY / lineHeight) + 1;
+                
+                // 確保行號在有效範圍內
+                line = Math.max(1, Math.min(line, lineNumbers.length));
+                
+                if (line !== lastHighlightedLine) {
+                    currentFocusedLine = line;
+                    currentFocusedPanel = panel;
+                    highlightCurrentLineNumber(panel, line);
+                    lastHighlightedLine = line;
+                }
+            });
+            
+            // 內容區域獲得焦點時更新面板
+            contentEl.addEventListener('click', function() {
+                currentFocusedPanel = panel;
+            });
+        }
+
+        // 高亮當前行號
+        function highlightCurrentLineNumber(panel, lineNumber) {
+            // 清除該面板之前的高亮
+            document.querySelectorAll(`#${panel}LineNumbers .line-number`).forEach(el => {
+                if (!el.classList.contains('bookmarked')) {
+                    el.style.backgroundColor = '';
+                }
+            });
+            
+            // 高亮當前行號
+            const lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${lineNumber}"]`);
+            if (lineElement && !lineElement.classList.contains('bookmarked')) {
+                lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.1)';
+            }
+        }
+
+        // 清除行號高亮
+        function clearLineNumberHighlight(panel) {
+            document.querySelectorAll(`#${panel}LineNumbers .line-number`).forEach(el => {
+                el.style.backgroundColor = '';
+            });
+        }
+
         // 顯示錯誤
         function showError(panel, message) {
             const contentEl = document.getElementById(panel + 'Content');
@@ -1087,19 +1564,40 @@
                     }
                 }
                 
-                // Ctrl+O 切換原始檔案
+                // F2 - 在當前行加書籤
+                if (e.key === 'F2') {
+                    e.preventDefault();
+                    
+                    // 找到當前行的行號元素
+                    const lineElement = document.querySelector(
+                        `#${currentFocusedPanel}ContentWrapper .line-number[data-line="${currentFocusedLine}"]`
+                    );
+                    
+                    if (lineElement) {
+                        toggleBookmark(lineElement);
+                        console.log(`F2: 在 ${currentFocusedPanel} 面板第 ${currentFocusedLine} 行切換書籤`);
+                    } else {
+                        console.log(`F2: 找不到行號元素 - Panel: ${currentFocusedPanel}, Line: ${currentFocusedLine}`);
+                    }
+                }
+                
+                // F3 - 跳轉到下一個書籤
+                if (e.key === 'F3') {
+                    e.preventDefault();
+                    navigateBookmarks();
+                }
+                
+                // 其他快捷鍵...
                 if (e.ctrlKey && e.key === 'o') {
                     e.preventDefault();
                     toggleOriginalPanel();
                 }
                 
-                // Ctrl+W 切換內容
                 if (e.ctrlKey && e.key === 'w') {
                     e.preventDefault();
                     switchPanels();
                 }
                 
-                // F11 全屏模式
                 if (e.key === 'F11') {
                     e.preventDefault();
                     toggleFullscreenMode();
@@ -1126,6 +1624,308 @@
             return div.innerHTML.replace(/[\u00A0-\u9999<>\&]/gim, function(i) {
                 return '&#' + i.charCodeAt(0) + ';';
             });
+        }
+    </script>
+    <script>
+        // 書籤相關變數
+        let bookmarks = new Set();
+        let currentBookmarkIndex = -1;
+        let bookmarkArray = [];
+
+        // 高亮相關變數
+        let highlightedTexts = {
+            1: null,
+            2: null,
+            3: null,
+            4: null,
+            5: null
+        };
+
+        // 設置行號處理器
+        function setupLineNumberHandlers(panel) {
+            const lineNumbers = document.querySelectorAll(`#${panel}ContentWrapper .line-number`);
+            
+            lineNumbers.forEach(lineNum => {
+                // 點擊行號切換書籤
+                lineNum.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleBookmark(this);
+                });
+                
+                // 滑鼠進入時更新當前行
+                lineNum.addEventListener('mouseenter', function() {
+                    const line = parseInt(this.getAttribute('data-line'));
+                    currentFocusedLine = line;
+                    currentFocusedPanel = panel;
+                });
+            });
+        }
+
+        // 確保行號與內容同步捲動
+        function syncLineNumbers(panel) {
+            const wrapper = document.getElementById(`${panel}ContentWrapper`);
+            const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+            
+            if (wrapper && lineNumbers) {
+                // 初始對齊
+                const content = document.getElementById(`${panel}OriginalContent`);
+                const computedStyle = window.getComputedStyle(content);
+                const paddingTop = parseInt(computedStyle.paddingTop);
+                
+                lineNumbers.style.paddingTop = paddingTop + 'px';
+                
+                // 監聽捲動事件
+                wrapper.addEventListener('scroll', function() {
+                    lineNumbers.style.transform = `translateY(-${this.scrollTop}px)`;
+                });
+            }
+        }
+
+        // 切換書籤
+        function toggleBookmark(lineElement) {
+            const lineNumber = parseInt(lineElement.getAttribute('data-line'));
+            const panel = lineElement.getAttribute('data-panel');
+            const key = `${panel}-${lineNumber}`;
+            
+            if (bookmarks.has(key)) {
+                bookmarks.delete(key);
+                lineElement.classList.remove('bookmarked');
+            } else {
+                bookmarks.add(key);
+                lineElement.classList.add('bookmarked');
+            }
+            
+            // 更新書籤陣列
+            updateBookmarkArray();
+        }
+
+        // 更新書籤陣列
+        function updateBookmarkArray() {
+            bookmarkArray = Array.from(bookmarks).sort((a, b) => {
+                const [panelA, lineA] = a.split('-');
+                const [panelB, lineB] = b.split('-');
+                if (panelA === panelB) {
+                    return parseInt(lineA) - parseInt(lineB);
+                }
+                return panelA.localeCompare(panelB);
+            });
+        }
+
+        // 高亮當前行
+        function highlightCurrentLine(panel, lineIndex) {
+            // 這個功能可以選擇性實現
+        }
+
+        // 高亮選中的文字（高亮所有相同文字）
+        function highlightSelection(colorIndex) {
+            if (!selectedText) return;
+            
+            // 清除之前同顏色的高亮
+            if (highlightedTexts[colorIndex]) {
+                clearHighlightColor(colorIndex);
+            }
+            
+            highlightedTexts[colorIndex] = selectedText;
+            
+            // 高亮所有視窗中的相同文字
+            highlightAllOccurrences(selectedText, colorIndex);
+            
+            // 顯示高亮控制按鈕
+            document.getElementById(`highlightBtn${colorIndex}`).style.display = 'block';
+            
+            hideContextMenu();
+            window.getSelection().removeAllRanges();
+        }
+
+        // 高亮所有出現的文字
+        function highlightAllOccurrences(text, colorIndex) {
+            // 處理左右面板
+            ['left', 'right'].forEach(panel => {
+                const contentEl = document.getElementById(`${panel}OriginalContent`);
+                if (contentEl) {
+                    highlightInElement(contentEl, text, colorIndex);
+                }
+                
+                // 處理 iframe 內容
+                const iframe = document.querySelector(`#${panel}Content iframe`);
+                if (iframe && iframe.contentDocument) {
+                    const iframeBody = iframe.contentDocument.body;
+                    if (iframeBody) {
+                        highlightInElement(iframeBody, text, colorIndex);
+                    }
+                }
+            });
+        }
+
+        // 在元素中高亮文字
+        function highlightInElement(element, text, colorIndex) {
+            const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+            
+            const textNodes = [];
+            let node;
+            
+            while (node = walker.nextNode()) {
+                if (node.nodeValue.includes(text)) {
+                    textNodes.push(node);
+                }
+            }
+            
+            textNodes.forEach(textNode => {
+                const parent = textNode.parentNode;
+                const content = textNode.nodeValue;
+                const regex = new RegExp(escapeRegExp(text), 'g');
+                
+                if (parent.className && parent.className.includes('highlight-')) {
+                    return; // 跳過已經高亮的
+                }
+                
+                const parts = content.split(regex);
+                const fragment = document.createDocumentFragment();
+                
+                parts.forEach((part, i) => {
+                    if (part) {
+                        fragment.appendChild(document.createTextNode(part));
+                    }
+                    if (i < parts.length - 1) {
+                        const span = document.createElement('span');
+                        span.className = `highlight-${colorIndex}`;
+                        span.textContent = text;
+                        fragment.appendChild(span);
+                    }
+                });
+                
+                parent.replaceChild(fragment, textNode);
+            });
+        }
+
+        // 清除特定顏色的高亮
+        function clearHighlightColor(colorIndex) {
+            document.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
+                const parent = element.parentNode;
+                const textNode = document.createTextNode(element.textContent);
+                parent.replaceChild(textNode, element);
+                
+                // 合併相鄰的文字節點
+                parent.normalize();
+            });
+            
+            highlightedTexts[colorIndex] = null;
+            document.getElementById(`highlightBtn${colorIndex}`).style.display = 'none';
+        }
+
+        // 清除所有高亮
+        function clearAllHighlights() {
+            for (let i = 1; i <= 5; i++) {
+                clearHighlightColor(i);
+            }
+            hideContextMenu();
+        }
+
+        // 輔助函數：轉義正則表達式
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // 在書籤間導航
+        function navigateBookmarks() {
+            if (bookmarkArray.length === 0) {
+                updateStatus('沒有書籤');
+                return;
+            }
+            
+            currentBookmarkIndex = (currentBookmarkIndex + 1) % bookmarkArray.length;
+            const [panel, line] = bookmarkArray[currentBookmarkIndex].split('-');
+            
+            // 找到對應的行
+            const row = document.querySelector(
+                `#${panel}ContentWrapper .line-number[data-line="${line}"]`
+            )?.closest('.content-row');
+            
+            if (row) {
+                // 滾動到書籤位置
+                row.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+                
+                // 閃爍效果
+                const lineElement = row.querySelector('.line-number');
+                if (lineElement) {
+                    lineElement.style.transition = 'background-color 0.3s';
+                    const originalBg = lineElement.style.backgroundColor;
+                    lineElement.style.backgroundColor = '#4ec9b0';
+                    setTimeout(() => {
+                        lineElement.style.backgroundColor = originalBg;
+                    }, 500);
+                }
+                
+                updateStatus(`跳轉到書籤: ${panel} 面板第 ${line} 行`);
+            }
+        }
+
+        // 確保全域變數被正確初始化
+        if (typeof currentFocusedPanel === 'undefined') {
+            window.currentFocusedPanel = 'left';
+        }
+        if (typeof currentFocusedLine === 'undefined') {
+            window.currentFocusedLine = 1;
+        }
+
+        let selectedText = '';
+        let selectedRange = null;
+
+        // 設置右鍵選單
+        function setupContextMenu(element) {
+            element.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                
+                const selection = window.getSelection();
+                selectedText = selection.toString();
+                
+                if (selectedText) {
+                    selectedRange = selection.getRangeAt(0);
+                    showContextMenu(e.clientX, e.clientY);
+                }
+            });
+        }
+
+        // 為 iframe 設置右鍵選單
+        function setupIframeContextMenu(iframe) {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            
+            iframeDoc.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                
+                const selection = iframe.contentWindow.getSelection();
+                selectedText = selection.toString();
+                
+                if (selectedText) {
+                    selectedRange = selection.getRangeAt(0);
+                    showContextMenu(e.clientX, e.clientY);
+                }
+            });
+        }
+
+        // 顯示右鍵選單
+        function showContextMenu(x, y) {
+            const menu = document.getElementById('contextMenu');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.style.display = 'block';
+            
+            // 點擊其他地方關閉選單
+            document.addEventListener('click', hideContextMenu);
+        }
+
+        // 隱藏右鍵選單
+        function hideContextMenu() {
+            document.getElementById('contextMenu').style.display = 'none';
+            document.removeEventListener('click', hideContextMenu);
         }
     </script>
 </body>
