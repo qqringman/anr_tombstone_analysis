@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Set
 from enum import Enum
 import traceback
+import base64
 
 # 導入基礎類別
 from vp_analyze_logs_base import (
@@ -4855,24 +4856,34 @@ class LogAnalyzerSystem:
         output_dir = os.path.join(self.output_folder, os.path.dirname(file_info['rel_path']))
         os.makedirs(output_dir, exist_ok=True)
         
-        output_file = os.path.join(output_dir, file_info['name'] + '.analyzed.txt')
+        # 保存文字版本
+        output_file_txt = os.path.join(output_dir, file_info['name'] + '.analyzed.txt')
+        with open(output_file_txt, 'w', encoding='utf-8') as f:
+            f.write(result)
+        
+        # 生成並保存 HTML 版本
+        output_file_html = os.path.join(output_dir, file_info['name'] + '.analyzed.html')
+        try:
+            html_content = self._generate_html_report(result, file_info)
+            with open(output_file_html, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            print(f"✅ HTML 報告已生成: {output_file_html}")
+            
+            # 如果 HTML 生成成功，使用 HTML 版本
+            output_file = output_file_html
+        except Exception as e:
+            print(f"❌ 生成 HTML 報告失敗: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            # 如果 HTML 生成失敗，使用文字版本
+            output_file = output_file_txt
         
         # 複製原始檔案
         original_copy = os.path.join(output_dir, file_info['name'])
         shutil.copy2(file_info['path'], original_copy)
         
-        # 在報告開頭加入原始檔案連結
-        original_link = f'''
-    🔗 查看原始檔案: {file_info['name']}
-    {'=' * 60}
-
-    '''
-        
-        # 寫入分析結果（加上連結）
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(original_link + result)
-        
-        # 更新索引
+        # 更新索引（保持原有結構）
         self._update_index(index_data, file_info['rel_path'], output_file, original_copy)
         
         # 更新統計
@@ -4881,6 +4892,366 @@ class LogAnalyzerSystem:
         else:
             self.stats['tombstone_count'] += 1
     
+    def _generate_html_report(self, text_content: str, file_info: Dict) -> str:
+        """生成 HTML 格式的分析報告（支援分割視窗）"""
+        import json
+        
+        # 原始檔案的相對路徑
+        original_file = file_info['name']
+        
+        # 將內容分行並進行 JSON 編碼（最安全的方式）
+        lines = text_content.split('\n')
+        json_lines = json.dumps(lines, ensure_ascii=False)
+        
+        return f"""<!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{html.escape(file_info['name'])} - 分析報告</title>
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
+            body {{
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                background: #1a1a1a;
+                color: #d4d4d4;
+                overflow: hidden;
+                height: 100vh;
+            }}
+            
+            /* 分割視窗容器 */
+            .split-container {{
+                display: flex;
+                height: 100vh;
+                position: relative;
+            }}
+            
+            /* 左側面板 - 分析報告 */
+            .left-panel {{
+                flex: 1;
+                overflow-y: auto;
+                background: #1e1e1e;
+                position: relative;
+            }}
+            
+            /* 右側面板 - 原始檔案 */
+            .right-panel {{
+                flex: 0;
+                width: 0;
+                overflow-y: auto;
+                background: #252526;
+                position: relative;
+                transition: width 0.3s ease;
+            }}
+            
+            .right-panel.open {{
+                flex: 1;
+                width: 50%;
+            }}
+            
+            /* 分割條 */
+            .splitter {{
+                width: 5px;
+                background: #333;
+                cursor: col-resize;
+                position: relative;
+                display: none;
+            }}
+            
+            .splitter.visible {{
+                display: block;
+            }}
+            
+            .splitter:hover {{
+                background: #007acc;
+            }}
+            
+            /* 面板內容 */
+            .panel-content {{
+                padding: 20px;
+                font-size: 14px;
+                line-height: 1.6;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            }}
+            
+            /* 標題欄 */
+            .panel-header {{
+                position: sticky;
+                top: 0;
+                background: #2d2d30;
+                padding: 10px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid #3e3e42;
+                z-index: 10;
+            }}
+            
+            .panel-title {{
+                font-weight: bold;
+                color: #cccccc;
+            }}
+            
+            /* 控制按鈕 */
+            .panel-controls {{
+                display: flex;
+                gap: 10px;
+            }}
+            
+            .control-btn {{
+                background: transparent;
+                border: none;
+                color: #cccccc;
+                cursor: pointer;
+                padding: 5px 10px;
+                border-radius: 3px;
+                font-size: 14px;
+                transition: all 0.2s;
+            }}
+            
+            .control-btn:hover {{
+                background: #3e3e42;
+                color: #ffffff;
+            }}
+            
+            /* 查看原始檔案連結 */
+            .view-original {{
+                color: #4ec9b0;
+                text-decoration: underline;
+                cursor: pointer;
+            }}
+            
+            .view-original:hover {{
+                color: #6edcb8;
+            }}
+            
+            /* 全屏模式 */
+            .fullscreen {{
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                z-index: 9999;
+                max-width: 100% !important;
+            }}
+            
+            /* Loading */
+            .loading {{
+                text-align: center;
+                padding: 50px;
+                color: #666;
+            }}
+            
+            /* 報告行樣式 */
+            .report-line {{
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                margin: 0;
+                padding: 2px 0;
+            }}
+            
+            /* 高亮樣式 */
+            .anr-type {{
+                color: #ff9800;
+                font-weight: bold;
+            }}
+            
+            .process-name {{
+                color: #4ec9b0;
+                font-weight: bold;
+            }}
+            
+            .timestamp {{
+                color: #608b4e;
+            }}
+            
+            .separator {{
+                color: #565656;
+            }}
+            
+            .emoji {{
+                font-size: 1.1em;
+            }}
+            
+            /* 原始檔案內容 */
+            .original-content {{
+                white-space: pre;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="split-container">
+            <!-- 左側面板 - 分析報告 -->
+            <div class="left-panel" id="leftPanel">
+                <div class="panel-header">
+                    <span class="panel-title">📊 分析報告</span>
+                    <div class="panel-controls">
+                        <button class="control-btn" onclick="toggleFullscreen('leftPanel')" title="全屏">⛶</button>
+                    </div>
+                </div>
+                <div class="panel-content" id="reportContent">載入中...</div>
+            </div>
+            
+            <!-- 分割條 -->
+            <div class="splitter" id="splitter"></div>
+            
+            <!-- 右側面板 - 原始檔案 -->
+            <div class="right-panel" id="rightPanel">
+                <div class="panel-header">
+                    <span class="panel-title">📄 原始檔案: {html.escape(original_file)}</span>
+                    <div class="panel-controls">
+                        <button class="control-btn" onclick="toggleFullscreen('rightPanel')" title="全屏">⛶</button>
+                        <button class="control-btn" onclick="closeRightPanel()" title="關閉">✕</button>
+                    </div>
+                </div>
+                <div class="panel-content" id="originalContent">
+                    <div class="loading">載入中...</div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // 報告內容（使用 JSON 格式最安全）
+            const reportLines = {json_lines};
+            
+            // 初始化
+            document.addEventListener('DOMContentLoaded', function() {{
+                processReportContent();
+            }});
+            
+            // 處理報告內容
+            function processReportContent() {{
+                const container = document.getElementById('reportContent');
+                container.innerHTML = '';
+                
+                reportLines.forEach(function(line) {{
+                    const div = document.createElement('div');
+                    div.className = 'report-line';
+                    
+                    // 處理特殊格式
+                    let processedLine = line;
+                    
+                    // 將 "查看原始檔案" 轉換為連結
+                    if (line.includes('🔗 查看原始檔案:')) {{
+                        processedLine = line.replace(
+                            /🔗 查看原始檔案: (.+)/,
+                            '🔗 <a class="view-original" onclick="openOriginalFile()">查看原始檔案: $1</a>'
+                        );
+                    }}
+                    
+                    // 高亮關鍵字
+                    processedLine = processedLine.replace(/ANR 類型: (.+)/, 'ANR 類型: <span class="anr-type">$1</span>');
+                    processedLine = processedLine.replace(/進程名稱: (.+)/, '進程名稱: <span class="process-name">$1</span>');
+                    processedLine = processedLine.replace(/發生時間: (.+)/, '發生時間: <span class="timestamp">$1</span>');
+                    
+                    // 處理分隔線
+                    if (/^=+$/.test(processedLine)) {{
+                        processedLine = '<span class="separator">' + processedLine + '</span>';
+                    }}
+                    
+                    div.innerHTML = processedLine;
+                    container.appendChild(div);
+                }});
+            }}
+            
+            // 開啟原始檔案
+            function openOriginalFile() {{
+                const rightPanel = document.getElementById('rightPanel');
+                const splitter = document.getElementById('splitter');
+                
+                rightPanel.classList.add('open');
+                splitter.classList.add('visible');
+                
+                loadOriginalFile();
+            }}
+            
+            // 載入原始檔案
+            async function loadOriginalFile() {{
+                try {{
+                    const response = await fetch('{original_file}');
+                    const text = await response.text();
+                    
+                    const contentDiv = document.getElementById('originalContent');
+                    contentDiv.innerHTML = '';
+                    
+                    const pre = document.createElement('pre');
+                    pre.className = 'original-content';
+                    pre.textContent = text;
+                    
+                    contentDiv.appendChild(pre);
+                }} catch (error) {{
+                    document.getElementById('originalContent').innerHTML = 
+                        '<div class="loading">載入失敗: ' + error.message + '</div>';
+                }}
+            }}
+            
+            // 關閉右側面板
+            function closeRightPanel() {{
+                const rightPanel = document.getElementById('rightPanel');
+                const splitter = document.getElementById('splitter');
+                
+                rightPanel.classList.remove('open');
+                splitter.classList.remove('visible');
+            }}
+            
+            // 全屏切換
+            function toggleFullscreen(panelId) {{
+                const panel = document.getElementById(panelId);
+                panel.classList.toggle('fullscreen');
+            }}
+            
+            // 分割條拖動
+            let isResizing = false;
+            
+            document.getElementById('splitter').addEventListener('mousedown', function(e) {{
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                e.preventDefault();
+            }});
+            
+            document.addEventListener('mousemove', function(e) {{
+                if (!isResizing) return;
+                
+                const container = document.querySelector('.split-container');
+                const leftPanel = document.getElementById('leftPanel');
+                const rightPanel = document.getElementById('rightPanel');
+                
+                const containerWidth = container.offsetWidth;
+                const leftWidth = e.clientX;
+                const leftPercent = (leftWidth / containerWidth) * 100;
+                
+                if (leftPercent > 20 && leftPercent < 80) {{
+                    leftPanel.style.flex = '0 0 ' + leftPercent + '%';
+                    rightPanel.style.flex = '0 0 ' + (100 - leftPercent) + '%';
+                }}
+            }});
+            
+            document.addEventListener('mouseup', function() {{
+                isResizing = false;
+                document.body.style.cursor = 'default';
+            }});
+            
+            // ESC 退出全屏
+            document.addEventListener('keydown', function(e) {{
+                if (e.key === 'Escape') {{
+                    document.querySelectorAll('.fullscreen').forEach(function(el) {{
+                        el.classList.remove('fullscreen');
+                    }});
+                }}
+            }});
+        </script>
+    </body>
+    </html>"""
+
     def _update_index(self, index_data: Dict, rel_path: str, analyzed_file: str, original_file: str):
         """更新索引"""
         parts = rel_path.split(os.sep)
@@ -4892,13 +5263,24 @@ class LogAnalyzerSystem:
             current = current[part]
         
         filename = parts[-1]
-        current[filename + '.analyzed.txt'] = {
+        
+        # 根據分析檔案的實際格式建立索引鍵
+        if analyzed_file.endswith('.html'):
+            index_key = filename + '.analyzed.html'
+        else:
+            index_key = filename + '.analyzed.txt'
+        
+        current[index_key] = {
             'analyzed_file': analyzed_file,
             'original_file': original_file
         }
     
     def _generate_index(self, index_data: Dict):
         """生成 HTML 索引"""
+        print(f"\n📊 最終索引數據結構:")
+        print(json.dumps(index_data, indent=2, ensure_ascii=False)[:1000])
+        print("...")
+        
         html_content = self._generate_html_index(index_data)
         
         index_file = os.path.join(self.output_folder, 'index.html')
@@ -4920,7 +5302,7 @@ class LogAnalyzerSystem:
                     # 檢查是否有 HTML 版本
                     is_html = analyzed_rel.endswith('.html')
                     file_type = 'anr' if 'anr' in name.lower() else 'tombstone'
-                    icon = '🟠' if file_type == 'anr' else '💥'
+                    icon = '⚠️' if file_type == 'anr' else '💥'
                     
                     # 直接連結到原始檔案
                     html_str += f'''
@@ -4966,7 +5348,7 @@ class LogAnalyzerSystem:
                         </div>
                     </div>
                     '''
-            return html_str
+            return html_str  # 確保有返回值！
         
         # 計算統計數據
         def _count_files(data):
@@ -5303,6 +5685,21 @@ class LogAnalyzerSystem:
 
             .control-btn svg {{
                 flex-shrink: 0;
+            }}
+
+            .file-formats {{
+                display: inline-flex;
+                gap: 8px;
+            }}
+
+            .file-formats a {{
+                text-decoration: none;
+                opacity: 0.7;
+                transition: opacity 0.2s;
+            }}
+
+            .file-formats a:hover {{
+                opacity: 1;
             }}
 
         </style>
