@@ -553,8 +553,6 @@ class AndroidLogAnalyzer:
                             if log_info['cmdline']:
                                 all_logs.append(log_info)
                                 files_with_cmdline += 1
-                                if log_info['type'] == 'ANR':  # 確保是 ANR 類型
-                                    anr_subject_count += 1
                     else:
                         # Fallback to file reading
                         print(f"  No grep results, falling back to file reading")
@@ -564,9 +562,7 @@ class AndroidLogAnalyzer:
                                 log_info = self.extract_cmdline_from_file_fallback(file_path)
                                 if log_info['cmdline']:
                                     all_logs.append(log_info)
-                                    files_with_cmdline += 1
-                                    if log_info['type'] == 'ANR':  # 確保是 ANR 類型
-                                        anr_subject_count += 1                                    
+                                    files_with_cmdline += 1                                   
                 else:
                     # No grep available, use traditional method
                     for file_name in os.listdir(tombstone_folder):

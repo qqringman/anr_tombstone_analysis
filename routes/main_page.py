@@ -3708,10 +3708,7 @@ def analyze():
         
         # 生成包含時間戳和 UUID 的唯一 ID
         analysis_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + str(uuid.uuid4())[:8]
-        
-        # 執行分析 - 這裡是關鍵，確保 results 被定義
-        results = analyzer.analyze_logs(path)
-               
+                      
         # === 新增：執行 vp_analyze_logs.py ===
         # 取得路徑的最後一個資料夾名稱
         last_folder_name = os.path.basename(path.rstrip(os.sep))
@@ -3735,7 +3732,10 @@ def analyze():
                 vp_analyze_success = False
         else:
             print(f"輸出目錄不存在，將建立新的: {output_path}")
-    
+
+        # 執行分析 - 這裡是關鍵，確保 results 被定義
+        results = analyzer.analyze_logs(path)
+            
         # 執行 vp_analyze_logs.py
         vp_analyze_success = False
         vp_analyze_error = None
