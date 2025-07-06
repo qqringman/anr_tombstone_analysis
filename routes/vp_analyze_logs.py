@@ -731,7 +731,22 @@ class ANRReportGenerator:
         
         <div class="report-content">
         '''
+
+        # 添加時間線分析
+        self._add_html_timeline_analysis()
         
+        # 添加 AI 異常檢測
+        self._add_html_anomaly_detection()
+        
+        # 添加風險評估
+        self._add_html_risk_assessment()
+        
+        # 添加代碼修復建議
+        self._add_html_code_fix_suggestions()
+        
+        # 添加執行摘要（放在最前面）
+        executive_summary = self._generate_executive_summary()
+
         # 添加摘要
         self._add_html_summary()
         
