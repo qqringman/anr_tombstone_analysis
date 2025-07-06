@@ -24,6 +24,7 @@ import queue
 from routes.ai_analyzer import ai_analyzer_bp
 from routes.view_file import view_file_bp
 from routes.main_page import main_page_bp
+from routes.view_analysis import view_analysis_bp
 
 # 添加進度隊列
 progress_queues = {}
@@ -34,6 +35,7 @@ app = Flask(__name__)
 app.register_blueprint(ai_analyzer_bp)
 app.register_blueprint(view_file_bp)
 app.register_blueprint(main_page_bp)
+app.register_blueprint(view_analysis_bp)
 
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 app.config['JSON_AS_ASCII'] = False

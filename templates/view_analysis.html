@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ file_path }} - Android Log 分析報告查看器</title>
+<style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+			
+		/* 將分析報告中的樣式提升為全域樣式 */
+		.panel-content style {
+			display: block !important;
+		}    
+		
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #252525;
+            --bg-hover: #333333;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --border-color: #444444;
+            --accent-color: #4ec9b0;
+            --header-height: 60px;
+            --status-height: 30px;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* 頂部工具列 */
+        .header {
+            height: var(--header-height);
+            background: #1a1a1a;  /* 改為更深的黑色 */
+            border-bottom: 1px solid #333333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            position: relative;
+            z-index: 100;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .file-info h1 {
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        .file-info p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .btn {
+            background: #2d2d2d;
+            border: 1px solid #444444;
+            color: #e0e0e0;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+        
+        .btn:hover {
+            background: #3a3a3a;
+            border-color: #666666;
+        }
+        
+        .btn-primary {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: var(--bg-primary);
+        }
+        
+        .btn-primary:hover {
+            background: #3db89f;
+        }
+        
+        /* 主容器 */
+        .main-container {
+            height: calc(100vh - var(--header-height) - var(--status-height));
+            display: flex;
+            position: relative;
+        }
+        
+        /* 分割面板 */
+        .split-panel {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .split-panel.hidden {
+            display: none;
+        }
+        
+        /* 面板頭部 */
+        .panel-header {
+            background: #1e1e1e;
+            padding: 8px 12px;
+            border-bottom: 1px solid #333333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 40px;
+        }
+        
+        .panel-title {
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .panel-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 18px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+        }
+        
+        .icon-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        /* 面板內容 */
+        .panel-content {
+            flex: 1;
+            overflow: hidden;  /* 改為 hidden，不顯示捲軸 */
+            position: relative;
+            background: var(--bg-primary);
+        }
+
+        /* iframe 樣式 */
+        .panel-content iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* 分析報告內容樣式 */
+        .analysis-content {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* 原始內容樣式 */
+        .original-content {
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #d4d4d4;
+            background: transparent;
+            height: 100%;
+            overflow: auto;  /* 保持捲軸 */
+            margin: 0;
+        }
+        
+        /* 分割條 */
+        .resize-handle {
+            width: 5px;
+            background: var(--border-color);
+            cursor: col-resize;
+            position: relative;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            /* 增加可點擊區域 */
+            margin: 0 -3px;
+            padding: 0 3px;
+            z-index: 10;
+        }
+        
+        .resize-handle:hover {
+            background: var(--accent-color);
+        }
+
+        .resize-handle::before {
+            content: '';
+            position: absolute;
+            left: -5px;
+            right: -5px;
+            top: 0;
+            bottom: 0;
+            cursor: col-resize;
+        }
+
+        .resize-handle.hidden {
+            display: none;
+        }
+        
+        /* 狀態列 */
+        .status-bar {
+            height: var(--status-height);
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        /* 全屏模式 */
+        .fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 9999;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        .fullscreen .panel-content {
+            height: calc(100% - 45px);
+        }
+        
+        /* 載入動畫 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+        
+        .loading::before {
+            content: '';
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 匯出選單 */
+        .export-menu {
+            position: absolute;
+            top: 40px;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 0;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: none;
+            z-index: 1000;
+        }
+        
+        .export-menu.show {
+            display: block;
+        }
+        
+        .export-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .export-item:hover {
+            background: var(--bg-hover);
+        }
+        
+        /* 響應式設計 */
+        @media (max-width: 768px) {
+            .header {
+                padding: 0 10px;
+            }
+            
+            .header-buttons {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+            
+            .btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            
+            .btn span:not(:first-child) {
+                display: none;
+            }
+            
+            /* 在手機上預設使用單欄顯示 */
+            .split-panel {
+                flex: 1 !important;
+            }
+            
+            .resize-handle {
+                display: none !important;
+            }
+        }
+        
+        /* 錯誤訊息 */
+        .error-message {
+            color: #ff6b6b;
+            padding: 20px;
+            text-align: center;
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 6px;
+            margin: 20px;
+        }
+
+        /* 分析報告內容樣式 */
+        .panel-content {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background: var(--bg-primary);
+        }
+        
+        /* 分析報告容器 */
+        .analysis-wrapper {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #d4d4d4;
+        }
+        
+        /* 覆蓋分析報告的樣式 */
+        .panel-content .report-content,
+        .panel-content .report-line,
+        .panel-content pre {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #d4d4d4;
+            background: transparent;
+        }
+        
+        .panel-content .report-line {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            padding: 2px 0;
+        }
+        
+        /* 原始內容樣式 */
+        .original-content {
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #d4d4d4;
+            background: transparent;
+        }
+        
+        /* 分析報告特定樣式 */
+        .panel-content .report-line {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            padding: 2px 0;
+            color: var(--text-primary);
+        }
+        
+        .panel-content .anr-type {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        
+        .panel-content .process-name {
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+        
+        .panel-content .timestamp {
+            color: #608b4e;
+        }
+        
+        .panel-content .separator {
+            color: #565656;
+        }
+        
+        .panel-content a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        
+        .panel-content a:hover {
+            text-decoration: underline;
+        }
+
+        /* 狀態列警告樣式 */
+        .status-bar .warning-text {
+            color: #ff6b6b;
+            font-weight: bold;
+            margin-left: 20px;
+        }
+
+        /* 匯出選單提示 */
+        .export-menu::before {
+            content: '請勿在載入內容前匯出';
+            position: absolute;
+            top: -25px;
+            right: 0;
+            color: #ff6b6b;
+            font-size: 12px;
+            white-space: nowrap;
+            background: var(--bg-secondary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #ff6b6b;
+        }        
+    </style>    
+</head>
+<body>
+    <!-- 頂部工具列 -->
+    <div class="header">
+        <div class="header-left">
+            <div class="file-info">
+                <h1 id="filename">載入中...</h1>
+                <p id="filepath">{{ file_path }}</p>
+            </div>
+        </div>
+        <div class="header-buttons">
+            <button class="btn btn-primary" id="toggleOriginalBtn" onclick="toggleOriginalPanel()">
+                <span>📄</span>
+                <span>查看原始檔案</span>
+            </button>
+            <button class="btn" onclick="switchPanels()">
+                <span>🔄</span>
+                <span>切換內容</span>
+            </button>
+            <button class="btn" onclick="toggleFullscreenMode()">
+                <span>⛶</span>
+                <span>全屏模式</span>
+            </button>
+            <a href="/view-analysis?path={{ file_path }}&download=true" class="btn" download>
+                <span>📥</span>
+                <span>下載分析</span>
+            </a>
+            <a href="/view-analysis?path={{ file_path }}&download=true&original=true" class="btn" download>
+                <span>📥</span>
+                <span>下載原始</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- 主容器 -->
+    <div class="main-container" id="mainContainer">
+        <!-- 左側面板（預設顯示分析報告） -->
+        <div class="split-panel" id="leftPanel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span id="leftPanelIcon">📊</span>
+                    <span id="leftPanelTitle">分析報告</span>
+                </div>
+                <div class="panel-controls">
+                    <div style="position: relative;">
+                        <button class="icon-btn" onclick="toggleExportMenu('left')" title="匯出">
+                            💾
+                        </button>
+                        <div class="export-menu" id="leftExportMenu">
+                            <div class="export-item" onclick="exportContent('left', 'html')">
+                                <span>🌐</span> HTML
+                            </div>
+                            <div class="export-item" onclick="exportContent('left', 'markdown')">
+                                <span>📝</span> Markdown
+                            </div>
+                            <div class="export-item" onclick="exportContent('left', 'txt')">
+                                <span>📄</span> 純文字
+                            </div>
+                        </div>
+                    </div>
+                    <button class="icon-btn" onclick="toggleFullscreen('left')" title="全屏">
+                        ⛶
+                    </button>
+                </div>
+            </div>
+            <div class="panel-content" id="leftContent">
+                <div class="loading">載入分析報告中...</div>
+            </div>
+        </div>
+        
+        <!-- 分割條 -->
+        <div class="resize-handle hidden" id="resizeHandle"></div>
+        
+        <!-- 右側面板（預設隱藏） -->
+        <div class="split-panel hidden" id="rightPanel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span id="rightPanelIcon">📄</span>
+                    <span id="rightPanelTitle">原始檔案</span>
+                </div>
+                <div class="panel-controls">
+                    <div style="position: relative;">
+                        <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
+                            💾
+                        </button>
+                        <div class="export-menu" id="rightExportMenu">
+                            <div class="export-item" onclick="exportContent('right', 'html')">
+                                <span>🌐</span> HTML
+                            </div>
+                            <div class="export-item" onclick="exportContent('right', 'markdown')">
+                                <span>📝</span> Markdown
+                            </div>
+                            <div class="export-item" onclick="exportContent('right', 'txt')">
+                                <span>📄</span> 純文字
+                            </div>
+                        </div>
+                    </div>
+                    <button class="icon-btn" onclick="toggleFullscreen('right')" title="全屏">
+                        ⛶
+                    </button>
+                    <button class="icon-btn" onclick="closePanel('right')" title="關閉">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <div class="panel-content" id="rightContent">
+                <div class="loading">準備載入原始檔案...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 狀態列 -->
+    <div class="status-bar">
+        <div class="status-left">
+            <span id="statusText">就緒</span>
+            <span class="warning-text">匯出時都會顯示內容再匯出</span>
+        </div>
+        <div class="status-right">
+            <span id="reportType">{{ report_type.upper() }} 報告</span>
+            <span> | </span>
+            <span id="loadTime">載入時間: 計算中...</span>
+        </div>
+    </div>
+    
+    <script>
+        // 全域變數
+        const filePath = {{ escaped_file_path | safe }};
+        let analysisContent = '';  // 分析報告內容
+        let originalContent = '';  // 原始檔案內容
+        let isOriginalLoaded = false;
+        let currentLeftType = 'analysis';
+        let currentRightType = 'original';
+        let startTime = Date.now();
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateFilename();
+            loadAnalysisContent();
+            
+            // 自動開啟原始檔案視窗
+            setTimeout(() => {
+                toggleOriginalPanel();  // 自動開啟右側面板
+            }, 500);
+            
+            setupResizeHandler();
+            setupKeyboardShortcuts();
+            
+            // 點擊外部關閉匯出選單
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.export-menu') && !e.target.closest('.icon-btn')) {
+                    closeAllExportMenus();
+                }
+            });
+        });
+        
+        // 更新檔名顯示
+        function updateFilename() {
+            // 解碼 HTML 編碼的檔案路徑
+            const decodedPath = decodeURIComponent(filePath);
+            const pathParts = decodedPath.split('/');
+            let filename = pathParts[pathParts.length - 1];
+            
+            // 移除 .analyzed.html 後綴以顯示更簡潔的檔名
+            filename = filename.replace('.analyzed.html', '');
+            filename = filename.replace('.analyzed.txt', '');
+            
+            document.getElementById('filename').textContent = filename;
+        }
+        
+        // 載入分析報告內容
+        async function loadAnalysisContent() {
+            try {
+                const response = await fetch(`/api/load-analysis?path=${encodeURIComponent(filePath)}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    analysisContent = data.content;  // 儲存分析報告內容
+                    
+                    // 調試：檢查內容類型
+                    console.log('Content type:', typeof data.content);
+                    console.log('Content preview:', data.content.substring(0, 200));
+                    
+                    displayContent('left', data.content, 'analysis');
+                    updateLoadTime();
+                } else {
+                    showError('left', data.error);
+                }
+            } catch (error) {
+                showError('left', '載入分析報告失敗: ' + error.message);
+            }
+        }
+        
+        // 載入原始檔案內容
+        async function loadOriginalContent() {
+            if (isOriginalLoaded) return;
+            
+            updateStatus('載入原始檔案中...');
+            
+            try {
+                const response = await fetch(`/api/load-original?path=${encodeURIComponent(filePath)}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    originalContent = data.content;  // 儲存原始檔案內容
+                    displayContent('right', data.content, 'original');
+                    isOriginalLoaded = true;
+                    updateStatus('原始檔案已載入');
+                } else {
+                    showError('right', data.error || '找不到原始檔案');
+                    updateStatus('載入原始檔案失敗');
+                }
+            } catch (error) {
+                showError('right', '載入原始檔案失敗: ' + error.message);
+                updateStatus('載入原始檔案失敗');
+            }
+        }
+        
+        // 顯示內容
+        function displayContent(panel, content, type) {
+            const contentEl = document.getElementById(panel + 'Content');
+            
+            if (type === 'analysis') {
+                // 保存原始 HTML 內容（重要！）
+                if (panel === 'left' && currentLeftType === 'analysis') {
+                    analysisContent = content;
+                } else if (panel === 'right' && currentRightType === 'analysis') {
+                    analysisContent = content;
+                }
+                
+                // 創建 iframe 顯示
+                contentEl.innerHTML = '';
+                
+                const iframe = document.createElement('iframe');
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                iframe.srcdoc = content;
+                
+                contentEl.appendChild(iframe);
+                
+            } else {
+                // 原始檔案 - 純文字顯示
+                if (panel === 'left' && currentLeftType === 'original') {
+                    originalContent = content;
+                } else if (panel === 'right' && currentRightType === 'original') {
+                    originalContent = content;
+                }
+                
+                contentEl.innerHTML = `<pre class="original-content">${escapeHtml(content)}</pre>`;
+            }
+        }
+        
+        // 顯示錯誤
+        function showError(panel, message) {
+            const contentEl = document.getElementById(panel + 'Content');
+            contentEl.innerHTML = `<div class="error-message">❌ ${escapeHtml(message)}</div>`;
+        }
+        
+        // 切換原始檔案面板
+        function toggleOriginalPanel() {
+            const leftPanel = document.getElementById('leftPanel');
+            const rightPanel = document.getElementById('rightPanel');
+            const resizeHandle = document.getElementById('resizeHandle');
+            const btn = document.getElementById('toggleOriginalBtn');
+            
+            if (rightPanel.classList.contains('hidden')) {
+                // 顯示右側面板
+                rightPanel.classList.remove('hidden');
+                resizeHandle.classList.remove('hidden');
+                
+                // 設定為 50%/50% 比例
+                leftPanel.style.flex = '0 0 calc(50% - 2.5px)';
+                rightPanel.style.flex = '0 0 calc(50% - 2.5px)';
+                
+                // 載入原始檔案
+                if (!isOriginalLoaded) {
+                    loadOriginalContent();
+                }
+                
+                // 更新按鈕文字
+                btn.innerHTML = '<span>📄</span><span>隱藏原始檔案</span>';
+            } else {
+                // 隱藏右側面板
+                rightPanel.classList.add('hidden');
+                resizeHandle.classList.add('hidden');
+                
+                // 左側面板恢復全寬
+                leftPanel.style.flex = '1';
+                
+                // 更新按鈕文字
+                btn.innerHTML = '<span>📄</span><span>查看原始檔案</span>';
+            }
+        }
+        
+        // 切換左右面板內容
+        function switchPanels() {
+            // 確保右側面板已經開啟
+            const rightPanel = document.getElementById('rightPanel');
+            if (rightPanel.classList.contains('hidden')) {
+                updateStatus('請先開啟原始檔案視窗');
+                return;
+            }
+            
+            // 交換內容類型
+            const tempType = currentLeftType;
+            currentLeftType = currentRightType;
+            currentRightType = tempType;
+            
+            // 重新顯示內容
+            if (currentLeftType === 'analysis') {
+                displayContent('left', analysisContent, 'analysis');
+            } else {
+                displayContent('left', originalContent, 'original');
+            }
+            
+            if (currentRightType === 'analysis') {
+                displayContent('right', analysisContent, 'analysis');
+            } else {
+                displayContent('right', originalContent, 'original');
+            }
+            
+            // 更新標題
+            updatePanelTitles();
+            
+            updateStatus('已切換面板內容');
+        }
+        
+        // 更新面板標題
+        function updatePanelTitles() {
+            const leftIcon = document.getElementById('leftPanelIcon');
+            const leftTitle = document.getElementById('leftPanelTitle');
+            const rightIcon = document.getElementById('rightPanelIcon');
+            const rightTitle = document.getElementById('rightPanelTitle');
+            
+            if (currentLeftType === 'analysis') {
+                leftIcon.textContent = '📊';
+                leftTitle.textContent = '分析報告';
+            } else {
+                leftIcon.textContent = '📄';
+                leftTitle.textContent = '原始檔案';
+            }
+            
+            if (currentRightType === 'analysis') {
+                rightIcon.textContent = '📊';
+                rightTitle.textContent = '分析報告';
+            } else {
+                rightIcon.textContent = '📄';
+                rightTitle.textContent = '原始檔案';
+            }
+        }
+        
+        // 切換全屏（指定面板）
+        function toggleFullscreen(panel) {
+            const panelEl = document.getElementById(panel + 'Panel');
+            
+            if (panelEl.classList.contains('fullscreen')) {
+                panelEl.classList.remove('fullscreen');
+            } else {
+                // 先關閉其他全屏
+                document.querySelectorAll('.fullscreen').forEach(el => {
+                    el.classList.remove('fullscreen');
+                });
+                panelEl.classList.add('fullscreen');
+            }
+        }
+        
+        // 切換全屏模式（整個應用）
+        function toggleFullscreenMode() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        // 關閉面板
+        function closePanel(panel) {
+            if (panel === 'right') {
+                toggleOriginalPanel();
+            }
+        }
+        
+        // 切換匯出選單
+        function toggleExportMenu(panel) {
+            const menu = document.getElementById(panel + 'ExportMenu');
+            const otherMenu = document.getElementById(panel === 'left' ? 'rightExportMenu' : 'leftExportMenu');
+            
+            // 關閉另一個選單
+            if (otherMenu) {
+                otherMenu.classList.remove('show');
+            }
+            
+            // 切換當前選單
+            menu.classList.toggle('show');
+        }
+        
+        // 關閉所有匯出選單
+        function closeAllExportMenus() {
+            document.querySelectorAll('.export-menu').forEach(menu => {
+                menu.classList.remove('show');
+            });
+        }
+        
+        // 匯出內容
+        async function exportContent(panel, format) {
+            closeAllExportMenus();
+            
+            // 確保內容已載入
+            if (panel === 'left' && !analysisContent) {
+                updateStatus('請等待分析報告載入完成後再匯出');
+                return;
+            }
+            
+            if (panel === 'right' && !originalContent) {
+                updateStatus('請等待原始檔案載入完成後再匯出');
+                return;
+            }
+            
+            // 根據當前面板顯示的內容類型來決定匯出什麼
+            let content = '';
+            let contentType = '';
+            
+            if (panel === 'left') {
+                content = (currentLeftType === 'analysis') ? analysisContent : originalContent;
+                contentType = currentLeftType;
+            } else {
+                content = (currentRightType === 'analysis') ? analysisContent : originalContent;
+                contentType = currentRightType;
+            }
+            
+            // 確保有內容可匯出
+            if (!content) {
+                updateStatus('沒有內容可供匯出');
+                return;
+            }
+            
+            const filename = filePath.split('/').pop().replace(/\.[^/.]+$/, '');
+            
+            updateStatus(`正在匯出為 ${format.toUpperCase()} 格式...`);
+            
+            try {
+                const response = await fetch('/api/export-content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        content: content,
+                        format: format,
+                        filename: filename,
+                        contentType: contentType
+                    })
+                });
+                
+                if (response.ok) {
+                    // 下載檔案
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 從 Content-Disposition header 獲取檔名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let downloadFilename = `${filename}_${format}.${format}`;
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            downloadFilename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = downloadFilename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    updateStatus('匯出成功');
+                } else {
+                    const error = await response.json();
+                    updateStatus('匯出失敗: ' + (error.error || '未知錯誤'));
+                }
+            } catch (error) {
+                updateStatus('匯出失敗: ' + error.message);
+            }
+        }
+        
+        // 設置調整大小處理
+        function setupResizeHandler() {
+            const resizeHandle = document.getElementById('resizeHandle');
+            const leftPanel = document.getElementById('leftPanel');
+            const rightPanel = document.getElementById('rightPanel');
+            const mainContainer = document.getElementById('mainContainer');
+            
+            let isResizing = false;
+            let startX = 0;
+            let startLeftWidth = 0;
+            
+            // 創建一個覆蓋層來防止 iframe 干擾
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100%';
+            overlay.style.height = '100%';
+            overlay.style.zIndex = '9999';
+            overlay.style.cursor = 'col-resize';
+            overlay.style.display = 'none';
+            overlay.style.userSelect = 'none';
+            document.body.appendChild(overlay);
+            
+            resizeHandle.addEventListener('mousedown', function(e) {
+                isResizing = true;
+                startX = e.clientX;
+                startLeftWidth = leftPanel.offsetWidth;
+                
+                // 顯示覆蓋層
+                overlay.style.display = 'block';
+                
+                // 防止文字選擇
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                document.body.style.webkitUserSelect = 'none';
+                document.body.style.mozUserSelect = 'none';
+                document.body.style.msUserSelect = 'none';
+                
+                // 禁用 iframe 的指標事件
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    iframe.style.pointerEvents = 'none';
+                });
+                
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            
+            // 在 overlay 和 document 上監聽事件
+            function handleMouseMove(e) {
+                if (!isResizing) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const deltaX = e.clientX - startX;
+                const newLeftWidth = startLeftWidth + deltaX;
+                const containerWidth = mainContainer.offsetWidth - 5; // 減去 resize handle 的寬度
+                const minWidth = 200;
+                const maxWidth = containerWidth - minWidth;
+                
+                if (newLeftWidth >= minWidth && newLeftWidth <= maxWidth) {
+                    const leftPercent = (newLeftWidth / containerWidth) * 100;
+                    const rightPercent = 100 - leftPercent;
+                    
+                    leftPanel.style.flex = `0 0 calc(${leftPercent}% - 2.5px)`;
+                    rightPanel.style.flex = `0 0 calc(${rightPercent}% - 2.5px)`;
+                }
+            }
+            
+            function handleMouseUp(e) {
+                if (!isResizing) return;
+                
+                isResizing = false;
+                
+                // 隱藏覆蓋層
+                overlay.style.display = 'none';
+                
+                // 恢復樣式
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = '';
+                document.body.style.webkitUserSelect = '';
+                document.body.style.mozUserSelect = '';
+                document.body.style.msUserSelect = '';
+                
+                // 恢復 iframe 的指標事件
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    iframe.style.pointerEvents = 'auto';
+                });
+                
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // 同時在 document 和 overlay 上監聽
+            document.addEventListener('mousemove', handleMouseMove);
+            overlay.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            overlay.addEventListener('mouseup', handleMouseUp);
+            
+            // 處理滑鼠離開視窗的情況
+            document.addEventListener('mouseleave', function(e) {
+                if (isResizing) {
+                    handleMouseUp(e);
+                }
+            });
+            
+            // 讓拖曳條更容易點擊
+            resizeHandle.style.position = 'relative';
+            resizeHandle.innerHTML = '<div style="position: absolute; left: -5px; right: -5px; top: 0; bottom: 0; cursor: col-resize;"></div>';
+        }
+        
+        // 設置鍵盤快捷鍵
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                // ESC 退出全屏
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.fullscreen').forEach(el => {
+                        el.classList.remove('fullscreen');
+                    });
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    }
+                }
+                
+                // Ctrl+O 切換原始檔案
+                if (e.ctrlKey && e.key === 'o') {
+                    e.preventDefault();
+                    toggleOriginalPanel();
+                }
+                
+                // Ctrl+W 切換內容
+                if (e.ctrlKey && e.key === 'w') {
+                    e.preventDefault();
+                    switchPanels();
+                }
+                
+                // F11 全屏模式
+                if (e.key === 'F11') {
+                    e.preventDefault();
+                    toggleFullscreenMode();
+                }
+            });
+        }
+        
+        // 更新狀態
+        function updateStatus(message) {
+            document.getElementById('statusText').textContent = message;
+        }
+        
+        // 更新載入時間
+        function updateLoadTime() {
+            const loadTime = Date.now() - startTime;
+            document.getElementById('loadTime').textContent = `載入時間: ${loadTime}ms`;
+        }
+        
+        // HTML 轉義
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            // 確保 Unicode 字符正確顯示
+            return div.innerHTML.replace(/[\u00A0-\u9999<>\&]/gim, function(i) {
+                return '&#' + i.charCodeAt(0) + ';';
+            });
+        }
+    </script>
+</body>
+</html>

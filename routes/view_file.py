@@ -80,7 +80,8 @@ def view_file():
     """View file content endpoint with enhanced features and AI split view"""
     file_path = request.args.get('path')
     download = request.args.get('download', 'false').lower() == 'true'
-    
+    render_html = request.args.get('render', 'false').lower() == 'true'
+
     if not file_path:
         return "No file path provided", 400
     # Security check - prevent directory traversal
@@ -92,7 +93,11 @@ def view_file():
     # Check if it's a file
     if not os.path.isfile(file_path):
         return "Not a file", 400
-    
+
+    # 新增：如果是html且要render，直接用send_file
+    if render_html and file_path.lower().endswith('.html'):
+        return send_file(file_path, mimetype='text/html')
+        
     try:
         # Read file content
         with open(file_path, 'r', errors='ignore') as f:

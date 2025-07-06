@@ -4042,6 +4042,58 @@ class TombstoneReportGenerator:
         
         self.report_lines.extend(["", "=" * 60, ""])
 
+    def _add_suggestions(self):
+        """添加解決建議"""
+        self.report_lines.append("\n💡 解決建議")
+        
+        suggestions = self._generate_suggestions()
+        
+        # 調試建議
+        if suggestions['debugging']:
+            self.report_lines.append("\n🔍 調試建議:")
+            for i, suggestion in enumerate(suggestions['debugging'], 1):
+                self.report_lines.append(f"  {i}. {suggestion}")
+        
+        # 修復建議
+        if suggestions['fixing']:
+            self.report_lines.append("\n🔧 修復建議:")
+            for i, suggestion in enumerate(suggestions['fixing'], 1):
+                self.report_lines.append(f"  {i}. {suggestion}")
+        
+        # 預防建議
+        if suggestions['prevention']:
+            self.report_lines.append("\n🛡️ 預防措施:")
+            for i, suggestion in enumerate(suggestions['prevention'], 1):
+                self.report_lines.append(f"  {i}. {suggestion}")
+        
+        # 推薦工具
+        self.report_lines.append("\n🔨 推薦工具:")
+        tools = [
+            "addr2line - 符號解析",
+            "ndk-stack - 堆疊符號化",
+            "AddressSanitizer (ASAN) - 記憶體錯誤檢測",
+            "ThreadSanitizer (TSAN) - 線程競爭檢測",
+            "UndefinedBehaviorSanitizer (UBSAN) - 未定義行為檢測",
+            "Valgrind - 記憶體洩漏檢測",
+            "GDB/LLDB - 調試器",
+            "Android Studio Native Debugger - IDE 調試"
+        ]
+        
+        for tool in tools:
+            self.report_lines.append(f"  • {tool}")
+        
+        # 相關文檔
+        self.report_lines.append("\n📚 相關文檔:")
+        docs = [
+            "Android NDK 調試指南: https://developer.android.com/ndk/guides/debug",
+            "AddressSanitizer 使用: https://source.android.com/docs/security/test/asan",
+            "Native Crash 分析: https://source.android.com/docs/core/architecture/debugging/native-crash",
+            "Tombstone 分析指南: https://source.android.com/docs/core/architecture/debugging"
+        ]
+        
+        for doc in docs:
+            self.report_lines.append(f"  • {doc}")
+            
     def _get_crash_type(self) -> str:
         """獲取崩潰類型"""
         if self.info.signal == CrashSignal.SIGSEGV:
@@ -5092,12 +5144,6 @@ class LogAnalyzerSystem:
         <div class="split-container">
             <!-- 左側面板 - 分析報告 -->
             <div class="left-panel" id="leftPanel">
-                <div class="panel-header">
-                    <span class="panel-title">📊 分析報告</span>
-                    <div class="panel-controls">
-                        <button class="control-btn" onclick="toggleFullscreen('leftPanel')" title="全屏">⛶</button>
-                    </div>
-                </div>
                 <div class="panel-content" id="reportContent">載入中...</div>
             </div>
             
@@ -5253,7 +5299,7 @@ class LogAnalyzerSystem:
     </html>"""
 
     def _update_index(self, index_data: Dict, rel_path: str, analyzed_file: str, original_file: str):
-        """更新索引"""
+        """更新索引 - 使用絕對路徑"""
         parts = rel_path.split(os.sep)
         current = index_data
         
@@ -5270,9 +5316,10 @@ class LogAnalyzerSystem:
         else:
             index_key = filename + '.analyzed.txt'
         
+        # 儲存絕對路徑而不是相對路徑
         current[index_key] = {
-            'analyzed_file': analyzed_file,
-            'original_file': original_file
+            'analyzed_file': os.path.abspath(analyzed_file),  # 使用絕對路徑
+            'original_file': os.path.abspath(original_file)   # 使用絕對路徑
         }
     
     def _generate_index(self, index_data: Dict):
@@ -5296,18 +5343,19 @@ class LogAnalyzerSystem:
             for name, value in sorted(data.items()):
                 if isinstance(value, dict) and 'analyzed_file' in value:
                     # 檔案項目
-                    analyzed_rel = os.path.relpath(value['analyzed_file'], self.output_folder)
-                    original_rel = os.path.relpath(value['original_file'], self.output_folder)
+                    # 現在 value['analyzed_file'] 和 value['original_file'] 已經是絕對路徑
+                    analyzed_path = value['analyzed_file']
+                    original_path = value['original_file']
                     
                     # 檢查是否有 HTML 版本
-                    is_html = analyzed_rel.endswith('.html')
+                    is_html = analyzed_path.endswith('.html')
                     file_type = 'anr' if 'anr' in name.lower() else 'tombstone'
                     icon = '⚠️' if file_type == 'anr' else '💥'
                     
-                    # 直接連結到原始檔案
+                    # 使用新的查看器，傳遞絕對路徑
                     html_str += f'''
                     <div class="file-item {file_type}-item">
-                        <a href="{html.escape(analyzed_rel)}" class="file-link">
+                        <a href="/view-analysis?path={html.escape(analyzed_path)}" class="file-link">
                             <div class="file-content">
                                 <span class="file-icon">{icon}</span>
                                 <div class="file-info">
@@ -5321,7 +5369,7 @@ class LogAnalyzerSystem:
                                 </div>
                             </div>
                         </a>
-                        <a href="{html.escape(original_rel)}" target="_blank" class="source-link" title="查看原始檔案">
+                        <a href="/view-analysis?path={html.escape(original_path)}&original=true" target="_blank" class="source-link" title="查看原始檔案">
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                                 <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
                                 <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
@@ -5330,7 +5378,7 @@ class LogAnalyzerSystem:
                     </div>
                     '''
                 elif isinstance(value, dict):
-                    # 目錄項目
+                    # 目錄項目（保持不變）
                     folder_id = f"folder-{prefix}-{name}".replace('/', '-').replace(' ', '-')
                     file_count = _count_files(value)
                     html_str += f'''
@@ -5348,7 +5396,7 @@ class LogAnalyzerSystem:
                         </div>
                     </div>
                     '''
-            return html_str  # 確保有返回值！
+            return html_str
         
         # 計算統計數據
         def _count_files(data):

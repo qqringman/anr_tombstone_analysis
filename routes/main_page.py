@@ -4162,11 +4162,11 @@ def view_analysis_report():
             base_dir = os.path.dirname(file_path)
             
             # 替換相對路徑的連結
-            content = re.sub(
-                r'(href|src)="(?!http|https|//|#)([^"]+)"',
-                lambda m: f'{m.group(1)}="/view-file?path={quote(os.path.join(base_dir, m.group(2)))}"',
-                content
-            )
+            # content = re.sub(
+            #    r'(href|src)="(?!http|https|//|#)([^"]+)"',
+            #    lambda m: f'{m.group(1)}="/view-file?path={quote(os.path.join(base_dir, m.group(2)))}"',
+            #    content
+            #)
             
             return Response(content, mimetype='text/html; charset=utf-8')
         
