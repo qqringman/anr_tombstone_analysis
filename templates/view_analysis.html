@@ -574,8 +574,19 @@
             z-index: 10000;
             display: none;
             box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+            max-height: 80vh; /* 加入最大高度限制 */
+            overflow-y: auto; /* 內容過多時顯示捲軸 */
+            min-width: 180px; /* 確保選單有最小寬度 */
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 0.1s ease, transform 0.1s ease;            
         }
 
+        .context-menu[style*="visibility: visible"] {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
         .context-menu-item {
             padding: 8px 20px;
             cursor: pointer;
@@ -753,7 +764,7 @@
                 <span>📄</span>
                 <span>查看原始檔案</span>
             </button>
-            <button class="btn" onclick="switchPanels()">
+            <button class="btn" id="switchPanelsBtn" onclick="switchPanels()" style="display: none;">
                 <span>🔄</span>
                 <span>左右交換</span>
             </button>
@@ -783,6 +794,9 @@
                 </div>
                 <div class="panel-controls">
                     <div style="position: relative;">
+                        <button class="icon-btn" onclick="copyPanelContent('left')" title="複製內容">
+                            📋
+                        </button>                        
                         <button class="icon-btn" onclick="toggleExportMenu('left')" title="匯出">
                             💾
                         </button>
@@ -827,7 +841,10 @@
                     <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5)" title="清除粉紅高亮"></div>
                 </div>                
                 <div class="panel-controls">
-                    <div style="position: relative;">                        
+                    <div style="position: relative;">
+                        <button class="icon-btn" onclick="copyPanelContent('right')" title="複製內容">
+                            📋
+                        </button>                                                
                         <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
                             💾
                         </button>
@@ -867,36 +884,6 @@
             <span id="reportType">{{ report_type.upper() }} 報告</span>
             <span> | </span>
             <span id="loadTime">載入時間: 計算中...</span>
-        </div>
-    </div>
-    <!-- 右鍵選單 -->
-    <div class="context-menu" id="contextMenu">
-        <div class="context-menu-item" onclick="highlightSelection(1)">
-            <div class="color-box" style="background: #ffff00;"></div>
-            <span>高亮 1 (黃色)</span>
-        </div>
-        <div class="context-menu-item" onclick="highlightSelection(2)">
-            <div class="color-box" style="background: #00ff00;"></div>
-            <span>高亮 2 (綠色)</span>
-        </div>
-        <div class="context-menu-item" onclick="highlightSelection(3)">
-            <div class="color-box" style="background: #00bfff;"></div>
-            <span>高亮 3 (藍色)</span>
-        </div>
-        <div class="context-menu-item" onclick="highlightSelection(4)">
-            <div class="color-box" style="background: #ffa500;"></div>
-            <span>高亮 4 (橙色)</span>
-        </div>
-        <div class="context-menu-item" onclick="highlightSelection(5)">
-            <div class="color-box" style="background: #ffc0cb;"></div>
-            <span>高亮 5 (粉紅)</span>
-        </div>
-        <div class="context-menu-separator"></div>
-        <div class="context-menu-item" onclick="clearHighlight()">
-            <span>移除此高亮</span>
-        </div>
-        <div class="context-menu-item" onclick="clearAllHighlights()">
-            <span>清除所有高亮</span>
         </div>
     </div>
     <!-- 高亮導航提示 -->
@@ -1120,19 +1107,8 @@
         // 為表格佈局設置右鍵選單
         function setupContextMenuForTable(panel) {
             const contentCells = document.querySelectorAll(`#${panel}ContentWrapper .content-cell`);
-            
             contentCells.forEach(cell => {
-                cell.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                    
-                    const selection = window.getSelection();
-                    selectedText = selection.toString();
-                    
-                    if (selectedText) {
-                        selectedRange = selection.getRangeAt(0);
-                        showContextMenu(e.clientX, e.clientY);
-                    }
-                });
+                contextMenuManager.setupForElement(cell);
             });
         }
 
@@ -1232,6 +1208,7 @@
                 
                 // 更新按鈕文字
                 btn.innerHTML = '<span>📄</span><span>隱藏原始檔案</span>';
+                document.getElementById('switchPanelsBtn').style.display = 'inline-flex';
             } else {
                 // 隱藏右側面板
                 rightPanel.classList.add('hidden');
@@ -1242,6 +1219,7 @@
                 
                 // 更新按鈕文字
                 btn.innerHTML = '<span>📄</span><span>查看原始檔案</span>';
+                document.getElementById('switchPanelsBtn').style.display = 'none';
             }
         }
         
@@ -1631,15 +1609,6 @@
         let currentBookmarkIndex = -1;
         let bookmarkArray = [];
 
-        // 高亮相關變數
-        let highlightedTexts = {
-            1: null,
-            2: null,
-            3: null,
-            4: null,
-            5: null
-        };
-
         // 設置行號處理器
         function setupLineNumberHandlers(panel) {
             const lineNumbers = document.querySelectorAll(`#${panel}ContentWrapper .line-number`);
@@ -1717,23 +1686,7 @@
 
         // 高亮選中的文字（高亮所有相同文字）
         function highlightSelection(colorIndex) {
-            if (!selectedText) return;
-            
-            // 清除之前同顏色的高亮
-            if (highlightedTexts[colorIndex]) {
-                clearHighlightColor(colorIndex);
-            }
-            
-            highlightedTexts[colorIndex] = selectedText;
-            
-            // 高亮所有視窗中的相同文字
-            highlightAllOccurrences(selectedText, colorIndex);
-            
-            // 顯示高亮控制按鈕
-            document.getElementById(`highlightBtn${colorIndex}`).style.display = 'block';
-            
-            hideContextMenu();
-            window.getSelection().removeAllRanges();
+            highlightManager.highlightSelection(colorIndex);
         }
 
         // 高亮所有出現的文字
@@ -1804,17 +1757,7 @@
 
         // 清除特定顏色的高亮
         function clearHighlightColor(colorIndex) {
-            document.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
-                const parent = element.parentNode;
-                const textNode = document.createTextNode(element.textContent);
-                parent.replaceChild(textNode, element);
-                
-                // 合併相鄰的文字節點
-                parent.normalize();
-            });
-            
-            highlightedTexts[colorIndex] = null;
-            document.getElementById(`highlightBtn${colorIndex}`).style.display = 'none';
+            highlightManager.clearHighlightColor(colorIndex);
         }
 
         // 清除所有高亮
@@ -1874,58 +1817,333 @@
         if (typeof currentFocusedLine === 'undefined') {
             window.currentFocusedLine = 1;
         }
-
-        let selectedText = '';
-        let selectedRange = null;
-
-        // 設置右鍵選單
-        function setupContextMenu(element) {
-            element.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                
-                const selection = window.getSelection();
-                selectedText = selection.toString();
-                
-                if (selectedText) {
-                    selectedRange = selection.getRangeAt(0);
-                    showContextMenu(e.clientX, e.clientY);
-                }
-            });
-        }
-
-        // 為 iframe 設置右鍵選單
-        function setupIframeContextMenu(iframe) {
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            
-            iframeDoc.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                
-                const selection = iframe.contentWindow.getSelection();
-                selectedText = selection.toString();
-                
-                if (selectedText) {
-                    selectedRange = selection.getRangeAt(0);
-                    showContextMenu(e.clientX, e.clientY);
-                }
-            });
-        }
-
-        // 顯示右鍵選單
-        function showContextMenu(x, y) {
-            const menu = document.getElementById('contextMenu');
-            menu.style.left = x + 'px';
-            menu.style.top = y + 'px';
-            menu.style.display = 'block';
-            
-            // 點擊其他地方關閉選單
-            document.addEventListener('click', hideContextMenu);
-        }
-
-        // 隱藏右鍵選單
-        function hideContextMenu() {
-            document.getElementById('contextMenu').style.display = 'none';
-            document.removeEventListener('click', hideContextMenu);
-        }
     </script>
+    <script>
+        // 高亮管理器類別
+        class HighlightManager {
+            constructor() {
+                this.highlightedTexts = {
+                    1: null,
+                    2: null,
+                    3: null,
+                    4: null,
+                    5: null
+                };
+                this.selectedText = '';
+                this.selectedRange = null;
+            }
+
+            // 高亮選中的文字
+            highlightSelection(colorIndex) {
+                if (!this.selectedText) return;
+                
+                // 清除之前同顏色的高亮
+                if (this.highlightedTexts[colorIndex]) {
+                    this.clearHighlightColor(colorIndex);
+                }
+                
+                this.highlightedTexts[colorIndex] = this.selectedText;
+                
+                // 高亮所有視窗中的相同文字
+                this.highlightAllOccurrences(this.selectedText, colorIndex);
+                
+                // 顯示高亮控制按鈕
+                document.getElementById(`highlightBtn${colorIndex}`).style.display = 'block';
+                
+                hideContextMenu();
+                window.getSelection().removeAllRanges();
+            }
+
+            // 高亮所有出現的文字
+            highlightAllOccurrences(text, colorIndex) {
+                // 處理左右面板
+                ['left', 'right'].forEach(panel => {
+                    const wrapper = document.getElementById(`${panel}ContentWrapper`);
+                    if (wrapper) {
+                        // 處理表格佈局的原始檔案
+                        const contentCells = wrapper.querySelectorAll('.content-cell');
+                        contentCells.forEach(cell => {
+                            this.highlightInNode(cell, text, colorIndex);
+                        });
+                    }
+                    
+                    // 處理 iframe 內容
+                    const iframe = document.querySelector(`#${panel}Content iframe`);
+                    if (iframe && iframe.contentDocument) {
+                        try {
+                            const iframeBody = iframe.contentDocument.body;
+                            if (iframeBody) {
+                                this.highlightInElement(iframeBody, text, colorIndex);
+                            }
+                        } catch (e) {
+                            console.log('無法存取 iframe 內容:', e);
+                        }
+                    }
+                });
+            }
+
+            // 在節點中高亮文字（針對表格佈局）
+            highlightInNode(node, text, colorIndex) {
+                if (!node || !node.textContent.includes(text)) return;
+                
+                const content = node.textContent;
+                const regex = new RegExp(this.escapeRegExp(text), 'g');
+                
+                // 如果已經包含高亮，先清除
+                const existingHighlights = node.querySelectorAll(`[class*="highlight-"]`);
+                existingHighlights.forEach(el => {
+                    if (el.textContent === text) {
+                        const textNode = document.createTextNode(el.textContent);
+                        el.parentNode.replaceChild(textNode, el);
+                    }
+                });
+                
+                // 重新獲取純文字內容
+                const newContent = node.textContent;
+                const parts = newContent.split(text);
+                
+                if (parts.length > 1) {
+                    node.innerHTML = '';
+                    parts.forEach((part, i) => {
+                        if (part) {
+                            node.appendChild(document.createTextNode(part));
+                        }
+                        if (i < parts.length - 1) {
+                            const span = document.createElement('span');
+                            span.className = `highlight-${colorIndex}`;
+                            span.textContent = text;
+                            node.appendChild(span);
+                        }
+                    });
+                }
+            }
+
+            // 清除特定顏色的高亮
+            clearHighlightColor(colorIndex) {
+                document.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
+                    const parent = element.parentNode;
+                    const textNode = document.createTextNode(element.textContent);
+                    parent.replaceChild(textNode, element);
+                    parent.normalize();
+                });
+                
+                this.highlightedTexts[colorIndex] = null;
+                document.getElementById(`highlightBtn${colorIndex}`).style.display = 'none';
+            }
+
+            // 輔助函數
+            escapeRegExp(string) {
+                return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+        }
+
+        // 建立全域高亮管理器實例
+        const highlightManager = new HighlightManager();        
+    </script>
+    <script>
+        // 右鍵選單管理器
+        class ContextMenuManager {
+            constructor() {
+                this.menu = null;
+                this.setupMenu();
+            }
+
+            setupMenu() {
+                // 檢查是否已存在選單
+                this.menu = document.getElementById('contextMenu');
+                if (!this.menu) {
+                    this.createMenu();
+                }
+            }
+
+            createMenu() {
+                const menu = document.createElement('div');
+                menu.id = 'contextMenu';
+                menu.className = 'context-menu';
+                menu.innerHTML = `
+                    <div class="context-menu-item" onclick="contextMenuManager.copyText()">
+                        <span>📋</span> 複製
+                    </div>
+                    <div class="context-menu-item" onclick="contextMenuManager.selectAll()">
+                        <span>🔲</span> 全選
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="highlightManager.highlightSelection(1)">
+                        <div class="color-box" style="background: #ffff00;"></div>
+                        <span>高亮 1 (黃色)</span>
+                    </div>
+                    <div class="context-menu-item" onclick="highlightManager.highlightSelection(2)">
+                        <div class="color-box" style="background: #00ff00;"></div>
+                        <span>高亮 2 (綠色)</span>
+                    </div>
+                    <div class="context-menu-item" onclick="highlightManager.highlightSelection(3)">
+                        <div class="color-box" style="background: #00bfff;"></div>
+                        <span>高亮 3 (藍色)</span>
+                    </div>
+                    <div class="context-menu-item" onclick="highlightManager.highlightSelection(4)">
+                        <div class="color-box" style="background: #ffa500;"></div>
+                        <span>高亮 4 (橙色)</span>
+                    </div>
+                    <div class="context-menu-item" onclick="highlightManager.highlightSelection(5)">
+                        <div class="color-box" style="background: #ffc0cb;"></div>
+                        <span>高亮 5 (粉紅)</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="clearAllHighlights()">
+                        <span>清除所有高亮</span>
+                    </div>
+                `;
+                document.body.appendChild(menu);
+                this.menu = menu;
+            }
+
+            show(x, y) {
+                // 先顯示選單以獲取尺寸
+                this.menu.style.display = 'block';
+                this.menu.style.visibility = 'hidden'; // 暫時隱藏避免閃爍
+                
+                // 獲取選單和視窗尺寸
+                const menuRect = this.menu.getBoundingClientRect();
+                const menuWidth = menuRect.width;
+                const menuHeight = menuRect.height;
+                const windowWidth = window.innerWidth;
+                const windowHeight = window.innerHeight;
+                
+                // 計算調整後的位置
+                let adjustedX = x;
+                let adjustedY = y;
+                
+                // 檢查右邊界
+                if (x + menuWidth > windowWidth - 10) { // 留 10px 邊距
+                    adjustedX = x - menuWidth; // 顯示在滑鼠左側
+                    if (adjustedX < 10) { // 如果左側也不夠空間
+                        adjustedX = windowWidth - menuWidth - 10; // 貼著右邊界
+                    }
+                }
+                
+                // 檢查下邊界
+                if (y + menuHeight > windowHeight - 10) { // 留 10px 邊距
+                    adjustedY = y - menuHeight; // 顯示在滑鼠上方
+                    if (adjustedY < 10) { // 如果上方也不夠空間
+                        adjustedY = windowHeight - menuHeight - 10; // 貼著下邊界
+                    }
+                }
+                
+                // 檢查左邊界
+                if (adjustedX < 10) {
+                    adjustedX = 10;
+                }
+                
+                // 檢查上邊界
+                if (adjustedY < 10) {
+                    adjustedY = 10;
+                }
+                
+                // 設定最終位置
+                this.menu.style.left = adjustedX + 'px';
+                this.menu.style.top = adjustedY + 'px';
+                this.menu.style.visibility = 'visible'; // 顯示選單
+                
+                // 點擊其他地方關閉選單
+                setTimeout(() => {
+                    document.addEventListener('click', () => this.hide(), { once: true });
+                }, 0);
+            }
+
+            hide() {
+                this.menu.style.display = 'none';
+            }
+
+            copyText() {
+                document.execCommand('copy');
+                this.hide();
+            }
+
+            cutText() {
+                document.execCommand('cut');
+                this.hide();
+            }
+
+            pasteText() {
+                document.execCommand('paste');
+                this.hide();
+            }
+
+            selectAll() {
+                if (window.currentFocusedPanel) {
+                    const panel = document.getElementById(`${window.currentFocusedPanel}Content`);
+                    if (panel) {
+                        const selection = window.getSelection();
+                        selection.removeAllRanges();
+                        const range = document.createRange();
+                        range.selectNodeContents(panel);
+                        selection.addRange(range);
+                    }
+                }
+                this.hide();
+            }
+
+            setupForElement(element, isIframe = false) {
+                element.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    
+                    const selection = isIframe ? 
+                        element.contentWindow.getSelection() : 
+                        window.getSelection();
+                    
+                    highlightManager.selectedText = selection.toString();
+                    
+                    if (selection.rangeCount > 0) {
+                        highlightManager.selectedRange = selection.getRangeAt(0);
+                    }
+                    
+                    // 計算實際的座標位置
+                    let clientX = e.clientX;
+                    let clientY = e.clientY;
+                    
+                    // 如果是 iframe，需要加上 iframe 的偏移量
+                    if (isIframe) {
+                        const iframeRect = element.getBoundingClientRect();
+                        clientX = e.clientX + iframeRect.left;
+                        clientY = e.clientY + iframeRect.top;
+                    }
+                    
+                    this.show(clientX, clientY);
+                });
+            }
+        }
+
+        // 建立全域右鍵選單管理器實例
+        const contextMenuManager = new ContextMenuManager();
+    </script>
+    <script>
+        // 複製面板內容
+        function copyPanelContent(panel) {
+            let content = '';
+            
+            if (panel === 'left') {
+                content = (currentLeftType === 'analysis') ? analysisContent : originalContent;
+            } else {
+                content = (currentRightType === 'analysis') ? analysisContent : originalContent;
+            }
+            
+            if (!content) {
+                updateStatus('沒有內容可供複製');
+                return;
+            }
+            
+            // 建立臨時 textarea 來複製純文字
+            const textarea = document.createElement('textarea');
+            textarea.value = content.replace(/<[^>]*>/g, ''); // 移除 HTML 標籤
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            
+            updateStatus('內容已複製到剪貼簿');
+        }        
+    </script>    
 </body>
 </html>
