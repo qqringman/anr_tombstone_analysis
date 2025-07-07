@@ -971,30 +971,33 @@
     <style>
         /* 左側分析報告專用的行號樣式 */
         #leftPanel .line-numbers-container {
-            position: relative;
+            position: sticky;
+            left: 0;
             background: #1a1a1a;
             border-right: 1px solid #333;
             overflow: hidden;
+            z-index: 10;
         }
 
         #leftPanel .analysis-line-numbers {
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: relative;
             width: 100%;
-            padding-right: 10px;
+            height: 100%;
         }
 
         #leftPanel .analysis-line-number {
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
             text-align: right;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             color: #666;
             user-select: none;
             cursor: pointer;
-            padding-left: 10px;
             box-sizing: border-box;
+            min-height: 20.8px;
         }
 
         #leftPanel .analysis-line-number:hover {
@@ -1399,27 +1402,120 @@
                                     
                                     // 計算實際行高的函數
                                     const measureActualLines = function() {
-                                        const leftPanel = iframeDoc.querySelector('.left-panel');
-                                        if (!leftPanel) {
-                                            console.log('找不到 left-panel');
+                                        // 先嘗試找到主要內容區域
+                                        const reportContent = iframeDoc.querySelector('.report-content') || 
+                                                            iframeDoc.querySelector('.left-panel') ||
+                                                            iframeDoc.querySelector('pre') ||
+                                                            iframeDoc.body;
+                                        
+                                        if (!reportContent) {
+                                            console.log('找不到報告內容');
                                             return [];
                                         }
                                         
-                                        // 獲取所有報告行
-                                        const reportLines = leftPanel.querySelectorAll('.report-line, p, div');
                                         const lineData = [];
                                         
-                                        reportLines.forEach((line, index) => {
-                                            const rect = line.getBoundingClientRect();
-                                            if (rect.height > 0) {
-                                                lineData.push({
-                                                    index: index + 1,
-                                                    top: rect.top + iframeWindow.pageYOffset,
-                                                    height: rect.height
-                                                });
+                                        // 獲取所有文字節點和包含文字的元素
+                                        const walker = iframeDoc.createTreeWalker(
+                                            reportContent,
+                                            NodeFilter.SHOW_ALL,
+                                            {
+                                                acceptNode: function(node) {
+                                                    // 接受文字節點
+                                                    if (node.nodeType === Node.TEXT_NODE) {
+                                                        const text = node.textContent.trim();
+                                                        if (text.length > 0) {
+                                                            return NodeFilter.FILTER_ACCEPT;
+                                                        }
+                                                    }
+                                                    // 接受包含直接文字內容的元素
+                                                    if (node.nodeType === Node.ELEMENT_NODE) {
+                                                        const tagName = node.tagName.toLowerCase();
+                                                        if (tagName === 'br' || tagName === 'div' || tagName === 'p' || 
+                                                            tagName === 'span' || tagName === 'pre') {
+                                                            return NodeFilter.FILTER_ACCEPT;
+                                                        }
+                                                    }
+                                                    return NodeFilter.FILTER_SKIP;
+                                                }
                                             }
-                                        });
+                                        );
                                         
+                                        let currentLine = 1;
+                                        let lastY = -1;
+                                        let node;
+                                        
+                                        while (node = walker.nextNode()) {
+                                            if (node.nodeType === Node.TEXT_NODE) {
+                                                // 對於文字節點，獲取其父元素的位置
+                                                const parent = node.parentElement;
+                                                if (parent) {
+                                                    const rect = parent.getBoundingClientRect();
+                                                    const y = rect.top + iframeWindow.pageYOffset;
+                                                    
+                                                    // 如果Y座標改變，表示新的一行
+                                                    if (Math.abs(y - lastY) > 5) { // 5px 的容差
+                                                        lineData.push({
+                                                            index: currentLine,
+                                                            top: y - 20, // 減去 padding
+                                                            height: rect.height || 20.8,
+                                                            element: parent
+                                                        });
+                                                        currentLine++;
+                                                        lastY = y;
+                                                    }
+                                                }
+                                            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                                                const tagName = node.tagName.toLowerCase();
+                                                
+                                                // BR 標籤表示換行
+                                                if (tagName === 'br') {
+                                                    currentLine++;
+                                                    continue;
+                                                }
+                                                
+                                                // 檢查是否是塊級元素或包含文字
+                                                const hasText = node.textContent.trim().length > 0;
+                                                const isBlock = window.getComputedStyle(node).display === 'block';
+                                                
+                                                if (hasText && isBlock) {
+                                                    const rect = node.getBoundingClientRect();
+                                                    const y = rect.top + iframeWindow.pageYOffset;
+                                                    
+                                                    if (Math.abs(y - lastY) > 5) {
+                                                        lineData.push({
+                                                            index: currentLine,
+                                                            top: y - 20,
+                                                            height: rect.height || 20.8,
+                                                            element: node
+                                                        });
+                                                        currentLine++;
+                                                        lastY = y;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // 如果沒有找到任何行，使用備用方案
+                                        if (lineData.length === 0) {
+                                            console.log('使用備用方案計算行數');
+                                            const lines = reportContent.innerText.split('\n');
+                                            let currentTop = 0;
+                                            
+                                            lines.forEach((line, index) => {
+                                                if (line.trim() || index === 0) { // 包含第一行即使是空的
+                                                    lineData.push({
+                                                        index: index + 1,
+                                                        top: currentTop,
+                                                        height: 20.8,
+                                                        element: null
+                                                    });
+                                                    currentTop += 20.8;
+                                                }
+                                            });
+                                        }
+                                        
+                                        console.log(`找到 ${lineData.length} 行`);
                                         return lineData;
                                     };
                                     
@@ -1436,7 +1532,7 @@
                                             lineNumberEl.setAttribute('data-panel', panel);
                                             lineNumberEl.textContent = data.index;
                                             lineNumberEl.style.position = 'absolute';
-                                            lineNumberEl.style.top = data.top + 'px';
+                                            lineNumberEl.style.top = (data.top + 20) + 'px'; // 加上 padding 偏移
                                             lineNumberEl.style.height = data.height + 'px';
                                             lineNumberEl.style.lineHeight = data.height + 'px';
                                             lineNumberEl.style.width = '100%';
@@ -1488,25 +1584,30 @@
                                         
                                         // 修改捲動同步邏輯
                                         const bindScrollEvents = function() {
-                                            const leftPanel = iframeDoc.querySelector('.left-panel');
-                                            const container = document.getElementById(`${panel}LineNumbersContainer`);
+                                            const scrollableElement = iframeDoc.querySelector('.left-panel') || 
+                                                                    iframeDoc.documentElement || 
+                                                                    iframeDoc.body;
                                             
-                                            if (leftPanel && container) {
-                                                // 當 iframe 內容捲動時，更新行號位置
+                                            if (scrollableElement) {
                                                 const syncScroll = function() {
-                                                    const scrollTop = leftPanel.scrollTop;
+                                                    const scrollTop = scrollableElement.scrollTop || 
+                                                                    iframeWindow.pageYOffset || 
+                                                                    iframeDoc.documentElement.scrollTop || 
+                                                                    iframeDoc.body.scrollTop || 0;
+                                                    
                                                     lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
                                                 };
                                                 
-                                                leftPanel.addEventListener('scroll', syncScroll);
+                                                // 綁定多個可能的捲動事件
+                                                scrollableElement.addEventListener('scroll', syncScroll);
+                                                iframeWindow.addEventListener('scroll', syncScroll);
                                                 
-                                                // 當視窗捲動時也同步
-                                                iframeWindow.addEventListener('scroll', function() {
-                                                    const scrollTop = iframeWindow.pageYOffset || 
-                                                                iframeDoc.documentElement.scrollTop || 
-                                                                iframeDoc.body.scrollTop || 0;
-                                                    lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
-                                                });
+                                                // 如果有橫向捲軸，確保行號不會跟著橫向移動
+                                                lineNumbersContainer.style.position = 'sticky';
+                                                lineNumbersContainer.style.left = '0';
+                                                
+                                                // 初始同步
+                                                syncScroll();
                                             }
                                         };
                                         
