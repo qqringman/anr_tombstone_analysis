@@ -34,6 +34,7 @@
             --accent-color: #4ec9b0;
             --header-height: 60px;
             --status-height: 30px;
+            --line-hover-color: #2d5a8e;  /* 新增統一的行 hover 顏色 */            
         }
         
         body {
@@ -690,7 +691,7 @@
         }
 
         .line-number:hover {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--line-hover-color);
         }
                 
         /* 第一行和最後一行的特殊處理 */
@@ -739,7 +740,7 @@
             content: '●';
             position: absolute;
             left: 2px;
-            color: #00ff00;
+            color: #4ec9b0;
             font-size: 10px;
         }
 
@@ -751,11 +752,10 @@
             position: relative;
         }
 
-        /* 調試用：顯示內容行的邊界 */
         .content-line:hover {
-            background-color: rgba(255, 255, 255, 0.02);
+            background-color: var(--line-hover-color);
         }
-                
+ 
         /* 自定義捲軸樣式 - 只在內容區域 */
         .content-container::-webkit-scrollbar,
         .original-content-wrapper::-webkit-scrollbar,
@@ -963,7 +963,7 @@
                 </div>                
                 <div class="panel-controls">
                     <button class="icon-btn" onclick="copyPanelContent('left')" title="複製內容">
-                        📋
+                        <span id="leftCopyIcon">📋</span>
                     </button>                        
                     <button class="icon-btn" onclick="toggleExportMenu('left')" title="匯出">
                         💾
@@ -1009,7 +1009,7 @@
                 </div>                
                 <div class="panel-controls">
                     <button class="icon-btn" onclick="copyPanelContent('right')" title="複製內容">
-                        📋
+                        <span id="rightCopyIcon">📋</span>
                     </button>                                                
                     <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
                         💾
@@ -1301,23 +1301,29 @@
                 
                 // 設置事件（延遲以確保 DOM 已更新）
                 setTimeout(() => {
-                    console.log(`開始設置 ${panel} 面板的事件處理`);
+                    //console.log(`開始設置 ${panel} 面板的事件處理`);
                     
-                    // 設置行號事件
-                    setupLineNumberHandlers(panel);
-                    
-                    // 設置內容行追蹤
-                    setupContentLineTracking(panel);
-                    
-                    // 設置右鍵選單
-                    setupContentContextMenu(panel);
-                    
-                    // 初始化焦點
-                    window.currentFocusedPanel = panel;
-                    window.currentFocusedLine = 1;
-                    
-                    console.log(`${panel} 面板事件設置完成`);
-                }, 200); // 增加延遲時間
+                    // 平行設置所有事件，而不是順序設置
+                    Promise.all([
+                        new Promise(resolve => {
+                            setupLineNumberHandlers(panel);
+                            resolve();
+                        }),
+                        new Promise(resolve => {
+                            setupContentLineTracking(panel);
+                            resolve();
+                        }),
+                        new Promise(resolve => {
+                            setupContentContextMenu(panel);
+                            resolve();
+                        })
+                    ]).then(() => {
+                        // 初始化焦點
+                        window.currentFocusedPanel = panel;
+                        window.currentFocusedLine = 1;
+                        //console.log(`${panel} 面板事件設置完成`);
+                    });
+                }, 100); // 減少延遲時間
                 
                 updateStatus(`載入完成 - 共 ${lines.length} 行`);
             }
@@ -1336,11 +1342,11 @@
 
         // 設置內容行追蹤（完全重寫）
         function setupContentLineTracking(panel) {
-            console.log(`開始設置 ${panel} 面板的行追蹤`);
+            //console.log(`開始設置 ${panel} 面板的行追蹤`);
             
             // 方法1：直接在每個內容行上設置事件
             const contentLines = document.querySelectorAll(`#${panel}ContentArea .content-line`);
-            console.log(`找到 ${contentLines.length} 個內容行`);
+            //console.log(`找到 ${contentLines.length} 個內容行`);
             
             contentLines.forEach((line, index) => {
                 // 如果沒有 data-line 屬性，設置它
@@ -1356,7 +1362,7 @@
                     if (window.currentFocusedLine !== lineNum || window.currentFocusedPanel !== panel) {
                         window.currentFocusedLine = lineNum;
                         window.currentFocusedPanel = panel;
-                        console.log(`滑鼠在: ${panel} 面板，第 ${lineNum} 行`);
+                        //console.log(`滑鼠在: ${panel} 面板，第 ${lineNum} 行`);
                         highlightCurrentLineNumber(panel, lineNum);
                     }
                 });
@@ -1366,7 +1372,7 @@
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
-                    console.log(`進入: ${panel} 面板，第 ${lineNum} 行`);
+                    //console.log(`進入: ${panel} 面板，第 ${lineNum} 行`);
                     highlightCurrentLineNumber(panel, lineNum);
                 });
                 
@@ -1375,13 +1381,13 @@
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
-                    console.log(`點擊: ${panel} 面板，第 ${lineNum} 行`);
+                    //console.log(`點擊: ${panel} 面板，第 ${lineNum} 行`);
                 });
             });
             
             // 方法2：也在行號上設置事件
             const lineNumbers = document.querySelectorAll(`#${panel}LineNumbers .line-number`);
-            console.log(`找到 ${lineNumbers.length} 個行號`);
+            //console.log(`找到 ${lineNumbers.length} 個行號`);
             
             lineNumbers.forEach((lineNumEl, index) => {
                 // 如果沒有屬性，設置它們
@@ -1399,7 +1405,7 @@
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
-                    console.log(`行號: ${panel} 面板，第 ${lineNum} 行`);
+                    //console.log(`行號: ${panel} 面板，第 ${lineNum} 行`);
                     highlightCurrentLineNumber(panel, lineNum);
                 });
                 
@@ -1416,7 +1422,7 @@
             if (container) {
                 container.addEventListener('mouseenter', function() {
                     window.currentFocusedPanel = panel;
-                    console.log(`進入 ${panel} 容器`);
+                    //console.log(`進入 ${panel} 容器`);
                 });
             }
         }          
@@ -2033,29 +2039,34 @@
                 return;
             }
             
-            const lineNumberEls = lineNumbers.querySelectorAll('.line-number');
-            console.log(`${panel} 面板找到 ${lineNumberEls.length} 個行號元素`);
-            
-            lineNumberEls.forEach(lineNum => {
-                // 確保有正確的屬性
-                if (!lineNum.getAttribute('data-line')) {
-                    const lineNumber = lineNum.textContent.trim();
-                    lineNum.setAttribute('data-line', lineNumber);
-                    lineNum.setAttribute('data-panel', panel);
-                }
-                
-                // 點擊行號切換書籤
-                lineNum.addEventListener('click', function(e) {
+            // 使用事件委託而不是為每個元素綁定事件
+            lineNumbers.addEventListener('click', function(e) {
+                const lineNum = e.target.closest('.line-number');
+                if (lineNum) {
+                    e.preventDefault();
                     e.stopPropagation();
-                    toggleBookmark(this);
-                });
-                
-                // 滑鼠進入時更新當前行
-                lineNum.addEventListener('mouseenter', function() {
-                    const line = parseInt(this.getAttribute('data-line'));
+                    console.log(`點擊行號: ${panel} 面板，第 ${lineNum.getAttribute('data-line')} 行`);
+                    toggleBookmark(lineNum);
+                }
+            });
+            
+            lineNumbers.addEventListener('mouseenter', function(e) {
+                const lineNum = e.target.closest('.line-number');
+                if (lineNum) {
+                    const line = parseInt(lineNum.getAttribute('data-line'));
                     window.currentFocusedLine = line;
                     window.currentFocusedPanel = panel;
-                });
+                    highlightCurrentLineNumber(panel, line);
+                }
+            }, true); // 使用捕獲階段
+            
+            // 確保所有行號都有正確的屬性
+            const lineNumberEls = lineNumbers.querySelectorAll('.line-number');
+            lineNumberEls.forEach((lineNum, index) => {
+                if (!lineNum.getAttribute('data-line')) {
+                    lineNum.setAttribute('data-line', index + 1);
+                }
+                lineNum.setAttribute('data-panel', panel);
             });
         }
 
@@ -2081,16 +2092,29 @@
 
         // 切換書籤
         function toggleBookmark(lineElement) {
+            if (!lineElement) {
+                console.error('toggleBookmark: lineElement is null');
+                return;
+            }
+            
             const lineNumber = parseInt(lineElement.getAttribute('data-line'));
             const panel = lineElement.getAttribute('data-panel');
+            
+            if (!lineNumber || !panel) {
+                console.error('toggleBookmark: 缺少必要屬性', { lineNumber, panel });
+                return;
+            }
+            
             const key = `${panel}-${lineNumber}`;
             
             if (bookmarks.has(key)) {
                 bookmarks.delete(key);
                 lineElement.classList.remove('bookmarked');
+                updateStatus(`已移除書籤: ${panel === 'left' ? '左側' : '右側'}面板第 ${lineNumber} 行`);
             } else {
                 bookmarks.add(key);
                 lineElement.classList.add('bookmarked');
+                updateStatus(`已新增書籤: ${panel === 'left' ? '左側' : '右側'}面板第 ${lineNumber} 行`);
             }
             
             // 更新書籤陣列
@@ -2840,13 +2864,38 @@
                 } else {
                     // 如果沒有選中文字，複製整個面板內容
                     const panel = this.currentPanel || window.currentFocusedPanel || 'left';
+                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
                     
-                    if (panel === 'left') {
-                        textToCopy = (currentLeftType === 'analysis') ? 
-                            this.extractTextFromHTML(analysisContent) : originalContent;
+                    if (panelType === 'analysis') {
+                        // 從 iframe 中提取純文字（只提取報告內容）
+                        const iframe = document.querySelector(`#${panel}Content iframe`);
+                        if (iframe && iframe.contentDocument) {
+                            try {
+                                const iframeDoc = iframe.contentDocument;
+                                // 嘗試找到報告的主要內容區域
+                                const reportContent = iframeDoc.querySelector('.report-content') || 
+                                                    iframeDoc.querySelector('.analysis-content') ||
+                                                    iframeDoc.querySelector('pre') ||
+                                                    iframeDoc.body;
+                                
+                                if (reportContent) {
+                                    textToCopy = reportContent.innerText || reportContent.textContent || '';
+                                }
+                            } catch (e) {
+                                console.log('無法存取 iframe 內容:', e);
+                                textToCopy = this.extractReportText(analysisContent);
+                            }
+                        } else {
+                            textToCopy = this.extractReportText(analysisContent);
+                        }
                     } else {
-                        textToCopy = (currentRightType === 'analysis') ? 
-                            this.extractTextFromHTML(analysisContent) : originalContent;
+                        // 原始內容 - 只複製內容區域的文字
+                        const contentArea = document.querySelector(`#${panel}ContentArea`);
+                        if (contentArea) {
+                            textToCopy = contentArea.innerText || contentArea.textContent || '';
+                        } else {
+                            textToCopy = originalContent;
+                        }
                     }
                 }
                 
@@ -2856,7 +2905,6 @@
                         navigator.clipboard.writeText(textToCopy).then(() => {
                             updateStatus(selection && selection.toString() ? '已複製選中的文字' : '已複製面板內容');
                         }).catch(() => {
-                            // 退回到舊方法
                             this.fallbackCopy(textToCopy);
                         });
                     } else {
@@ -2864,10 +2912,31 @@
                     }
                 }
                 
-                // 清理
                 this.currentIframe = null;
                 this.currentSelection = null;
                 this.hide();
+            }
+
+            extractReportText(html) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                
+                // 嘗試找到報告內容區域
+                const reportContent = tempDiv.querySelector('.report-content') || 
+                                    tempDiv.querySelector('.analysis-content') ||
+                                    tempDiv.querySelector('pre');
+                
+                if (reportContent) {
+                    return reportContent.textContent || reportContent.innerText || '';
+                }
+                
+                // 如果找不到特定區域，提取 body 內容
+                const body = tempDiv.querySelector('body');
+                if (body) {
+                    return body.textContent || body.innerText || '';
+                }
+                
+                return tempDiv.textContent || tempDiv.innerText || '';
             }
 
             // 從 HTML 提取純文字的輔助方法
@@ -2954,32 +3023,44 @@
     <script>
         // 複製面板內容
         function copyPanelContent(panel) {
-            let content = '';
-            let contentType = '';
+            let textContent = '';
+            const panelType = (panel === 'left') ? currentLeftType : currentRightType;
             
-            if (panel === 'left') {
-                content = (currentLeftType === 'analysis') ? analysisContent : originalContent;
-                contentType = currentLeftType;
+            if (panelType === 'analysis') {
+                // 嘗試從 iframe 中提取純文字
+                const iframe = document.querySelector(`#${panel}Content iframe`);
+                if (iframe && iframe.contentDocument) {
+                    try {
+                        const iframeDoc = iframe.contentDocument;
+                        // 只提取報告內容，不包括UI元素
+                        const reportContent = iframeDoc.querySelector('.report-content') || 
+                                            iframeDoc.querySelector('.analysis-content') ||
+                                            iframeDoc.querySelector('pre') ||
+                                            iframeDoc.body;
+                        
+                        if (reportContent) {
+                            textContent = reportContent.innerText || reportContent.textContent || '';
+                        }
+                    } catch (e) {
+                        console.log('無法存取 iframe 內容:', e);
+                        textContent = contextMenuManager.extractReportText(analysisContent);
+                    }
+                } else {
+                    textContent = contextMenuManager.extractReportText(analysisContent);
+                }
             } else {
-                content = (currentRightType === 'analysis') ? analysisContent : originalContent;
-                contentType = currentRightType;
+                // 原始內容 - 只複製內容區域
+                const contentArea = document.querySelector(`#${panel}ContentArea`);
+                if (contentArea) {
+                    textContent = contentArea.innerText || contentArea.textContent || '';
+                } else {
+                    textContent = originalContent;
+                }
             }
             
-            if (!content) {
+            if (!textContent) {
                 updateStatus('沒有內容可供複製');
                 return;
-            }
-            
-            // 處理內容
-            let textContent = '';
-            if (contentType === 'analysis') {
-                // 從 HTML 中提取純文字
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = content;
-                textContent = tempDiv.textContent || tempDiv.innerText || '';
-            } else {
-                // 原始內容已經是純文字
-                textContent = content;
             }
             
             // 使用 Clipboard API
@@ -3003,9 +3084,10 @@
                 // 改成勾號
                 iconElement.textContent = '✓';
                 
-                // 可選：添加動畫效果
+                // 添加動畫效果
                 iconElement.style.color = '#4ec9b0';
-                iconElement.style.transition = 'color 0.2s ease';
+                iconElement.style.transform = 'scale(1.2)';
+                iconElement.style.transition = 'all 0.2s ease';
                 
                 updateStatus('內容已複製到剪貼簿');
                 
@@ -3013,7 +3095,10 @@
                 setTimeout(() => {
                     iconElement.textContent = originalIcon;
                     iconElement.style.color = '';
+                    iconElement.style.transform = '';
                 }, 500);
+            } else {
+                updateStatus('內容已複製到剪貼簿');
             }
         }
 
