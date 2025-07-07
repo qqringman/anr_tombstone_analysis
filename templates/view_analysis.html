@@ -153,6 +153,7 @@
         .panel-controls {
             display: flex;
             gap: 8px;
+            align-items: center;
         }
         
         .icon-btn {
@@ -262,16 +263,22 @@
         /* 狀態列 */
         .status-bar {
             height: var(--status-height);
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border-color);
+            background: #1e3a5f; /* 深藍色背景 */
+            border-top: 1px solid #2d5a8e;
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 20px;
             font-size: 12px;
-            color: var(--text-secondary);
+            color: #a8c7e8; /* 淺藍色文字 */
         }
-        
+
+        .status-bar .warning-text {
+            color: #ffd700; /* 金黃色警告文字 */
+            font-weight: bold;
+            margin-left: 20px;
+        }
+
         /* 全屏模式 */
         .fullscreen {
             position: fixed !important;
@@ -770,24 +777,30 @@
                     <span id="leftPanelIcon">📊</span>
                     <span id="leftPanelTitle">分析報告</span>
                 </div>
+                <!-- 左側高亮控制按鈕 -->
+                <div class="highlight-controls" id="leftHighlightControls">
+                    <div class="highlight-control-btn" id="leftHighlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1, 'left')" title="清除黃色高亮"></div>
+                    <div class="highlight-control-btn" id="leftHighlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2, 'left')" title="清除綠色高亮"></div>
+                    <div class="highlight-control-btn" id="leftHighlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3, 'left')" title="清除藍色高亮"></div>
+                    <div class="highlight-control-btn" id="leftHighlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4, 'left')" title="清除橙色高亮"></div>
+                    <div class="highlight-control-btn" id="leftHighlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5, 'left')" title="清除粉紅高亮"></div>
+                </div>                
                 <div class="panel-controls">
-                    <div style="position: relative;">
-                        <button class="icon-btn" onclick="copyPanelContent('left')" title="複製內容">
-                            📋
-                        </button>                        
-                        <button class="icon-btn" onclick="toggleExportMenu('left')" title="匯出">
-                            💾
-                        </button>
-                        <div class="export-menu" id="leftExportMenu">
-                            <div class="export-item" onclick="exportContent('left', 'html')">
-                                <span>🌐</span> HTML
-                            </div>
-                            <div class="export-item" onclick="exportContent('left', 'markdown')">
-                                <span>📝</span> Markdown
-                            </div>
-                            <div class="export-item" onclick="exportContent('left', 'txt')">
-                                <span>📄</span> 純文字
-                            </div>
+                    <button class="icon-btn" onclick="copyPanelContent('left')" title="複製內容">
+                        📋
+                    </button>                        
+                    <button class="icon-btn" onclick="toggleExportMenu('left')" title="匯出">
+                        💾
+                    </button>
+                    <div class="export-menu" id="leftExportMenu">
+                        <div class="export-item" onclick="exportContent('left', 'html')">
+                            <span>🌐</span> HTML
+                        </div>
+                        <div class="export-item" onclick="exportContent('left', 'markdown')">
+                            <span>📝</span> Markdown
+                        </div>
+                        <div class="export-item" onclick="exportContent('left', 'txt')">
+                            <span>📄</span> 純文字
                         </div>
                     </div>
                     <button class="icon-btn" onclick="toggleFullscreen('left')" title="全屏">
@@ -812,30 +825,28 @@
                 </div>
                 <!-- 高亮控制按鈕 -->
                 <div class="highlight-controls" id="highlightControls">
-                    <div class="highlight-control-btn" id="highlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1)" title="清除黃色高亮"></div>
-                    <div class="highlight-control-btn" id="highlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2)" title="清除綠色高亮"></div>
-                    <div class="highlight-control-btn" id="highlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3)" title="清除藍色高亮"></div>
-                    <div class="highlight-control-btn" id="highlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4)" title="清除橙色高亮"></div>
-                    <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5)" title="清除粉紅高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1, 'right')" title="清除黃色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2, 'right')" title="清除綠色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3, 'right')" title="清除藍色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4, 'right')" title="清除橙色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5, 'right')" title="清除粉紅高亮"></div>
                 </div>                
                 <div class="panel-controls">
-                    <div style="position: relative;">
-                        <button class="icon-btn" onclick="copyPanelContent('right')" title="複製內容">
-                            📋
-                        </button>                                                
-                        <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
-                            💾
-                        </button>
-                        <div class="export-menu" id="rightExportMenu">
-                            <div class="export-item" onclick="exportContent('right', 'html')">
-                                <span>🌐</span> HTML
-                            </div>
-                            <div class="export-item" onclick="exportContent('right', 'markdown')">
-                                <span>📝</span> Markdown
-                            </div>
-                            <div class="export-item" onclick="exportContent('right', 'txt')">
-                                <span>📄</span> 純文字
-                            </div>
+                    <button class="icon-btn" onclick="copyPanelContent('right')" title="複製內容">
+                        📋
+                    </button>                                                
+                    <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
+                        💾
+                    </button>
+                    <div class="export-menu" id="rightExportMenu">
+                        <div class="export-item" onclick="exportContent('right', 'html')">
+                            <span>🌐</span> HTML
+                        </div>
+                        <div class="export-item" onclick="exportContent('right', 'markdown')">
+                            <span>📝</span> Markdown
+                        </div>
+                        <div class="export-item" onclick="exportContent('right', 'txt')">
+                            <span>📄</span> 純文字
                         </div>
                     </div>
                     <button class="icon-btn" onclick="toggleFullscreen('right')" title="全屏">
@@ -980,7 +991,28 @@
                 iframe.srcdoc = content;
                 
                 iframe.onload = function() {
-                    setupIframeContextMenu(iframe);
+                    // 確保 iframe 完全載入後再設置事件
+                    setTimeout(() => {
+                        setupIframeContextMenu(iframe);
+                        
+                        // 將 iframe 樣式注入到 iframe 內部
+                        try {
+                            const iframeDoc = iframe.contentDocument;
+                            if (iframeDoc) {
+                                const style = iframeDoc.createElement('style');
+                                style.textContent = `
+                                    .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
+                                    .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
+                                `;
+                                iframeDoc.head.appendChild(style);
+                            }
+                        } catch (e) {
+                            console.log('無法注入樣式到 iframe:', e);
+                        }
+                    }, 100);
                 };
                 
                 contentEl.appendChild(iframe);
@@ -1505,6 +1537,76 @@
             resizeHandle.innerHTML = '<div style="position: absolute; left: -5px; right: -5px; top: 0; bottom: 0; cursor: col-resize;"></div>';
         }
         
+        // 設置 iframe 的右鍵選單
+        function setupIframeContextMenu(iframe, panel) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                
+                if (iframeDoc) {
+                    // 設置右鍵選單
+                    iframeDoc.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        
+                        // 設置當前面板
+                        highlightManager.currentPanel = panel;
+                        window.currentFocusedPanel = panel;
+                        contextMenuManager.currentPanel = panel;
+                        
+                        const selection = iframe.contentWindow.getSelection();
+                        highlightManager.selectedText = selection.toString();
+                        
+                        // 記錄 iframe 和其選擇，供複製使用
+                        contextMenuManager.currentIframe = iframe;
+                        contextMenuManager.currentSelection = selection;
+                        
+                        if (selection.rangeCount > 0) {
+                            highlightManager.selectedRange = selection.getRangeAt(0);
+                        }
+                        
+                        // 計算在主視窗中的實際位置
+                        const iframeRect = iframe.getBoundingClientRect();
+                        const x = e.clientX + iframeRect.left;
+                        const y = e.clientY + iframeRect.top;
+                        
+                        contextMenuManager.show(x, y);
+                    });
+                }
+            } catch (e) {
+                console.log('無法存取 iframe 內容:', e);
+            }
+        }
+
+        // 設置 iframe 內部事件
+        function setupIframeEvents(iframe, iframeDoc) {
+            // 設置右鍵選單
+            iframeDoc.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                
+                const selection = iframe.contentWindow.getSelection();
+                highlightManager.selectedText = selection.toString();
+                
+                if (selection.rangeCount > 0) {
+                    highlightManager.selectedRange = selection.getRangeAt(0);
+                }
+                
+                // 計算在主視窗中的實際位置
+                const iframeRect = iframe.getBoundingClientRect();
+                const x = e.clientX + iframeRect.left;
+                const y = e.clientY + iframeRect.top;
+                
+                contextMenuManager.show(x, y);
+            });
+            
+            // 處理 iframe 內的選擇事件
+            iframeDoc.addEventListener('mouseup', function() {
+                const selection = iframe.contentWindow.getSelection();
+                if (selection.toString()) {
+                    highlightManager.selectedText = selection.toString();
+                    highlightManager.currentIframe = iframe;
+                }
+            });
+        }
+
         // 設置鍵盤快捷鍵
         function setupKeyboardShortcuts() {
             document.addEventListener('keydown', function(e) {
@@ -1661,29 +1763,160 @@
             // 這個功能可以選擇性實現
         }
 
-        // 高亮選中的文字（高亮所有相同文字）
+        // 高亮選中的文字（只在當前面板）
         function highlightSelection(colorIndex) {
-            highlightManager.highlightSelection(colorIndex);
+            if (!this.selectedText) return;
+            
+            // 確定當前面板
+            const panel = this.currentPanel || window.currentFocusedPanel || 'left';
+            
+            // 清除該面板之前同顏色的高亮
+            if (this.panelHighlights[panel][colorIndex]) {
+                this.clearHighlightColorInPanel(panel, colorIndex);
+            }
+            
+            this.panelHighlights[panel][colorIndex] = this.selectedText;
+            
+            // 只在當前面板高亮
+            this.highlightInPanel(panel, this.selectedText, colorIndex);
+            
+            // 顯示高亮控制按鈕（如果在右側面板）
+            if (panel === 'right') {
+                document.getElementById(`highlightBtn${colorIndex}`).style.display = 'block';
+            }
+            
+            hideContextMenu();
+            window.getSelection().removeAllRanges();
         }
+
+        // 在特定面板中高亮
+        function highlightInPanel(panel, text, colorIndex) {
+            const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+            
+            if (panelType === 'original') {
+                // 處理原始檔案
+                const wrapper = document.getElementById(`${panel}ContentWrapper`);
+                if (wrapper) {
+                    const contentCells = wrapper.querySelectorAll('.content-cell');
+                    contentCells.forEach(cell => {
+                        this.highlightInNode(cell, text, colorIndex);
+                    });
+                }
+            } else if (panelType === 'analysis') {
+                // 處理分析報告（iframe）
+                const iframe = document.querySelector(`#${panel}Content iframe`);
+                if (iframe && iframe.contentDocument) {
+                    try {
+                        this.injectHighlightStyles(iframe);
+                        const iframeBody = iframe.contentDocument.body;
+                        if (iframeBody) {
+                            this.highlightInElement(iframeBody, text, colorIndex);
+                        }
+                    } catch (e) {
+                        console.log('無法存取 iframe 內容:', e);
+                    }
+                }
+            }
+        }
+
+        // 清除特定面板特定顏色的高亮
+        function clearHighlightColorInPanel(panel, colorIndex) {
+            const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+            
+            if (panelType === 'original') {
+                // 清除原始檔案的高亮
+                document.querySelectorAll(`#${panel}ContentWrapper .highlight-${colorIndex}`).forEach(element => {
+                    const parent = element.parentNode;
+                    const textNode = document.createTextNode(element.textContent);
+                    parent.replaceChild(textNode, element);
+                    parent.normalize();
+                });
+            } else if (panelType === 'analysis') {
+                // 清除 iframe 中的高亮
+                const iframe = document.querySelector(`#${panel}Content iframe`);
+                if (iframe && iframe.contentDocument) {
+                    iframe.contentDocument.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
+                        const parent = element.parentNode;
+                        const textNode = iframe.contentDocument.createTextNode(element.textContent);
+                        parent.replaceChild(textNode, element);
+                        parent.normalize();
+                    });
+                }
+            }
+            
+            this.panelHighlights[panel][colorIndex] = null;
+            
+            // 如果是右側面板，更新按鈕顯示
+            if (panel === 'right') {
+                // 檢查是否還有其他高亮
+                let hasHighlight = false;
+                for (let i = 1; i <= 5; i++) {
+                    if (this.panelHighlights[panel][i]) {
+                        hasHighlight = true;
+                        break;
+                    }
+                }
+                if (!hasHighlight || !this.panelHighlights[panel][colorIndex]) {
+                    document.getElementById(`highlightBtn${colorIndex}`).style.display = 'none';
+                }
+            }
+        }   
 
         // 高亮所有出現的文字
         function highlightAllOccurrences(text, colorIndex) {
             // 處理左右面板
             ['left', 'right'].forEach(panel => {
-                const contentEl = document.getElementById(`${panel}OriginalContent`);
-                if (contentEl) {
-                    highlightInElement(contentEl, text, colorIndex);
-                }
+                const panelType = (panel === 'left') ? currentLeftType : currentRightType;
                 
-                // 處理 iframe 內容
-                const iframe = document.querySelector(`#${panel}Content iframe`);
-                if (iframe && iframe.contentDocument) {
-                    const iframeBody = iframe.contentDocument.body;
-                    if (iframeBody) {
-                        highlightInElement(iframeBody, text, colorIndex);
+                if (panelType === 'original') {
+                    // 處理原始檔案（表格佈局）
+                    const wrapper = document.getElementById(`${panel}ContentWrapper`);
+                    if (wrapper) {
+                        const contentCells = wrapper.querySelectorAll('.content-cell');
+                        contentCells.forEach(cell => {
+                            this.highlightInNode(cell, text, colorIndex);
+                        });
+                    }
+                } else if (panelType === 'analysis') {
+                    // 處理分析報告（iframe）
+                    const iframe = document.querySelector(`#${panel}Content iframe`);
+                    if (iframe && iframe.contentDocument) {
+                        try {
+                            // 注入高亮樣式到 iframe
+                            this.injectHighlightStyles(iframe);
+                            
+                            // 高亮 iframe 內容
+                            const iframeBody = iframe.contentDocument.body;
+                            if (iframeBody) {
+                                this.highlightInElement(iframeBody, text, colorIndex);
+                            }
+                        } catch (e) {
+                            console.log('無法存取 iframe 內容:', e);
+                        }
                     }
                 }
             });
+        }
+
+        // 注入高亮樣式到 iframe
+        function injectHighlightStyles(iframe) {
+            try {
+                const iframeDoc = iframe.contentDocument;
+                if (!iframeDoc.getElementById('highlight-styles')) {
+                    const style = iframeDoc.createElement('style');
+                    style.id = 'highlight-styles';
+                    style.textContent = `
+                        .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
+                        .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
+                        .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
+                        .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
+                        .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
+                    `;
+                    iframeDoc.head.appendChild(style);
+                }
+            } catch (e) {
+                console.log('無法注入樣式:', e);
+            }
         }
 
         // 在元素中高亮文字
@@ -1691,7 +1924,16 @@
             const walker = document.createTreeWalker(
                 element,
                 NodeFilter.SHOW_TEXT,
-                null,
+                {
+                    acceptNode: function(node) {
+                        // 跳過已經高亮的節點
+                        if (node.parentElement && node.parentElement.className && 
+                            node.parentElement.className.includes('highlight-')) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                },
                 false
             );
             
@@ -1699,7 +1941,7 @@
             let node;
             
             while (node = walker.nextNode()) {
-                if (node.nodeValue.includes(text)) {
+                if (node.nodeValue && node.nodeValue.includes(text)) {
                     textNodes.push(node);
                 }
             }
@@ -1707,40 +1949,43 @@
             textNodes.forEach(textNode => {
                 const parent = textNode.parentNode;
                 const content = textNode.nodeValue;
-                const regex = new RegExp(escapeRegExp(text), 'g');
                 
-                if (parent.className && parent.className.includes('highlight-')) {
-                    return; // 跳過已經高亮的
+                // 創建正則表達式，支援大小寫
+                const regex = new RegExp(this.escapeRegExp(text), 'gi');
+                const matches = content.match(regex);
+                
+                if (matches && matches.length > 0) {
+                    const parts = content.split(regex);
+                    const fragment = document.createDocumentFragment();
+                    
+                    parts.forEach((part, i) => {
+                        if (part) {
+                            fragment.appendChild(document.createTextNode(part));
+                        }
+                        if (i < parts.length - 1 && i < matches.length) {
+                            const span = document.createElement('span');
+                            span.className = `highlight-${colorIndex}`;
+                            span.textContent = matches[i];
+                            fragment.appendChild(span);
+                        }
+                    });
+                    
+                    parent.replaceChild(fragment, textNode);
                 }
-                
-                const parts = content.split(regex);
-                const fragment = document.createDocumentFragment();
-                
-                parts.forEach((part, i) => {
-                    if (part) {
-                        fragment.appendChild(document.createTextNode(part));
-                    }
-                    if (i < parts.length - 1) {
-                        const span = document.createElement('span');
-                        span.className = `highlight-${colorIndex}`;
-                        span.textContent = text;
-                        fragment.appendChild(span);
-                    }
-                });
-                
-                parent.replaceChild(fragment, textNode);
             });
         }
 
-        // 清除特定顏色的高亮
-        function clearHighlightColor(colorIndex) {
-            highlightManager.clearHighlightColor(colorIndex);
+        // 清除特定顏色的高亮（只清除右側面板）
+        function clearHighlightColor(colorIndex, panel) {
+            panel = panel || window.currentFocusedPanel || 'right';
+            highlightManager.clearHighlightColorInPanel(panel, colorIndex);
         }
 
         // 清除所有高亮
         function clearAllHighlights() {
+            const panel = highlightManager.currentPanel || window.currentFocusedPanel || 'left';
             for (let i = 1; i <= 5; i++) {
-                clearHighlightColor(i);
+                highlightManager.clearHighlightColorInPanel(panel, i);
             }
             hideContextMenu();
         }
@@ -1799,55 +2044,63 @@
         // 高亮管理器類別
         class HighlightManager {
             constructor() {
-                this.highlightedTexts = {
-                    1: null,
-                    2: null,
-                    3: null,
-                    4: null,
-                    5: null
-                };
+                // 每個面板獨立管理高亮
+                this.leftHighlights = { 1: null, 2: null, 3: null, 4: null, 5: null };
+                this.rightHighlights = { 1: null, 2: null, 3: null, 4: null, 5: null };
                 this.selectedText = '';
                 this.selectedRange = null;
+                this.currentPanel = null;
+            }
+
+            // 獲取面板的高亮資料
+            getPanelHighlights(panel) {
+                return panel === 'left' ? this.leftHighlights : this.rightHighlights;
             }
 
             // 高亮選中的文字
             highlightSelection(colorIndex) {
                 if (!this.selectedText) return;
                 
-                // 清除之前同顏色的高亮
-                if (this.highlightedTexts[colorIndex]) {
-                    this.clearHighlightColor(colorIndex);
+                // 確定當前面板
+                const panel = this.currentPanel || window.currentFocusedPanel || 'left';
+                const highlights = this.getPanelHighlights(panel);
+                
+                // 清除該面板之前同顏色的高亮
+                if (highlights[colorIndex]) {
+                    this.clearHighlightColorInPanel(panel, colorIndex);
                 }
                 
-                this.highlightedTexts[colorIndex] = this.selectedText;
+                highlights[colorIndex] = this.selectedText;
                 
-                // 高亮所有視窗中的相同文字
-                this.highlightAllOccurrences(this.selectedText, colorIndex);
+                // 只在當前面板高亮
+                this.highlightInPanel(panel, this.selectedText, colorIndex);
                 
-                // 顯示高亮控制按鈕
-                document.getElementById(`highlightBtn${colorIndex}`).style.display = 'block';
+                // 更新高亮控制按鈕顯示
+                this.updateHighlightButtons(panel);
                 
                 hideContextMenu();
                 window.getSelection().removeAllRanges();
             }
 
-            // 高亮所有出現的文字
-            highlightAllOccurrences(text, colorIndex) {
-                // 處理左右面板
-                ['left', 'right'].forEach(panel => {
+            // 在特定面板中高亮
+            highlightInPanel(panel, text, colorIndex) {
+                const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+                
+                if (panelType === 'original') {
+                    // 處理原始檔案
                     const wrapper = document.getElementById(`${panel}ContentWrapper`);
                     if (wrapper) {
-                        // 處理表格佈局的原始檔案
                         const contentCells = wrapper.querySelectorAll('.content-cell');
                         contentCells.forEach(cell => {
                             this.highlightInNode(cell, text, colorIndex);
                         });
                     }
-                    
-                    // 處理 iframe 內容
+                } else if (panelType === 'analysis') {
+                    // 處理分析報告（iframe）
                     const iframe = document.querySelector(`#${panel}Content iframe`);
                     if (iframe && iframe.contentDocument) {
                         try {
+                            this.injectHighlightStyles(iframe);
                             const iframeBody = iframe.contentDocument.body;
                             if (iframeBody) {
                                 this.highlightInElement(iframeBody, text, colorIndex);
@@ -1856,7 +2109,7 @@
                             console.log('無法存取 iframe 內容:', e);
                         }
                     }
-                });
+                }
             }
 
             // 在節點中高亮文字（針對表格佈局）
@@ -1864,7 +2117,7 @@
                 if (!node || !node.textContent.includes(text)) return;
                 
                 const content = node.textContent;
-                const regex = new RegExp(this.escapeRegExp(text), 'g');
+                const regex = new RegExp(this.escapeRegExp(text), 'gi');
                 
                 // 如果已經包含高亮，先清除
                 const existingHighlights = node.querySelectorAll(`[class*="highlight-"]`);
@@ -1877,7 +2130,8 @@
                 
                 // 重新獲取純文字內容
                 const newContent = node.textContent;
-                const parts = newContent.split(text);
+                const parts = newContent.split(regex);
+                const matches = newContent.match(regex) || [];
                 
                 if (parts.length > 1) {
                     node.innerHTML = '';
@@ -1885,27 +2139,144 @@
                         if (part) {
                             node.appendChild(document.createTextNode(part));
                         }
-                        if (i < parts.length - 1) {
+                        if (i < parts.length - 1 && i < matches.length) {
                             const span = document.createElement('span');
                             span.className = `highlight-${colorIndex}`;
-                            span.textContent = text;
+                            span.textContent = matches[i];
                             node.appendChild(span);
                         }
                     });
                 }
             }
 
-            // 清除特定顏色的高亮
-            clearHighlightColor(colorIndex) {
-                document.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
-                    const parent = element.parentNode;
-                    const textNode = document.createTextNode(element.textContent);
-                    parent.replaceChild(textNode, element);
-                    parent.normalize();
-                });
+            // 在元素中高亮文字（支援 iframe）
+            highlightInElement(element, text, colorIndex) {
+                const walker = document.createTreeWalker(
+                    element,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function(node) {
+                            // 跳過已經高亮的節點
+                            if (node.parentElement && node.parentElement.className && 
+                                node.parentElement.className.includes('highlight-')) {
+                                return NodeFilter.FILTER_REJECT;
+                            }
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    },
+                    false
+                );
                 
-                this.highlightedTexts[colorIndex] = null;
-                document.getElementById(`highlightBtn${colorIndex}`).style.display = 'none';
+                const textNodes = [];
+                let node;
+                
+                while (node = walker.nextNode()) {
+                    if (node.nodeValue && node.nodeValue.includes(text)) {
+                        textNodes.push(node);
+                    }
+                }
+                
+                textNodes.forEach(textNode => {
+                    const parent = textNode.parentNode;
+                    const content = textNode.nodeValue;
+                    
+                    // 創建正則表達式，支援大小寫
+                    const regex = new RegExp(this.escapeRegExp(text), 'gi');
+                    const matches = content.match(regex);
+                    
+                    if (matches && matches.length > 0) {
+                        const parts = content.split(regex);
+                        const fragment = document.createDocumentFragment();
+                        
+                        parts.forEach((part, i) => {
+                            if (part) {
+                                fragment.appendChild(document.createTextNode(part));
+                            }
+                            if (i < parts.length - 1 && i < matches.length) {
+                                const span = document.createElement('span');
+                                span.className = `highlight-${colorIndex}`;
+                                span.textContent = matches[i];
+                                fragment.appendChild(span);
+                            }
+                        });
+                        
+                        parent.replaceChild(fragment, textNode);
+                    }
+                });
+            }
+
+            // 注入高亮樣式到 iframe
+            injectHighlightStyles(iframe) {
+                try {
+                    const iframeDoc = iframe.contentDocument;
+                    if (!iframeDoc.getElementById('highlight-styles')) {
+                        const style = iframeDoc.createElement('style');
+                        style.id = 'highlight-styles';
+                        style.textContent = `
+                            .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
+                            .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
+                            .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
+                            .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
+                            .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
+                        `;
+                        iframeDoc.head.appendChild(style);
+                    }
+                } catch (e) {
+                    console.log('無法注入樣式:', e);
+                }
+            }
+
+            // 清除特定面板特定顏色的高亮
+            clearHighlightColorInPanel(panel, colorIndex) {
+                const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+                
+                if (panelType === 'original') {
+                    // 清除原始檔案的高亮
+                    document.querySelectorAll(`#${panel}ContentWrapper .highlight-${colorIndex}`).forEach(element => {
+                        const parent = element.parentNode;
+                        const textNode = document.createTextNode(element.textContent);
+                        parent.replaceChild(textNode, element);
+                        parent.normalize();
+                    });
+                } else if (panelType === 'analysis') {
+                    // 清除 iframe 中的高亮
+                    const iframe = document.querySelector(`#${panel}Content iframe`);
+                    if (iframe && iframe.contentDocument) {
+                        iframe.contentDocument.querySelectorAll(`.highlight-${colorIndex}`).forEach(element => {
+                            const parent = element.parentNode;
+                            const textNode = iframe.contentDocument.createTextNode(element.textContent);
+                            parent.replaceChild(textNode, element);
+                            parent.normalize();
+                        });
+                    }
+                }
+                
+                const highlights = this.getPanelHighlights(panel);
+                highlights[colorIndex] = null;
+                
+                // 更新高亮控制按鈕顯示
+                this.updateHighlightButtons(panel);
+            }
+
+            // 清除特定顏色的高亮（只清除當前焦點面板）
+            clearHighlightColor(colorIndex) {
+                const panel = window.currentFocusedPanel || 'right';
+                this.clearHighlightColorInPanel(panel, colorIndex);
+            }
+
+            // 更新高亮控制按鈕顯示
+            updateHighlightButtons(panel) {
+                const highlights = this.getPanelHighlights(panel);
+                
+                for (let i = 1; i <= 5; i++) {
+                    // 根據面板選擇正確的按鈕
+                    const btnId = panel === 'left' ? `leftHighlightBtn${i}` : `highlightBtn${i}`;
+                    const btn = document.getElementById(btnId);
+                    
+                    if (btn) {
+                        btn.style.display = highlights[i] ? 'block' : 'none';
+                    }
+                }
             }
 
             // 輔助函數
@@ -1915,7 +2286,7 @@
         }
 
         // 建立全域高亮管理器實例
-        const highlightManager = new HighlightManager();        
+        const highlightManager = new HighlightManager();      
     </script>
     <script>
         // 右鍵選單管理器
@@ -2032,18 +2403,73 @@
             }
 
             copyText() {
-                document.execCommand('copy');
+                let textToCopy = '';
+                let selection = null;
+                
+                // 檢查是否有 iframe 的選擇
+                if (this.currentIframe && this.currentSelection) {
+                    selection = this.currentSelection;
+                } else {
+                    selection = window.getSelection();
+                }
+                
+                // 優先複製選中的文字
+                if (selection && selection.toString().trim()) {
+                    textToCopy = selection.toString();
+                } else {
+                    // 如果沒有選中文字，複製整個面板內容
+                    const panel = this.currentPanel || window.currentFocusedPanel || 'left';
+                    
+                    if (panel === 'left') {
+                        textToCopy = (currentLeftType === 'analysis') ? 
+                            this.extractTextFromHTML(analysisContent) : originalContent;
+                    } else {
+                        textToCopy = (currentRightType === 'analysis') ? 
+                            this.extractTextFromHTML(analysisContent) : originalContent;
+                    }
+                }
+                
+                if (textToCopy) {
+                    // 使用 Clipboard API
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(textToCopy).then(() => {
+                            updateStatus(selection && selection.toString() ? '已複製選中的文字' : '已複製面板內容');
+                        }).catch(() => {
+                            // 退回到舊方法
+                            this.fallbackCopy(textToCopy);
+                        });
+                    } else {
+                        this.fallbackCopy(textToCopy);
+                    }
+                }
+                
+                // 清理
+                this.currentIframe = null;
+                this.currentSelection = null;
                 this.hide();
             }
 
-            cutText() {
-                document.execCommand('cut');
-                this.hide();
+            // 從 HTML 提取純文字的輔助方法
+            extractTextFromHTML(html) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                return tempDiv.textContent || tempDiv.innerText || '';
             }
 
-            pasteText() {
-                document.execCommand('paste');
-                this.hide();
+            // 備用複製方法
+            fallbackCopy(text) {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                const success = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                if (success) {
+                    updateStatus('已複製');
+                }
             }
 
             selectAll() {
@@ -2063,6 +2489,17 @@
             setupForElement(element, isIframe = false) {
                 element.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
+                    
+                    // 確定當前是哪個面板
+                    let panel = 'left';
+                    if (element.closest('#rightContent') || element.closest('#rightPanel')) {
+                        panel = 'right';
+                    } else if (element.closest('#leftContent') || element.closest('#leftPanel')) {
+                        panel = 'left';
+                    }
+                    
+                    highlightManager.currentPanel = panel;
+                    window.currentFocusedPanel = panel;
                     
                     const selection = isIframe ? 
                         element.contentWindow.getSelection() : 
@@ -2097,11 +2534,14 @@
         // 複製面板內容
         function copyPanelContent(panel) {
             let content = '';
+            let contentType = '';
             
             if (panel === 'left') {
                 content = (currentLeftType === 'analysis') ? analysisContent : originalContent;
+                contentType = currentLeftType;
             } else {
                 content = (currentRightType === 'analysis') ? analysisContent : originalContent;
+                contentType = currentRightType;
             }
             
             if (!content) {
@@ -2109,18 +2549,70 @@
                 return;
             }
             
-            // 建立臨時 textarea 來複製純文字
+            // 處理內容
+            let textContent = '';
+            if (contentType === 'analysis') {
+                // 從 HTML 中提取純文字
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = content;
+                textContent = tempDiv.textContent || tempDiv.innerText || '';
+            } else {
+                // 原始內容已經是純文字
+                textContent = content;
+            }
+            
+            // 使用 Clipboard API
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    showPanelCopySuccess(panel);
+                }).catch(() => {
+                    fallbackPanelCopy(textContent, panel);
+                });
+            } else {
+                fallbackPanelCopy(textContent, panel);
+            }
+        }
+
+        // 顯示面板複製成功的動畫
+        function showPanelCopySuccess(panel) {
+            const iconElement = document.getElementById(`${panel}CopyIcon`);
+            if (iconElement) {
+                const originalIcon = iconElement.textContent;
+                
+                // 改成勾號
+                iconElement.textContent = '✓';
+                
+                // 可選：添加動畫效果
+                iconElement.style.color = '#4ec9b0';
+                iconElement.style.transition = 'color 0.2s ease';
+                
+                updateStatus('內容已複製到剪貼簿');
+                
+                // 0.5秒後恢復原始圖標
+                setTimeout(() => {
+                    iconElement.textContent = originalIcon;
+                    iconElement.style.color = '';
+                }, 500);
+            }
+        }
+
+        // 備用的面板複製方法
+        function fallbackPanelCopy(text, panel) {
             const textarea = document.createElement('textarea');
-            textarea.value = content.replace(/<[^>]*>/g, ''); // 移除 HTML 標籤
+            textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
             document.body.appendChild(textarea);
             textarea.select();
-            document.execCommand('copy');
+            const success = document.execCommand('copy');
             document.body.removeChild(textarea);
             
-            updateStatus('內容已複製到剪貼簿');
-        }        
+            if (success) {
+                showPanelCopySuccess(panel);
+            } else {
+                updateStatus('複製失敗');
+            }
+        }
     </script>    
 </body>
 </html>
