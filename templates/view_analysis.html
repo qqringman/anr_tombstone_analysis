@@ -1647,6 +1647,44 @@
                                         
                                         bindScrollEvents();
                                         
+                                        // 設置 iframe 內的鍵盤事件處理
+                                        const setupIframeKeyboardEvents = function() {
+                                            try {
+                                                // 在 iframe 內監聽鍵盤事件
+                                                iframeDoc.addEventListener('keydown', function(e) {
+                                                    // 將事件傳遞到父視窗
+                                                    const event = new KeyboardEvent('keydown', {
+                                                        key: e.key,
+                                                        keyCode: e.keyCode,
+                                                        ctrlKey: e.ctrlKey,
+                                                        altKey: e.altKey,
+                                                        shiftKey: e.shiftKey,
+                                                        metaKey: e.metaKey,
+                                                        bubbles: true
+                                                    });
+                                                    
+                                                    // 設置當前焦點面板
+                                                    window.currentFocusedPanel = panel;
+                                                    
+                                                    // 觸發父視窗的事件
+                                                    document.dispatchEvent(event);
+                                                });
+                                                
+                                                // 確保 iframe 可以獲得焦點
+                                                iframeDoc.body.setAttribute('tabindex', '0');
+                                                
+                                                // iframe 獲得焦點時更新當前面板
+                                                iframeWindow.addEventListener('focus', function() {
+                                                    window.currentFocusedPanel = panel;
+                                                });
+                                                
+                                            } catch (e) {
+                                                console.log('設置 iframe 鍵盤事件失敗:', e);
+                                            }
+                                        };
+
+                                        setupIframeKeyboardEvents();
+
                                         // 監聽 iframe 內容變化，重新計算行高
                                         const observer = new MutationObserver(function() {
                                             const newLineData = measureActualLines();
@@ -1665,11 +1703,12 @@
                                             });
                                         }
                                         
-                                        // 滑鼠追蹤
+                                        // 改進的滑鼠追蹤
                                         const trackMouse = function(e) {
                                             const leftPanel = iframeDoc.querySelector('.left-panel');
                                             const scrollTop = leftPanel ? leftPanel.scrollTop : 0;
-                                            const y = e.clientY + scrollTop - 20;
+                                            const rect = iframe.getBoundingClientRect();
+                                            const y = e.clientY - rect.top + scrollTop - 20;
                                             
                                             // 根據滑鼠位置找到對應的行
                                             let targetLine = null;
@@ -1687,8 +1726,13 @@
                                                 highlightCurrentLineNumber(panel, targetLine);
                                             }
                                         };
-                                        
+
+                                        // 同時監聽 iframe 和容器的滑鼠事件
                                         iframeDoc.addEventListener('mousemove', trackMouse);
+                                        contentContainer.addEventListener('mousemove', function(e) {
+                                            // 如果滑鼠在 iframe 外但在容器內，也要更新焦點面板
+                                            window.currentFocusedPanel = panel;
+                                        });
                                         
                                         // 設置其他事件
                                         setupIframeContextMenu(iframe, panel);
@@ -2141,6 +2185,24 @@
                 return;
             }
             
+            // 保存當前的書籤狀態
+            const leftBookmarksTemp = new Set();
+            const rightBookmarksTemp = new Set();
+            
+            bookmarks.forEach(key => {
+                const [panel, line] = key.split('-');
+                if (panel === 'left') {
+                    // 切換後會變成右側，所以改為 right
+                    rightBookmarksTemp.add(`right-${line}`);
+                } else {
+                    // 切換後會變成左側，所以改為 left
+                    leftBookmarksTemp.add(`left-${line}`);
+                }
+            });
+            
+            // 清空舊書籤
+            bookmarks.clear();
+            
             // 交換內容類型
             const tempType = currentLeftType;
             currentLeftType = currentRightType;
@@ -2159,12 +2221,64 @@
                 displayContent('right', originalContent, 'original');
             }
             
+            // 延遲恢復書籤（等待內容載入完成）
+            setTimeout(() => {
+                // 恢復書籤
+                leftBookmarksTemp.forEach(key => bookmarks.add(key));
+                rightBookmarksTemp.forEach(key => bookmarks.add(key));
+                
+                // 更新書籤顯示
+                updateBookmarkDisplay('left');
+                updateBookmarkDisplay('right');
+                
+                // 重置書籤索引
+                leftBookmarkIndex = -1;
+                rightBookmarkIndex = -1;
+            }, 500);
+            
             // 更新標題
             updatePanelTitles();
             
             updateStatus('已切換面板內容');
         }
-        
+
+        // 更新書籤顯示
+        function updateBookmarkDisplay(panel) {
+            const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+            
+            if (panelType === 'analysis') {
+                // 分析報告 - 等待行號生成完成
+                const checkInterval = setInterval(() => {
+                    const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+                    if (lineNumbers && lineNumbers.querySelectorAll('.analysis-line-number').length > 0) {
+                        clearInterval(checkInterval);
+                        
+                        // 恢復書籤顯示
+                        bookmarks.forEach(bookmarkKey => {
+                            const [bPanel, bLine] = bookmarkKey.split('-');
+                            if (bPanel === panel) {
+                                const lineEl = lineNumbers.querySelector(`.analysis-line-number[data-line="${bLine}"]`);
+                                if (lineEl) {
+                                    lineEl.classList.add('bookmarked');
+                                }
+                            }
+                        });
+                    }
+                }, 100);
+            } else {
+                // 原始檔案
+                bookmarks.forEach(bookmarkKey => {
+                    const [bPanel, bLine] = bookmarkKey.split('-');
+                    if (bPanel === panel) {
+                        const lineEl = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${bLine}"]`);
+                        if (lineEl) {
+                            lineEl.classList.add('bookmarked');
+                        }
+                    }
+                });
+            }
+        }
+
         // 更新面板標題
         function updatePanelTitles() {
             const leftIcon = document.getElementById('leftPanelIcon');
@@ -2536,41 +2650,38 @@
                         return;
                     }
                     
-                    // 查找行號元素 - 使用更寬鬆的選擇器
-                    let lineElement = null;
+                    // 判斷面板類型
+                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
                     
-                    // 先嘗試精確匹配
-                    lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"][data-panel="${panel}"]`);
-                    
-                    // 如果找不到，使用更寬鬆的選擇器
-                    if (!lineElement) {
+                    if (panelType === 'analysis') {
+                        // 分析報告 - 使用特殊的行號選擇器
                         const lineNumbers = document.getElementById(`${panel}LineNumbers`);
-                        if (lineNumbers) {
-                            // 遍歷所有行號元素
-                            const allLineNumbers = lineNumbers.querySelectorAll('.line-number');
-                            for (let el of allLineNumbers) {
-                                if (el.getAttribute('data-line') === String(line)) {
-                                    lineElement = el;
-                                    break;
+                        if (lineNumbers && lineNumbers.className === 'analysis-line-numbers') {
+                            const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${line}"]`);
+                            if (lineElement) {
+                                // 確保有正確的屬性
+                                if (!lineElement.getAttribute('data-panel')) {
+                                    lineElement.setAttribute('data-panel', panel);
                                 }
+                                toggleBookmark(lineElement);
+                                updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行切換書籤`);
+                            } else {
+                                console.error('F2: 找不到分析報告行號元素', { panel, line });
                             }
                         }
-                    }
-                    
-                    if (lineElement) {
-                        // 確保元素有正確的 data-panel 屬性
-                        if (!lineElement.getAttribute('data-panel')) {
-                            lineElement.setAttribute('data-panel', panel);
-                        }
-                        toggleBookmark(lineElement);
-                        updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行切換書籤`);
                     } else {
-                        console.error(`F2: 找不到行號元素`, {
-                            panel: panel,
-                            line: line,
-                            lineNumbersExists: !!document.getElementById(`${panel}LineNumbers`),
-                            totalLines: document.querySelectorAll(`#${panel}LineNumbers .line-number`).length
-                        });
+                        // 原始檔案 - 使用原有邏輯
+                        let lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
+                        
+                        if (lineElement) {
+                            if (!lineElement.getAttribute('data-panel')) {
+                                lineElement.setAttribute('data-panel', panel);
+                            }
+                            toggleBookmark(lineElement);
+                            updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行切換書籤`);
+                        } else {
+                            console.error('F2: 找不到行號元素', { panel, line });
+                        }
                     }
                 }
 
