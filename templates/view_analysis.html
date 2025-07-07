@@ -518,7 +518,42 @@
 
         /* 分析報告專用樣式 - 不影響右側 */
         #leftPanel .content-container {
-            overflow: hidden !important; /* 容器不顯示捲軸 */
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #leftPanel .content-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 確保 wrapper 也填滿 */
+        #leftPanel .original-content-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: row;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 移除可能的額外邊距 */
+        #leftPanel .panel-content {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
 
         /* 確保 iframe 內容不會橫向溢出 */
@@ -971,33 +1006,39 @@
     <style>
         /* 左側分析報告專用的行號樣式 */
         #leftPanel .line-numbers-container {
-            position: sticky;
-            left: 0;
+            width: 60px;
+            min-width: 60px;
             background: #1a1a1a;
             border-right: 1px solid #333;
             overflow: hidden;
+            flex-shrink: 0;
+            position: sticky;
+            left: 0;
             z-index: 10;
         }
 
         #leftPanel .analysis-line-numbers {
             position: relative;
             width: 100%;
-            height: 100%;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6em;
+            color: #666;
+            user-select: none;
         }
 
         #leftPanel .analysis-line-number {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 10px;
+            position: absolute;
+            width: 100%;
+            padding: 0 10px 0 0;
             text-align: right;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             color: #666;
             user-select: none;
             cursor: pointer;
-            box-sizing: border-box;
-            min-height: 20.8px;
+            background: #1a1a1a;
+            transition: background-color 0.2s ease;
         }
 
         #leftPanel .analysis-line-number:hover {
@@ -1010,7 +1051,21 @@
             left: 2px;
             color: #4ec9b0;
             font-size: 10px;
-        }        
+        }
+
+        #leftPanel .analysis-line-number:not(.bookmarked):hover::before {
+            content: '📌';
+            position: absolute;
+            left: 2px;
+            font-size: 10px;
+            opacity: 0.5;
+        }
+
+        #leftPanel .analysis-line-number.bookmarked:hover::before {
+            content: '✕';
+            color: #ff6666;
+            left: 2px;
+        }       
     </style>   
 </head>
 <body>
@@ -1324,23 +1379,31 @@
                                 // 注入樣式
                                 const style = iframeDoc.createElement('style');
                                 style.textContent = `
-                                    html {
+                                    html, body {
+                                        margin: 0;
+                                        padding: 0;
                                         height: 100%;
-                                        overflow-y: auto;
-                                        overflow-x: hidden;
+                                        overflow: auto;
                                     }
                                     
                                     body {
                                         line-height: 1.6em;
-                                        margin: 0;
-                                        padding: 20px;
                                         font-size: 13px;
                                         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                        min-height: calc(100% - 40px);
                                         word-wrap: break-word;
                                         word-break: break-all;
                                         overflow-wrap: break-word;
                                         max-width: 100%;
+                                        background: transparent;
+                                    }
+                                    
+                                    /* 移除可能的外層容器邊距 */
+                                    .report-content,
+                                    .left-panel,
+                                    .analysis-content {
+                                        margin: 0;
+                                        padding: 20px;
+                                        box-sizing: border-box;
                                     }
                                     
                                     * {
@@ -1402,7 +1465,6 @@
                                     
                                     // 計算實際行高的函數
                                     const measureActualLines = function() {
-                                        // 先嘗試找到主要內容區域
                                         const reportContent = iframeDoc.querySelector('.report-content') || 
                                                             iframeDoc.querySelector('.left-panel') ||
                                                             iframeDoc.querySelector('pre') ||
@@ -1413,109 +1475,74 @@
                                             return [];
                                         }
                                         
+                                        // 獲取計算後的樣式
+                                        const computedStyle = iframeWindow.getComputedStyle(reportContent);
+                                        const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+                                        
                                         const lineData = [];
                                         
-                                        // 獲取所有文字節點和包含文字的元素
-                                        const walker = iframeDoc.createTreeWalker(
-                                            reportContent,
-                                            NodeFilter.SHOW_ALL,
-                                            {
-                                                acceptNode: function(node) {
-                                                    // 接受文字節點
-                                                    if (node.nodeType === Node.TEXT_NODE) {
-                                                        const text = node.textContent.trim();
-                                                        if (text.length > 0) {
-                                                            return NodeFilter.FILTER_ACCEPT;
-                                                        }
-                                                    }
-                                                    // 接受包含直接文字內容的元素
-                                                    if (node.nodeType === Node.ELEMENT_NODE) {
-                                                        const tagName = node.tagName.toLowerCase();
-                                                        if (tagName === 'br' || tagName === 'div' || tagName === 'p' || 
-                                                            tagName === 'span' || tagName === 'pre') {
-                                                            return NodeFilter.FILTER_ACCEPT;
-                                                        }
-                                                    }
-                                                    return NodeFilter.FILTER_SKIP;
-                                                }
-                                            }
-                                        );
-                                        
-                                        let currentLine = 1;
-                                        let lastY = -1;
-                                        let node;
-                                        
-                                        while (node = walker.nextNode()) {
-                                            if (node.nodeType === Node.TEXT_NODE) {
-                                                // 對於文字節點，獲取其父元素的位置
-                                                const parent = node.parentElement;
-                                                if (parent) {
-                                                    const rect = parent.getBoundingClientRect();
-                                                    const y = rect.top + iframeWindow.pageYOffset;
-                                                    
-                                                    // 如果Y座標改變，表示新的一行
-                                                    if (Math.abs(y - lastY) > 5) { // 5px 的容差
-                                                        lineData.push({
-                                                            index: currentLine,
-                                                            top: y - 20, // 減去 padding
-                                                            height: rect.height || 20.8,
-                                                            element: parent
-                                                        });
-                                                        currentLine++;
-                                                        lastY = y;
-                                                    }
-                                                }
-                                            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                                                const tagName = node.tagName.toLowerCase();
-                                                
-                                                // BR 標籤表示換行
-                                                if (tagName === 'br') {
-                                                    currentLine++;
-                                                    continue;
-                                                }
-                                                
-                                                // 檢查是否是塊級元素或包含文字
-                                                const hasText = node.textContent.trim().length > 0;
-                                                const isBlock = window.getComputedStyle(node).display === 'block';
-                                                
-                                                if (hasText && isBlock) {
-                                                    const rect = node.getBoundingClientRect();
-                                                    const y = rect.top + iframeWindow.pageYOffset;
-                                                    
-                                                    if (Math.abs(y - lastY) > 5) {
-                                                        lineData.push({
-                                                            index: currentLine,
-                                                            top: y - 20,
-                                                            height: rect.height || 20.8,
-                                                            element: node
-                                                        });
-                                                        currentLine++;
-                                                        lastY = y;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        
-                                        // 如果沒有找到任何行，使用備用方案
-                                        if (lineData.length === 0) {
-                                            console.log('使用備用方案計算行數');
-                                            const lines = reportContent.innerText.split('\n');
-                                            let currentTop = 0;
+                                        // 如果是 pre 元素，按行分割
+                                        if (reportContent.tagName === 'PRE') {
+                                            const lines = reportContent.textContent.split('\n');
+                                            let currentTop = paddingTop;
+                                            const lineHeight = 20.8; // 1.6em * 13px
                                             
                                             lines.forEach((line, index) => {
-                                                if (line.trim() || index === 0) { // 包含第一行即使是空的
+                                                lineData.push({
+                                                    index: index + 1,
+                                                    top: currentTop,
+                                                    height: lineHeight,
+                                                    element: null
+                                                });
+                                                currentTop += lineHeight;
+                                            });
+                                        } else {
+                                            // 對於其他元素，分析實際的行佈局
+                                            const allElements = reportContent.querySelectorAll('*');
+                                            let currentLine = 1;
+                                            let lastY = -999;
+                                            
+                                            allElements.forEach(element => {
+                                                // 跳過隱藏元素
+                                                const style = iframeWindow.getComputedStyle(element);
+                                                if (style.display === 'none' || style.visibility === 'hidden') {
+                                                    return;
+                                                }
+                                                
+                                                // 只處理包含文字的元素
+                                                const text = element.textContent.trim();
+                                                if (text.length === 0 && element.tagName !== 'BR') {
+                                                    return;
+                                                }
+                                                
+                                                const rect = element.getBoundingClientRect();
+                                                const y = rect.top + iframeWindow.pageYOffset;
+                                                
+                                                // 如果 Y 座標變化超過 5px，視為新行
+                                                if (Math.abs(y - lastY) > 5) {
                                                     lineData.push({
-                                                        index: index + 1,
-                                                        top: currentTop,
-                                                        height: 20.8,
-                                                        element: null
+                                                        index: currentLine,
+                                                        top: y - paddingTop, // 減去容器的 padding
+                                                        height: rect.height || 20.8,
+                                                        element: element
                                                     });
-                                                    currentTop += 20.8;
+                                                    currentLine++;
+                                                    lastY = y;
                                                 }
                                             });
                                         }
                                         
-                                        console.log(`找到 ${lineData.length} 行`);
+                                        // 確保至少有一行
+                                        if (lineData.length === 0) {
+                                            lineData.push({
+                                                index: 1,
+                                                top: 0,
+                                                height: 20.8,
+                                                element: null
+                                            });
+                                        }
+                                        
+                                        console.log(`計算出 ${lineData.length} 行`);
                                         return lineData;
                                     };
                                     
@@ -1525,17 +1552,24 @@
                                         lineNumbersContent.innerHTML = '';
                                         lineNumbersContent.className = 'analysis-line-numbers';
                                         
+                                        // 設置容器樣式，與右側一致
+                                        lineNumbersContent.style.paddingTop = '20px';
+                                        lineNumbersContent.style.paddingBottom = '20px';
+                                        
                                         lineData.forEach(data => {
-                                            const lineNumberEl = document.createElement('div');
+                                            const lineNumberEl = document.createElement('span'); // 使用 span 而不是 div
                                             lineNumberEl.className = 'analysis-line-number';
                                             lineNumberEl.setAttribute('data-line', String(data.index));
                                             lineNumberEl.setAttribute('data-panel', panel);
                                             lineNumberEl.textContent = data.index;
+                                            
+                                            // 設置絕對定位來對齊實際行高
                                             lineNumberEl.style.position = 'absolute';
                                             lineNumberEl.style.top = (data.top + 20) + 'px'; // 加上 padding 偏移
                                             lineNumberEl.style.height = data.height + 'px';
                                             lineNumberEl.style.lineHeight = data.height + 'px';
-                                            lineNumberEl.style.width = '100%';
+                                            lineNumberEl.style.width = '50px'; // 固定寬度
+                                            lineNumberEl.style.display = 'block';
                                             
                                             // 添加事件處理
                                             lineNumberEl.addEventListener('click', function(e) {
@@ -1552,6 +1586,13 @@
                                             
                                             lineNumbersContent.appendChild(lineNumberEl);
                                         });
+                                        
+                                        // 設置容器的總高度
+                                        if (lineData.length > 0) {
+                                            const lastLine = lineData[lineData.length - 1];
+                                            const totalHeight = lastLine.top + lastLine.height + 40; // 加上上下 padding
+                                            lineNumbersContent.style.height = totalHeight + 'px';
+                                        }
                                         
                                         return lineData.length;
                                     };
@@ -2157,13 +2198,14 @@
             if (panel === 'left' && currentLeftType === 'analysis') {
                 const lineNumbers = document.getElementById(`${panel}LineNumbers`);
                 if (lineNumbers && lineNumbers.className === 'analysis-line-numbers') {
-                    // 處理動態行號
+                    // 清除之前的高亮
                     lineNumbers.querySelectorAll('.analysis-line-number').forEach(el => {
                         if (!el.classList.contains('bookmarked')) {
                             el.style.backgroundColor = '';
                         }
                     });
                     
+                    // 高亮當前行
                     const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${lineNumber}"]`);
                     if (lineElement && !lineElement.classList.contains('bookmarked')) {
                         lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.1)';
