@@ -469,7 +469,14 @@
             flex-shrink: 0;
         }
 
+        /* 分析報告的 iframe 容器樣式 */
+        .content-container iframe {
+            position: relative;
+            z-index: 1;
+        }
+
         /* 行號內容 */
+        .analysis-with-line-numbers,
         .line-numbers-content {
             padding: 20px 10px 20px 0;
             text-align: right;
@@ -478,6 +485,16 @@
             line-height: 1.6em;
             color: #666;
             user-select: none;
+        }
+
+        /* 虛擬行 hover 效果 */
+        .hover-overlay {
+            pointer-events: none !important;
+        }
+
+        .current-line-highlight {
+            pointer-events: none !important;
+            will-change: transform, top;
         }
 
         /* 內容容器 - 可捲動 */
@@ -499,6 +516,25 @@
             min-width: max-content;
         }
 
+        /* 分析報告專用樣式 - 不影響右側 */
+        #leftPanel .content-container {
+            overflow: hidden !important; /* 容器不顯示捲軸 */
+        }
+
+        /* 確保 iframe 內容不會橫向溢出 */
+        #leftPanel iframe {
+            max-width: 100%;
+        }
+                
+        /* 確保 iframe 填滿容器 */
+        .content-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }        
         /* 行號列固定 */
         .line-number-column {
             position: sticky;
@@ -840,6 +876,28 @@
         #rightPanel {
             padding-right: 6px;
         }
+
+        /* 分析報告的虛擬行 hover 效果 */
+        .analysis-line-overlay {
+            position: absolute;
+            left: 60px; /* 行號寬度 */
+            right: 0;
+            height: 20.8px; /* 1.6em * 13px */
+            pointer-events: none;
+            background-color: transparent;
+            transition: background-color 0.2s ease;
+            z-index: 5;
+        }
+
+        .analysis-line-overlay.hover {
+            background-color: var(--line-hover-color);
+            opacity: 0.3;
+        }
+
+        /* iframe 容器的相對定位 */
+        .content-container.analysis-container {
+            position: relative;
+        }        
     </style>
     <style>
         /* 內容行樣式 */
@@ -1068,6 +1126,9 @@
         let bookmarks = new Set();
         let currentBookmarkIndex = -1;
         let bookmarkArray = [];
+        // 改為每個面板各自的書籤索引
+        let leftBookmarkIndex = -1;
+        let rightBookmarkIndex = -1;
 
         // 確保全域變數被正確初始化
         if (typeof window.currentFocusedPanel === 'undefined') {
@@ -1165,40 +1226,99 @@
             const contentEl = document.getElementById(panel + 'Content');
             
             if (type === 'analysis') {
-                // 分析報告處理（保持原樣）
+                // 分析報告處理
                 if (panel === 'left' && currentLeftType === 'analysis') {
                     analysisContent = content;
                 } else if (panel === 'right' && currentRightType === 'analysis') {
                     analysisContent = content;
                 }
                 
-                contentEl.innerHTML = '';
+                // 建立結構
+                const wrapper = document.createElement('div');
+                wrapper.className = 'original-content-wrapper';
+                wrapper.id = `${panel}ContentWrapper`;
+                
+                // 建立行號容器
+                const lineNumbersContainer = document.createElement('div');
+                lineNumbersContainer.className = 'line-numbers-container';
+                lineNumbersContainer.id = `${panel}LineNumbersContainer`;
+                
+                const lineNumbersContent = document.createElement('div');
+                lineNumbersContent.className = 'line-numbers-content';
+                lineNumbersContent.id = `${panel}LineNumbers`;
+                
+                // 建立內容容器
+                const contentContainer = document.createElement('div');
+                contentContainer.className = 'content-container';
+                contentContainer.id = `${panel}ContentContainer`;
+                contentContainer.style.position = 'relative';
+                
+                // 建立 iframe
                 const iframe = document.createElement('iframe');
                 iframe.style.width = '100%';
                 iframe.style.height = '100%';
                 iframe.style.border = 'none';
                 iframe.srcdoc = content;
                 
+                // 組裝結構
+                lineNumbersContainer.appendChild(lineNumbersContent);
+                contentContainer.appendChild(iframe);
+                wrapper.appendChild(lineNumbersContainer);
+                wrapper.appendChild(contentContainer);
+                
+                contentEl.innerHTML = '';
+                contentEl.appendChild(wrapper);
+                
+                // iframe 載入後的處理
                 iframe.onload = function() {
                     setTimeout(() => {
-                        setupIframeContextMenu(iframe, panel);
-                        
                         try {
                             const iframeDoc = iframe.contentDocument;
-                            if (iframeDoc) {
+                            const iframeWindow = iframe.contentWindow;
+                            
+                            if (iframeDoc && iframeWindow) {
+                                // 注入樣式
                                 const style = iframeDoc.createElement('style');
                                 style.textContent = `
-                                    /* 高亮樣式 */
-                                    .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
-                                    .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
+                                    html {
+                                        height: 100%;
+                                        overflow-y: auto;
+                                        overflow-x: hidden; /* 隱藏橫向捲軸 */
+                                    }
+                                    
+                                    body {
+                                        line-height: 1.6em;
+                                        margin: 0;
+                                        padding: 20px;
+                                        font-size: 13px;
+                                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                        min-height: calc(100% - 40px);
+                                        word-wrap: break-word; /* 強制長單詞換行 */
+                                        word-break: break-all; /* 允許在任何位置換行 */
+                                        overflow-wrap: break-word; /* 相容性 */
+                                        max-width: 100%; /* 限制最大寬度 */
+                                    }
+                                    
+                                    /* 確保所有元素都遵守換行規則 */
+                                    * {
+                                        word-wrap: break-word;
+                                        word-break: break-all;
+                                        overflow-wrap: break-word;
+                                        max-width: 100%;
+                                    }
+                                    
+                                    /* 特別處理 pre 和 code 元素 */
+                                    pre, code {
+                                        white-space: pre-wrap; /* 保留空白但允許換行 */
+                                        word-wrap: break-word;
+                                        word-break: break-all;
+                                        overflow-wrap: break-word;
+                                    }
                                     
                                     /* 統一捲軸樣式 */
                                     ::-webkit-scrollbar {
-                                        height: 12px;
-                                        width: 12px;
+                                        height: 8px;
+                                        width: 8px;
                                     }
                                     
                                     ::-webkit-scrollbar-track {
@@ -1207,7 +1327,7 @@
                                     
                                     ::-webkit-scrollbar-thumb {
                                         background: #444;
-                                        border-radius: 6px;
+                                        border-radius: 4px;
                                     }
                                     
                                     ::-webkit-scrollbar-thumb:hover {
@@ -1219,17 +1339,231 @@
                                         scrollbar-width: thin;
                                         scrollbar-color: #444 #1a1a1a;
                                     }
+                                    
+                                    /* 報告行樣式 */
+                                    .report-line {
+                                        line-height: 1.6em;
+                                        font-size: 13px;
+                                        margin: 0;
+                                        word-wrap: break-word;
+                                        word-break: break-all;
+                                    }
+                                    
+                                    /* 高亮樣式 */
+                                    .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
+                                    .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
+                                    .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
                                 `;
                                 iframeDoc.head.appendChild(style);
+                                
+                                // 計算行數的函數
+                                const calculateLines = function() {
+                                    // 強制重新計算佈局
+                                    const body = iframeDoc.body;
+                                    body.style.display = 'none';
+                                    body.offsetHeight; // 觸發重排
+                                    body.style.display = '';
+                                    
+                                    // 獲取所有文字內容的實際高度
+                                    const computedStyle = iframeWindow.getComputedStyle(body);
+                                    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+                                    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+                                    const contentHeight = body.scrollHeight - paddingTop - paddingBottom;
+                                    
+                                    // 計算實際需要的行數
+                                    const lineHeight = 20.8; // 1.6em * 13px
+                                    const lineCount = Math.ceil(contentHeight / lineHeight);
+                                    
+                                    return lineCount;
+                                };
+                                
+                                // 生成行號的函數
+                                const generateLineNumbers = function(count) {
+                                    lineNumbersContent.innerHTML = '';
+                                    for (let i = 1; i <= count; i++) {
+                                        const lineNumberEl = document.createElement('span');
+                                        lineNumberEl.className = 'line-number';
+                                        lineNumberEl.setAttribute('data-line', String(i));
+                                        lineNumberEl.setAttribute('data-panel', panel);
+                                        lineNumberEl.textContent = i;
+                                        
+                                        lineNumberEl.addEventListener('click', function(e) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            toggleBookmark(this);
+                                        });
+                                        
+                                        lineNumberEl.addEventListener('mouseenter', function() {
+                                            window.currentFocusedLine = i;
+                                            window.currentFocusedPanel = panel;
+                                            highlightCurrentLineNumber(panel, i);
+                                        });
+                                        
+                                        lineNumbersContent.appendChild(lineNumberEl);
+                                    }
+                                    
+                                    // 設置行號容器的 padding，確保與內容對齊
+                                    lineNumbersContent.style.paddingTop = '20px'; // 與 body padding 相同
+                                    lineNumbersContent.style.paddingBottom = '20px';
+                                };
+                                
+                                // 延遲計算以確保內容完全渲染
+                                setTimeout(() => {
+                                    const lineCount = calculateLines();
+                                    generateLineNumbers(lineCount);
+                                    
+                                    // 保存行數
+                                    window[`${panel}LineCount`] = lineCount;
+                                    
+                                    // 捲動同步函數
+                                    const getScrollTop = function() {
+                                        return iframeWindow.pageYOffset ||
+                                            iframeDoc.documentElement.scrollTop ||
+                                            iframeDoc.body.scrollTop ||
+                                            (iframeDoc.scrollingElement && iframeDoc.scrollingElement.scrollTop) ||
+                                            0;
+                                    };
+                                    
+                                    const syncScroll = function() {
+                                        const scrollTop = getScrollTop();
+                                        lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
+                                    };
+                                    
+                                    // 綁定所有可能的捲動事件
+                                    const bindScrollEvents = function() {
+                                        // 1. window scroll
+                                        iframeWindow.addEventListener('scroll', syncScroll, true);
+                                        
+                                        // 2. document scroll
+                                        iframeDoc.addEventListener('scroll', syncScroll, true);
+                                        
+                                        // 3. documentElement scroll
+                                        if (iframeDoc.documentElement) {
+                                            iframeDoc.documentElement.addEventListener('scroll', syncScroll, true);
+                                        }
+                                        
+                                        // 4. body scroll
+                                        if (iframeDoc.body) {
+                                            iframeDoc.body.addEventListener('scroll', syncScroll, true);
+                                        }
+                                        
+                                        // 5. wheel 事件（滑鼠滾輪）
+                                        iframeDoc.addEventListener('wheel', function() {
+                                            requestAnimationFrame(syncScroll);
+                                        }, { passive: true });
+                                        
+                                        // 6. 使用 MutationObserver 監測 DOM 變化
+                                        const observer = new MutationObserver(function(mutations) {
+                                            let needSync = false;
+                                            for (let mutation of mutations) {
+                                                if (mutation.type === 'attributes' && 
+                                                    mutation.attributeName === 'style') {
+                                                    needSync = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (needSync) {
+                                                syncScroll();
+                                            }
+                                        });
+                                        
+                                        // 監測屬性變化
+                                        observer.observe(iframeDoc.documentElement, {
+                                            attributes: true,
+                                            attributeFilter: ['style']
+                                        });
+                                        
+                                        if (iframeDoc.body) {
+                                            observer.observe(iframeDoc.body, {
+                                                attributes: true,
+                                                attributeFilter: ['style']
+                                            });
+                                        }
+                                        
+                                        // 7. 定時器作為最後手段
+                                        let scrollTimer = setInterval(syncScroll, 50);
+                                        
+                                        // 10秒後停止定時器
+                                        setTimeout(() => {
+                                            clearInterval(scrollTimer);
+                                        }, 10000);
+                                    };
+                                    
+                                    // 立即綁定事件
+                                    bindScrollEvents();
+                                    
+                                    // 滑鼠追蹤
+                                    const trackMouse = function(e) {
+                                        const scrollTop = getScrollTop();
+                                        const y = e.clientY + scrollTop - 20;
+                                        const lineHeight = 20.8;
+                                        const lineNum = Math.floor(y / lineHeight) + 1;
+                                        
+                                        if (lineNum > 0 && lineNum <= lineCount) {
+                                            window.currentFocusedLine = lineNum;
+                                            window.currentFocusedPanel = panel;
+                                            highlightCurrentLineNumber(panel, lineNum);
+                                        }
+                                    };
+                                    
+                                    iframeDoc.addEventListener('mousemove', trackMouse);
+                                    
+                                    // 監聽窗口大小變化
+                                    let resizeTimer;
+                                    iframeWindow.addEventListener('resize', function() {
+                                        clearTimeout(resizeTimer);
+                                        resizeTimer = setTimeout(() => {
+                                            const newLineCount = calculateLines();
+                                            if (newLineCount !== window[`${panel}LineCount`]) {
+                                                window[`${panel}LineCount`] = newLineCount;
+                                                generateLineNumbers(newLineCount);
+                                                
+                                                // 恢復書籤
+                                                bookmarks.forEach(bookmarkKey => {
+                                                    const [bPanel, bLine] = bookmarkKey.split('-');
+                                                    if (bPanel === panel) {
+                                                        const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
+                                                        if (lineEl) {
+                                                            lineEl.classList.add('bookmarked');
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }, 300);
+                                    });
+                                    
+                                    // 設置其他事件
+                                    setupIframeContextMenu(iframe, panel);
+                                    
+                                    // 恢復書籤狀態
+                                    bookmarks.forEach(bookmarkKey => {
+                                        const [bPanel, bLine] = bookmarkKey.split('-');
+                                        if (bPanel === panel) {
+                                            const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
+                                            if (lineEl) {
+                                                lineEl.classList.add('bookmarked');
+                                            }
+                                        }
+                                    });
+                                    
+                                    updateStatus(`載入完成 - 共 ${lineCount} 行`);
+                                    
+                                    // 初始同步
+                                    syncScroll();
+                                    
+                                }, 500); // 延遲確保內容完全渲染
                             }
                         } catch (e) {
-                            console.log('無法注入樣式到 iframe:', e);
+                            console.error('處理 iframe 時發生錯誤:', e);
                         }
-                    }, 100);
+                    }, 300);
                 };
                 
-                contentEl.appendChild(iframe);
-                
+                // 初始化焦點
+                window.currentFocusedPanel = panel;
+                window.currentFocusedLine = 1;
             } else {
                 // 原始檔案處理 - 分離行號和內容
                 if (panel === 'left' && currentLeftType === 'original') {
@@ -1274,16 +1608,16 @@
                     const lineNumberEl = document.createElement('span');
                     lineNumberEl.className = 'line-number';
                     lineNumberEl.setAttribute('data-line', lineNum);
-                    lineNumberEl.setAttribute('data-panel', panel);  // 確保這行存在
+                    lineNumberEl.setAttribute('data-panel', panel);
                     lineNumberEl.textContent = lineNum;
                     lineNumbersContent.appendChild(lineNumberEl);
                     
                     // 建立內容行
                     const contentLineEl = document.createElement('div');
                     contentLineEl.className = 'content-line';
-                    contentLineEl.setAttribute('data-line', String(lineNum)); // 確保是字串
+                    contentLineEl.setAttribute('data-line', String(lineNum));
                     contentLineEl.setAttribute('data-panel', panel);
-                    contentLineEl.innerHTML = escapeHtml(line) || '&nbsp;'; // 使用 &nbsp; 而不是空格
+                    contentLineEl.innerHTML = escapeHtml(line) || '&nbsp;';
                     contentArea.appendChild(contentLineEl);
                 });
                 
@@ -1301,9 +1635,7 @@
                 
                 // 設置事件（延遲以確保 DOM 已更新）
                 setTimeout(() => {
-                    //console.log(`開始設置 ${panel} 面板的事件處理`);
-                    
-                    // 平行設置所有事件，而不是順序設置
+                    // 平行設置所有事件
                     Promise.all([
                         new Promise(resolve => {
                             setupLineNumberHandlers(panel);
@@ -1321,11 +1653,114 @@
                         // 初始化焦點
                         window.currentFocusedPanel = panel;
                         window.currentFocusedLine = 1;
-                        //console.log(`${panel} 面板事件設置完成`);
                     });
-                }, 100); // 減少延遲時間
+                }, 100);
                 
                 updateStatus(`載入完成 - 共 ${lines.length} 行`);
+            }
+        }
+
+        function setupIframeScrollSync(iframe, lineNumbers) {
+            try {
+                const iframeWindow = iframe.contentWindow;
+                if (!iframeWindow) return;
+                
+                // 監聽 iframe 內的捲動事件
+                iframeWindow.addEventListener('scroll', function() {
+                    const scrollTop = iframeWindow.pageYOffset || 
+                                    iframeWindow.document.documentElement.scrollTop || 
+                                    iframeWindow.document.body.scrollTop || 0;
+                    
+                    // 同步行號位置
+                    lineNumbers.style.transform = `translateY(-${scrollTop}px)`;
+                });
+                
+                // 也監聽 iframe 內 body 的捲動
+                const iframeBody = iframe.contentDocument.body;
+                if (iframeBody) {
+                    iframeBody.addEventListener('scroll', function() {
+                        lineNumbers.style.transform = `translateY(-${this.scrollTop}px)`;
+                    });
+                }
+            } catch (e) {
+                console.log('設置 iframe 捲動同步失敗:', e);
+            }
+        }      
+
+        // 為分析報告添加行追蹤
+        function setupAnalysisLineTracking(panel, iframe, lineCount) {
+            const wrapper = document.getElementById(`${panel}ContentWrapper`);
+            const contentContainer = document.getElementById(`${panel}ContentContainer`);
+            
+            if (!wrapper || !contentContainer || !iframe) return;
+            
+            // 為整個容器添加滑鼠移動事件
+            contentContainer.addEventListener('mousemove', function(e) {
+                // 計算相對於容器的位置
+                const rect = contentContainer.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                
+                // 考慮捲動位置
+                let scrollTop = 0;
+                try {
+                    const iframeWindow = iframe.contentWindow;
+                    if (iframeWindow) {
+                        scrollTop = iframeWindow.pageYOffset || 
+                                iframeWindow.document.documentElement.scrollTop || 
+                                iframeWindow.document.body.scrollTop || 0;
+                    }
+                } catch (e) {}
+                
+                // 計算行號
+                const adjustedY = relativeY + scrollTop - 20; // 20px 是 padding
+                const lineHeight = 20.8; // 1.6em * 13px
+                const lineNum = Math.floor(adjustedY / lineHeight) + 1;
+                
+                if (lineNum > 0 && lineNum <= lineCount) {
+                    window.currentFocusedLine = lineNum;
+                    window.currentFocusedPanel = panel;
+                    highlightCurrentLineNumber(panel, lineNum);
+                    
+                    // 更新虛擬行 hover
+                    const overlays = contentContainer.querySelectorAll('.analysis-line-overlay');
+                    overlays.forEach(overlay => {
+                        overlay.classList.remove('hover');
+                    });
+                    const currentOverlay = contentContainer.querySelector(`.analysis-line-overlay[data-line="${lineNum}"]`);
+                    if (currentOverlay) {
+                        currentOverlay.classList.add('hover');
+                    }
+                }
+            });
+            
+            // 滑鼠離開時清除 hover
+            contentContainer.addEventListener('mouseleave', function() {
+                const overlays = contentContainer.querySelectorAll('.analysis-line-overlay');
+                overlays.forEach(overlay => {
+                    overlay.classList.remove('hover');
+                });
+            });
+            
+            // 處理 iframe 內的滑鼠事件
+            try {
+                const iframeDoc = iframe.contentDocument;
+                if (iframeDoc) {
+                    // 允許滑鼠事件穿透到父容器
+                    iframeDoc.body.style.pointerEvents = 'auto';
+                    
+                    // 監聽 iframe 內的滑鼠移動
+                    iframeDoc.addEventListener('mousemove', function(e) {
+                        // 創建一個對應的事件並傳遞到父容器
+                        const parentEvent = new MouseEvent('mousemove', {
+                            clientX: e.clientX + iframe.getBoundingClientRect().left,
+                            clientY: e.clientY + iframe.getBoundingClientRect().top,
+                            bubbles: true
+                        });
+                        contentContainer.dispatchEvent(parentEvent);
+                    });
+                }
+            } catch (e) {
+                console.log('無法設置 iframe 內事件:', e);
             }
         }
 
@@ -1342,55 +1777,37 @@
 
         // 設置內容行追蹤（完全重寫）
         function setupContentLineTracking(panel) {
-            //console.log(`開始設置 ${panel} 面板的行追蹤`);
-            
-            // 方法1：直接在每個內容行上設置事件
             const contentLines = document.querySelectorAll(`#${panel}ContentArea .content-line`);
-            //console.log(`找到 ${contentLines.length} 個內容行`);
             
             contentLines.forEach((line, index) => {
-                // 如果沒有 data-line 屬性，設置它
                 if (!line.getAttribute('data-line')) {
                     line.setAttribute('data-line', index + 1);
                 }
                 
                 const lineNum = parseInt(line.getAttribute('data-line'));
                 
-                // 滑鼠移動到該行時
+                // 滑鼠移動時更新焦點
                 line.addEventListener('mousemove', function(e) {
                     e.stopPropagation();
-                    if (window.currentFocusedLine !== lineNum || window.currentFocusedPanel !== panel) {
+                    // 只在滑鼠真正移動時更新，避免被其他操作干擾
+                    if (e.movementX !== 0 || e.movementY !== 0) {
                         window.currentFocusedLine = lineNum;
                         window.currentFocusedPanel = panel;
-                        //console.log(`滑鼠在: ${panel} 面板，第 ${lineNum} 行`);
                         highlightCurrentLineNumber(panel, lineNum);
                     }
                 });
                 
-                // 滑鼠進入該行時
                 line.addEventListener('mouseenter', function(e) {
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
-                    //console.log(`進入: ${panel} 面板，第 ${lineNum} 行`);
                     highlightCurrentLineNumber(panel, lineNum);
-                });
-                
-                // 點擊該行時
-                line.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    window.currentFocusedLine = lineNum;
-                    window.currentFocusedPanel = panel;
-                    //console.log(`點擊: ${panel} 面板，第 ${lineNum} 行`);
                 });
             });
             
-            // 方法2：也在行號上設置事件
+            // 行號的滑鼠事件
             const lineNumbers = document.querySelectorAll(`#${panel}LineNumbers .line-number`);
-            //console.log(`找到 ${lineNumbers.length} 個行號`);
-            
             lineNumbers.forEach((lineNumEl, index) => {
-                // 如果沒有屬性，設置它們
                 if (!lineNumEl.getAttribute('data-line')) {
                     lineNumEl.setAttribute('data-line', index + 1);
                 }
@@ -1400,40 +1817,40 @@
                 
                 const lineNum = parseInt(lineNumEl.getAttribute('data-line'));
                 
-                // 滑鼠在行號上
                 lineNumEl.addEventListener('mouseenter', function(e) {
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
-                    //console.log(`行號: ${panel} 面板，第 ${lineNum} 行`);
                     highlightCurrentLineNumber(panel, lineNum);
                 });
-                
-                // 點擊行號切換書籤
-                lineNumEl.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    toggleBookmark(this);
-                });
             });
-            
-            // 設置容器的焦點
-            const container = document.getElementById(`${panel}ContentContainer`);
-            if (container) {
-                container.addEventListener('mouseenter', function() {
-                    window.currentFocusedPanel = panel;
-                    //console.log(`進入 ${panel} 容器`);
-                });
-            }
-        }          
+        }         
 
         // 設置內容右鍵選單
         function setupContentContextMenu(panel) {
             const contentArea = document.getElementById(`${panel}ContentArea`);
             if (contentArea) {
-                contextMenuManager.setupForElement(contentArea);
+                contentArea.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    
+                    // 設置當前面板
+                    contextMenuManager.currentPanel = panel;
+                    highlightManager.currentPanel = panel;
+                    window.currentFocusedPanel = panel;
+                    
+                    // 獲取選擇
+                    const selection = window.getSelection();
+                    highlightManager.selectedText = selection.toString();
+                    contextMenuManager.currentSelection = selection;
+                    
+                    if (selection.rangeCount > 0) {
+                        highlightManager.selectedRange = selection.getRangeAt(0);
+                    }
+                    
+                    contextMenuManager.show(e.clientX, e.clientY);
+                });
             }
-        }        
+        }       
 
         // 為表格佈局設置右鍵選單
         function setupContextMenuForTable(panel) {
@@ -1933,54 +2350,53 @@
                 if (e.key === 'F2') {
                     e.preventDefault();
                     
-                    // 使用當前焦點面板和行號
                     const panel = window.currentFocusedPanel || 'left';
                     const line = window.currentFocusedLine || 1;
                     
                     console.log(`F2 按下: Panel=${panel}, Line=${line}`);
                     
-                    // 嘗試多種選擇器找到行號元素
+                    // 檢查面板是否可見
+                    const panelEl = document.getElementById(`${panel}Panel`);
+                    if (!panelEl || panelEl.classList.contains('hidden')) {
+                        console.log('F2: 面板隱藏中');
+                        return;
+                    }
+                    
+                    // 查找行號元素 - 使用更寬鬆的選擇器
                     let lineElement = null;
                     
-                    // 方法1：新結構 - 分離的行號區域
-                    lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
-                    if (lineElement) {
-                        console.log('找到元素（新結構）');
-                    }
+                    // 先嘗試精確匹配
+                    lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"][data-panel="${panel}"]`);
                     
-                    // 方法2：舊結構 - 表格式
+                    // 如果找不到，使用更寬鬆的選擇器
                     if (!lineElement) {
-                        lineElement = document.querySelector(`#${panel}ContentWrapper .line-number[data-line="${line}"]`);
-                        if (lineElement) {
-                            console.log('找到元素（舊結構）');
-                        }
-                    }
-                    
-                    // 方法3：直接搜尋所有行號
-                    if (!lineElement) {
-                        const allLineNumbers = document.querySelectorAll(`.line-number[data-line="${line}"][data-panel="${panel}"]`);
-                        if (allLineNumbers.length > 0) {
-                            lineElement = allLineNumbers[0];
-                            console.log('找到元素（全域搜尋）');
+                        const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+                        if (lineNumbers) {
+                            // 遍歷所有行號元素
+                            const allLineNumbers = lineNumbers.querySelectorAll('.line-number');
+                            for (let el of allLineNumbers) {
+                                if (el.getAttribute('data-line') === String(line)) {
+                                    lineElement = el;
+                                    break;
+                                }
+                            }
                         }
                     }
                     
                     if (lineElement) {
+                        // 確保元素有正確的 data-panel 屬性
+                        if (!lineElement.getAttribute('data-panel')) {
+                            lineElement.setAttribute('data-panel', panel);
+                        }
                         toggleBookmark(lineElement);
                         updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行切換書籤`);
                     } else {
                         console.error(`F2: 找不到行號元素`, {
                             panel: panel,
                             line: line,
-                            嘗試的選擇器: [
-                                `#${panel}LineNumbers .line-number[data-line="${line}"]`,
-                                `#${panel}ContentWrapper .line-number[data-line="${line}"]`,
-                                `.line-number[data-line="${line}"][data-panel="${panel}"]`
-                            ]
+                            lineNumbersExists: !!document.getElementById(`${panel}LineNumbers`),
+                            totalLines: document.querySelectorAll(`#${panel}LineNumbers .line-number`).length
                         });
-                        
-                        // 列出所有找到的行號元素以便調試
-                        console.log('所有行號元素：', document.querySelectorAll('.line-number'));
                     }
                 }
 
@@ -2032,25 +2448,24 @@
     <script>
         // 設置行號處理器
         function setupLineNumberHandlers(panel) {
-            const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+            const lineNumbersContainer = document.getElementById(`${panel}LineNumbersContainer`);
             
-            if (!lineNumbers) {
-                console.log(`找不到 ${panel}LineNumbers`);
+            if (!lineNumbersContainer) {
+                console.log(`找不到 ${panel}LineNumbersContainer`);
                 return;
             }
             
-            // 使用事件委託而不是為每個元素綁定事件
-            lineNumbers.addEventListener('click', function(e) {
+            // 使用事件委託處理動態生成的行號
+            lineNumbersContainer.addEventListener('click', function(e) {
                 const lineNum = e.target.closest('.line-number');
                 if (lineNum) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log(`點擊行號: ${panel} 面板，第 ${lineNum.getAttribute('data-line')} 行`);
                     toggleBookmark(lineNum);
                 }
             });
             
-            lineNumbers.addEventListener('mouseenter', function(e) {
+            lineNumbersContainer.addEventListener('mouseenter', function(e) {
                 const lineNum = e.target.closest('.line-number');
                 if (lineNum) {
                     const line = parseInt(lineNum.getAttribute('data-line'));
@@ -2058,16 +2473,7 @@
                     window.currentFocusedPanel = panel;
                     highlightCurrentLineNumber(panel, line);
                 }
-            }, true); // 使用捕獲階段
-            
-            // 確保所有行號都有正確的屬性
-            const lineNumberEls = lineNumbers.querySelectorAll('.line-number');
-            lineNumberEls.forEach((lineNum, index) => {
-                if (!lineNum.getAttribute('data-line')) {
-                    lineNum.setAttribute('data-line', index + 1);
-                }
-                lineNum.setAttribute('data-panel', panel);
-            });
+            }, true);
         }
 
         // 確保行號與內容同步捲動
@@ -2098,7 +2504,7 @@
             }
             
             const lineNumber = parseInt(lineElement.getAttribute('data-line'));
-            const panel = lineElement.getAttribute('data-panel');
+            const panel = lineElement.getAttribute('data-panel') || window.currentFocusedPanel;
             
             if (!lineNumber || !panel) {
                 console.error('toggleBookmark: 缺少必要屬性', { lineNumber, panel });
@@ -2117,8 +2523,12 @@
                 updateStatus(`已新增書籤: ${panel === 'left' ? '左側' : '右側'}面板第 ${lineNumber} 行`);
             }
             
-            // 更新書籤陣列
-            updateBookmarkArray();
+            // 重置對應面板的索引
+            if (panel === 'left') {
+                leftBookmarkIndex = -1;
+            } else {
+                rightBookmarkIndex = -1;
+            }
         }
 
         // 更新書籤陣列
@@ -2287,6 +2697,50 @@
                     const style = iframeDoc.createElement('style');
                     style.id = 'highlight-styles';
                     style.textContent = `
+                        /* 基本樣式 */
+                        body {
+                            line-height: 1.6em;
+                            margin: 0;
+                            padding: 20px;
+                            font-size: 13px;
+                            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                            overflow-y: auto;
+                            overflow-x: auto;
+                        }
+                        
+                        /* 統一捲軸樣式 - 與右側相同 */
+                        ::-webkit-scrollbar {
+                            height: 8px;
+                            width: 8px;
+                        }
+                        
+                        ::-webkit-scrollbar-track {
+                            background: #1a1a1a;
+                        }
+                        
+                        ::-webkit-scrollbar-thumb {
+                            background: #444;
+                            border-radius: 4px;
+                        }
+                        
+                        ::-webkit-scrollbar-thumb:hover {
+                            background: #555;
+                        }
+                        
+                        /* Firefox 捲軸 */
+                        * {
+                            scrollbar-width: thin;
+                            scrollbar-color: #444 #1a1a1a;
+                        }
+                        
+                        /* 其他樣式 */
+                        pre, .report-line {
+                            line-height: 1.6em;
+                            font-size: 13px;
+                            margin: 0;
+                        }
+                        
+                        /* 高亮樣式 */
                         .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
                         .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
                         .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
@@ -2378,62 +2832,104 @@
 
         // 在書籤間導航
         function navigateBookmarks() {
-            if (bookmarkArray.length === 0) {
+            // 取得當前焦點面板
+            const currentPanel = window.currentFocusedPanel || 'left';
+            
+            if (bookmarks.size === 0) {
                 updateStatus('沒有書籤');
                 return;
             }
             
-            currentBookmarkIndex = (currentBookmarkIndex + 1) % bookmarkArray.length;
-            const [panel, line] = bookmarkArray[currentBookmarkIndex].split('-');
+            // 更新書籤陣列，但只包含當前面板的書籤
+            const panelBookmarks = Array.from(bookmarks).filter(key => key.startsWith(currentPanel + '-'));
             
-            // 嘗試新結構
-            let targetElement = document.querySelector(`#${panel}ContentArea .content-line[data-line="${line}"]`);
-            let lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
+            if (panelBookmarks.length === 0) {
+                updateStatus(`${currentPanel === 'left' ? '左側' : '右側'}面板沒有書籤`);
+                return;
+            }
             
-            // 如果新結構找不到，嘗試舊的表格結構
-            if (!targetElement) {
-                const row = document.querySelector(
-                    `#${panel}ContentWrapper .line-number[data-line="${line}"]`
-                )?.closest('.content-row');
-                if (row) {
-                    targetElement = row;
-                    lineElement = row.querySelector('.line-number');
+            // 排序書籤（按行號）
+            panelBookmarks.sort((a, b) => {
+                const lineA = parseInt(a.split('-')[1]);
+                const lineB = parseInt(b.split('-')[1]);
+                return lineA - lineB;
+            });
+            
+            // 獲取並更新當前面板的索引
+            let currentIndex = currentPanel === 'left' ? leftBookmarkIndex : rightBookmarkIndex;
+            currentIndex++;
+            if (currentIndex >= panelBookmarks.length) {
+                currentIndex = 0;
+            }
+            
+            // 更新對應面板的索引
+            if (currentPanel === 'left') {
+                leftBookmarkIndex = currentIndex;
+            } else {
+                rightBookmarkIndex = currentIndex;
+            }
+            
+            const bookmarkKey = panelBookmarks[currentIndex];
+            const [panel, line] = bookmarkKey.split('-');
+            
+            console.log(`F3 導航到書籤: ${bookmarkKey}, 索引: ${currentIndex + 1}/${panelBookmarks.length}`);
+            
+            // 查找行號元素
+            const lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
+            if (!lineElement) {
+                console.error('F3: 找不到行號元素', { panel, line });
+                return;
+            }
+            
+            // 檢查面板類型
+            const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+            
+            if (panelType === 'original') {
+                // 原始檔案 - 查找內容行並捲動
+                const targetElement = document.querySelector(`#${panel}ContentArea .content-line[data-line="${line}"]`);
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            } else {
+                // 分析報告 - 捲動 iframe
+                const iframe = document.querySelector(`#${panel}Content iframe`);
+                if (iframe && iframe.contentWindow) {
+                    const lineHeight = 20.8; // 1.6em * 13px
+                    const scrollTop = (parseInt(line) - 1) * lineHeight;
+                    
+                    iframe.contentWindow.scrollTo({
+                        top: scrollTop,
+                        behavior: 'smooth'
+                    });
                 }
             }
             
-            if (targetElement) {
-                // 確保面板是可見的
-                const panelEl = document.getElementById(`${panel}Panel`);
-                if (panelEl && panelEl.classList.contains('hidden')) {
-                    updateStatus(`書籤位於隱藏的${panel === 'left' ? '左側' : '右側'}面板`);
-                    return;
-                }
-                
-                // 滾動到書籤位置
-                targetElement.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                });
-                
-                // 閃爍效果
-                if (lineElement) {
-                    lineElement.style.transition = 'background-color 0.3s';
-                    const originalBg = lineElement.style.backgroundColor;
-                    lineElement.style.backgroundColor = '#4ec9b0';
-                    setTimeout(() => {
-                        lineElement.style.backgroundColor = originalBg;
-                    }, 500);
-                }
-                
-                // 更新當前焦點
-                currentFocusedPanel = panel;
-                currentFocusedLine = parseInt(line);
-                
-                updateStatus(`跳轉到書籤: ${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行`);
+            // 閃爍效果
+            if (lineElement) {
+                lineElement.style.transition = 'background-color 0.3s';
+                const originalBg = lineElement.style.backgroundColor;
+                lineElement.style.backgroundColor = '#4ec9b0';
+                setTimeout(() => {
+                    lineElement.style.backgroundColor = originalBg;
+                }, 500);
             }
-        }
+            
+            updateStatus(`${panel === 'left' ? '左側' : '右側'}面板書籤 ${currentIndex + 1}/${panelBookmarks.length}: 第 ${line} 行`);
+        }        
 
-        // 監聽面板的點擊事件
+        // 監聽面板的焦點切換
+        document.getElementById('leftPanel').addEventListener('mouseenter', function() {
+            window.currentFocusedPanel = 'left';
+        });
+
+        document.getElementById('rightPanel').addEventListener('mouseenter', function() {
+            window.currentFocusedPanel = 'right';
+        });
+
+        // 點擊面板時也更新焦點
         document.getElementById('leftPanel').addEventListener('click', function() {
             window.currentFocusedPanel = 'left';
         });
@@ -2851,14 +3347,22 @@
                 let textToCopy = '';
                 let selection = null;
                 
-                // 檢查是否有 iframe 的選擇
-                if (this.currentIframe && this.currentSelection) {
-                    selection = this.currentSelection;
+                // 優先使用當前的選擇
+                if (this.currentPanel) {
+                    const panelType = (this.currentPanel === 'left') ? currentLeftType : currentRightType;
+                    
+                    if (panelType === 'analysis' && this.currentIframe) {
+                        // 分析報告的選擇
+                        selection = this.currentIframe.contentWindow.getSelection();
+                    } else {
+                        // 原始檔案的選擇
+                        selection = window.getSelection();
+                    }
                 } else {
                     selection = window.getSelection();
                 }
                 
-                // 優先複製選中的文字
+                // 獲取選中的文字
                 if (selection && selection.toString().trim()) {
                     textToCopy = selection.toString();
                 } else {
@@ -2867,34 +3371,22 @@
                     const panelType = (panel === 'left') ? currentLeftType : currentRightType;
                     
                     if (panelType === 'analysis') {
-                        // 從 iframe 中提取純文字（只提取報告內容）
                         const iframe = document.querySelector(`#${panel}Content iframe`);
                         if (iframe && iframe.contentDocument) {
                             try {
                                 const iframeDoc = iframe.contentDocument;
-                                // 嘗試找到報告的主要內容區域
-                                const reportContent = iframeDoc.querySelector('.report-content') || 
-                                                    iframeDoc.querySelector('.analysis-content') ||
-                                                    iframeDoc.querySelector('pre') ||
-                                                    iframeDoc.body;
-                                
+                                const reportContent = iframeDoc.body;
                                 if (reportContent) {
                                     textToCopy = reportContent.innerText || reportContent.textContent || '';
                                 }
                             } catch (e) {
                                 console.log('無法存取 iframe 內容:', e);
-                                textToCopy = this.extractReportText(analysisContent);
                             }
-                        } else {
-                            textToCopy = this.extractReportText(analysisContent);
                         }
                     } else {
-                        // 原始內容 - 只複製內容區域的文字
                         const contentArea = document.querySelector(`#${panel}ContentArea`);
                         if (contentArea) {
                             textToCopy = contentArea.innerText || contentArea.textContent || '';
-                        } else {
-                            textToCopy = originalContent;
                         }
                     }
                 }
@@ -2912,6 +3404,7 @@
                     }
                 }
                 
+                // 清理
                 this.currentIframe = null;
                 this.currentSelection = null;
                 this.hide();
@@ -3119,6 +3612,6 @@
                 updateStatus('複製失敗');
             }
         }
-    </script>    
+    </script>  
 </body>
 </html>
