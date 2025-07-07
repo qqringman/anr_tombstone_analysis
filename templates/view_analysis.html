@@ -1374,91 +1374,7 @@
                         try {
                             const iframeDoc = iframe.contentDocument;
                             const iframeWindow = iframe.contentWindow;
-                            
                             if (iframeDoc && iframeWindow) {
-                                // 注入樣式
-                                const style = iframeDoc.createElement('style');
-                                style.textContent = `
-                                    html, body {
-                                        margin: 0;
-                                        padding: 0;
-                                        height: 100%;
-                                        overflow: auto;
-                                    }
-                                    
-                                    body {
-                                        line-height: 1.6em;
-                                        font-size: 13px;
-                                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                        word-wrap: break-word;
-                                        word-break: break-all;
-                                        overflow-wrap: break-word;
-                                        max-width: 100%;
-                                        background: transparent;
-                                    }
-                                    
-                                    /* 移除可能的外層容器邊距 */
-                                    .report-content,
-                                    .left-panel,
-                                    .analysis-content {
-                                        margin: 0;
-                                        padding: 20px;
-                                        box-sizing: border-box;
-                                    }
-                                    
-                                    * {
-                                        word-wrap: break-word;
-                                        word-break: break-all;
-                                        overflow-wrap: break-word;
-                                        max-width: 100%;
-                                    }
-                                    
-                                    pre, code {
-                                        white-space: pre-wrap;
-                                        word-wrap: break-word;
-                                        word-break: break-all;
-                                        overflow-wrap: break-word;
-                                    }
-                                    
-                                    ::-webkit-scrollbar {
-                                        height: 8px;
-                                        width: 8px;
-                                    }
-                                    
-                                    ::-webkit-scrollbar-track {
-                                        background: #1a1a1a;
-                                    }
-                                    
-                                    ::-webkit-scrollbar-thumb {
-                                        background: #444;
-                                        border-radius: 4px;
-                                    }
-                                    
-                                    ::-webkit-scrollbar-thumb:hover {
-                                        background: #555;
-                                    }
-                                    
-                                    * {
-                                        scrollbar-width: thin;
-                                        scrollbar-color: #444 #1a1a1a;
-                                    }
-                                    
-                                    .report-line {
-                                        line-height: 1.6em;
-                                        font-size: 13px;
-                                        margin: 0;
-                                        word-wrap: break-word;
-                                        word-break: break-all;
-                                    }
-                                    
-                                    .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
-                                    .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
-                                    .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
-                                `;
-                                iframeDoc.head.appendChild(style);
-                                
                                 // 根據面板決定行號生成方式
                                 if (panel === 'left' && currentLeftType === 'analysis') {
                                     // 左側分析報告 - 使用動態行號對齊
@@ -1602,16 +1518,11 @@
                                         const checkInterval = setInterval(() => {
                                             const leftPanel = iframeDoc.querySelector('.left-panel');
                                             
-                                            if (leftPanel && leftPanel.scrollHeight > 100) {
+                                            if (leftPanel && leftPanel.scrollHeight > 100) {                                              
                                                 clearInterval(checkInterval);
                                                 callback();
                                             }
                                         }, 100);
-                                        
-                                        setTimeout(() => {
-                                            clearInterval(checkInterval);
-                                            callback();
-                                        }, 3000);
                                     };
                                     
                                     // 等待內容載入完成後測量行高
@@ -1648,7 +1559,7 @@
                                                 lineNumbersContainer.style.left = '0';
                                                 
                                                 // 初始同步
-                                                syncScroll();
+                                                //syncScroll();
                                             }
                                         };
                                         
