@@ -967,7 +967,48 @@
         .panel-content {
             overflow: hidden; /* 面板本身不顯示捲軸 */
         }        
-    </style>    
+    </style>
+    <style>
+        /* 左側分析報告專用的行號樣式 */
+        #leftPanel .line-numbers-container {
+            position: relative;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            overflow: hidden;
+        }
+
+        #leftPanel .analysis-line-numbers {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding-right: 10px;
+        }
+
+        #leftPanel .analysis-line-number {
+            display: block;
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            color: #666;
+            user-select: none;
+            cursor: pointer;
+            padding-left: 10px;
+            box-sizing: border-box;
+        }
+
+        #leftPanel .analysis-line-number:hover {
+            background-color: var(--line-hover-color);
+        }
+
+        #leftPanel .analysis-line-number.bookmarked::before {
+            content: '●';
+            position: absolute;
+            left: 2px;
+            color: #4ec9b0;
+            font-size: 10px;
+        }        
+    </style>   
 </head>
 <body>
     <!-- 頂部工具列 -->
@@ -1283,7 +1324,7 @@
                                     html {
                                         height: 100%;
                                         overflow-y: auto;
-                                        overflow-x: hidden; /* 隱藏橫向捲軸 */
+                                        overflow-x: hidden;
                                     }
                                     
                                     body {
@@ -1293,13 +1334,12 @@
                                         font-size: 13px;
                                         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                                         min-height: calc(100% - 40px);
-                                        word-wrap: break-word; /* 強制長單詞換行 */
-                                        word-break: break-all; /* 允許在任何位置換行 */
-                                        overflow-wrap: break-word; /* 相容性 */
-                                        max-width: 100%; /* 限制最大寬度 */
+                                        word-wrap: break-word;
+                                        word-break: break-all;
+                                        overflow-wrap: break-word;
+                                        max-width: 100%;
                                     }
                                     
-                                    /* 確保所有元素都遵守換行規則 */
                                     * {
                                         word-wrap: break-word;
                                         word-break: break-all;
@@ -1307,15 +1347,13 @@
                                         max-width: 100%;
                                     }
                                     
-                                    /* 特別處理 pre 和 code 元素 */
                                     pre, code {
-                                        white-space: pre-wrap; /* 保留空白但允許換行 */
+                                        white-space: pre-wrap;
                                         word-wrap: break-word;
                                         word-break: break-all;
                                         overflow-wrap: break-word;
                                     }
                                     
-                                    /* 統一捲軸樣式 */
                                     ::-webkit-scrollbar {
                                         height: 8px;
                                         width: 8px;
@@ -1334,13 +1372,11 @@
                                         background: #555;
                                     }
                                     
-                                    /* Firefox 捲軸 */
                                     * {
                                         scrollbar-width: thin;
                                         scrollbar-color: #444 #1a1a1a;
                                     }
                                     
-                                    /* 報告行樣式 */
                                     .report-line {
                                         line-height: 1.6em;
                                         font-size: 13px;
@@ -1349,7 +1385,6 @@
                                         word-break: break-all;
                                     }
                                     
-                                    /* 高亮樣式 */
                                     .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
@@ -1358,188 +1393,358 @@
                                 `;
                                 iframeDoc.head.appendChild(style);
                                 
-                                // 計算行數的函數
-                                const calculateLines = function() {
-                                    // 等待 left-panel 元素出現
-                                    const leftPanel = iframeDoc.querySelector('.left-panel');
-                                    let contentHeight = 0;
+                                // 根據面板決定行號生成方式
+                                if (panel === 'left' && currentLeftType === 'analysis') {
+                                    // 左側分析報告 - 使用動態行號對齊
                                     
-                                    if (leftPanel) {
-                                        // 使用 left-panel 的 scrollHeight
-                                        contentHeight = leftPanel.scrollHeight;
-                                        console.log('使用 left-panel scrollHeight:', contentHeight);
-                                    } else {
-                                        // 備用：使用 body 的 scrollHeight
-                                        const body = iframeDoc.body;
-                                        contentHeight = body.scrollHeight;
-                                        console.log('使用 body scrollHeight:', contentHeight);
-                                    }
-                                    
-                                    const lineHeight = 20.8;
-                                    const lineCount = Math.ceil(contentHeight / lineHeight);
-                                    console.log(`計算出 ${lineCount} 行`);
-                                    
-                                    return lineCount;
-                                };
-                                
-                                // 生成行號的函數
-                                const generateLineNumbers = function(count) {
-                                    lineNumbersContent.innerHTML = '';
-                                    for (let i = 1; i <= count; i++) {
-                                        const lineNumberEl = document.createElement('span');
-                                        lineNumberEl.className = 'line-number';
-                                        lineNumberEl.setAttribute('data-line', String(i));
-                                        lineNumberEl.setAttribute('data-panel', panel);
-                                        lineNumberEl.textContent = i;
-                                        
-                                        lineNumberEl.addEventListener('click', function(e) {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            toggleBookmark(this);
-                                        });
-                                        
-                                        lineNumberEl.addEventListener('mouseenter', function() {
-                                            window.currentFocusedLine = i;
-                                            window.currentFocusedPanel = panel;
-                                            highlightCurrentLineNumber(panel, i);
-                                        });
-                                        
-                                        lineNumbersContent.appendChild(lineNumberEl);
-                                    }
-                                    
-                                    // 設置行號容器的 padding，確保與內容對齊
-                                    lineNumbersContent.style.paddingTop = '20px'; // 與 body padding 相同
-                                    lineNumbersContent.style.paddingBottom = '20px';
-                                };
-                                
-                                // 延遲執行以確保內容載入完成
-                                const waitForContent = function(callback) {
-                                    const checkInterval = setInterval(() => {
+                                    // 計算實際行高的函數
+                                    const measureActualLines = function() {
                                         const leftPanel = iframeDoc.querySelector('.left-panel');
-                                        
-                                        // 檢查 left-panel 是否存在且有內容
-                                        if (leftPanel && leftPanel.scrollHeight > 100) {
-                                            clearInterval(checkInterval);
-                                            callback();
+                                        if (!leftPanel) {
+                                            console.log('找不到 left-panel');
+                                            return [];
                                         }
-                                    }, 100);
-                                    
-                                    // 最多等待 3 秒
-                                    setTimeout(() => {
-                                        clearInterval(checkInterval);
-                                        // 即使沒找到 left-panel 也執行
-                                        callback();
-                                    }, 3000);
-                                };
-                                
-                                // 等待內容載入完成後再計算行數
-                                waitForContent(() => {
-                                    const lineCount = calculateLines();
-                                    generateLineNumbers(lineCount);
-                                    
-                                    // 保存行數
-                                    window[`${panel}LineCount`] = lineCount;
-                                    
-                                    // 捲動同步函數
-                                    const bindScrollEvents = function() {
-                                        // 查找實際的滾動容器
-                                        const leftPanel = iframeDoc.querySelector('.left-panel');
-                                        const container = document.getElementById(`${panel}LineNumbersContainer`);
                                         
-                                        if (leftPanel && container) {
-                                            console.log('找到 left-panel，設置滾動同步');
-                                            
-                                            // 設置容器可以滾動
-                                            container.style.overflowY = 'auto';
-                                            container.style.overflowX = 'hidden';
-                                            container.style.height = '100%';
-                                            
-                                            // 同步滾動函數
-                                            const syncScroll = function() {
-                                                container.scrollTop = leftPanel.scrollTop;
-                                            };
-                                            
-                                            // 綁定滾動事件
-                                            leftPanel.addEventListener('scroll', syncScroll);
-                                            
-                                            // 初始同步
-                                            syncScroll();
-                                        } else {
-                                            console.log('未找到滾動元素，500ms 後重試');
-                                            setTimeout(bindScrollEvents, 500);
-                                        }
-                                    };
-                                    
-                                    // 綁定滾動事件
-                                    bindScrollEvents();
-                                    
-                                    // 滑鼠追蹤
-                                    const trackMouse = function(e) {
-                                        const leftPanel = iframeDoc.querySelector('.left-panel');
-                                        const scrollTop = leftPanel ? leftPanel.scrollTop : 0;
-                                        const y = e.clientY + scrollTop - 20;
-                                        const lineHeight = 20.8;
-                                        const lineNum = Math.floor(y / lineHeight) + 1;
+                                        // 獲取所有報告行
+                                        const reportLines = leftPanel.querySelectorAll('.report-line, p, div');
+                                        const lineData = [];
                                         
-                                        if (lineNum > 0 && lineNum <= lineCount) {
-                                            window.currentFocusedLine = lineNum;
-                                            window.currentFocusedPanel = panel;
-                                            highlightCurrentLineNumber(panel, lineNum);
-                                        }
-                                    };
-                                    
-                                    iframeDoc.addEventListener('mousemove', trackMouse);
-                                    
-                                    // 監聽窗口大小變化
-                                    let resizeTimer;
-                                    iframeWindow.addEventListener('resize', function() {
-                                        clearTimeout(resizeTimer);
-                                        resizeTimer = setTimeout(() => {
-                                            const newLineCount = calculateLines();
-                                            if (newLineCount !== window[`${panel}LineCount`]) {
-                                                window[`${panel}LineCount`] = newLineCount;
-                                                generateLineNumbers(newLineCount);
-                                                
-                                                // 恢復書籤
-                                                bookmarks.forEach(bookmarkKey => {
-                                                    const [bPanel, bLine] = bookmarkKey.split('-');
-                                                    if (bPanel === panel) {
-                                                        const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
-                                                        if (lineEl) {
-                                                            lineEl.classList.add('bookmarked');
-                                                        }
-                                                    }
+                                        reportLines.forEach((line, index) => {
+                                            const rect = line.getBoundingClientRect();
+                                            if (rect.height > 0) {
+                                                lineData.push({
+                                                    index: index + 1,
+                                                    top: rect.top + iframeWindow.pageYOffset,
+                                                    height: rect.height
                                                 });
                                             }
-                                        }, 300);
-                                    });
+                                        });
+                                        
+                                        return lineData;
+                                    };
                                     
-                                    // 設置其他事件
-                                    setupIframeContextMenu(iframe, panel);
+                                    // 生成動態行號的函數
+                                    const generateDynamicLineNumbers = function(lineData) {
+                                        // 清空容器
+                                        lineNumbersContent.innerHTML = '';
+                                        lineNumbersContent.className = 'analysis-line-numbers';
+                                        
+                                        lineData.forEach(data => {
+                                            const lineNumberEl = document.createElement('div');
+                                            lineNumberEl.className = 'analysis-line-number';
+                                            lineNumberEl.setAttribute('data-line', String(data.index));
+                                            lineNumberEl.setAttribute('data-panel', panel);
+                                            lineNumberEl.textContent = data.index;
+                                            lineNumberEl.style.position = 'absolute';
+                                            lineNumberEl.style.top = data.top + 'px';
+                                            lineNumberEl.style.height = data.height + 'px';
+                                            lineNumberEl.style.lineHeight = data.height + 'px';
+                                            lineNumberEl.style.width = '100%';
+                                            
+                                            // 添加事件處理
+                                            lineNumberEl.addEventListener('click', function(e) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleBookmark(this);
+                                            });
+                                            
+                                            lineNumberEl.addEventListener('mouseenter', function() {
+                                                window.currentFocusedLine = data.index;
+                                                window.currentFocusedPanel = panel;
+                                                highlightCurrentLineNumber(panel, data.index);
+                                            });
+                                            
+                                            lineNumbersContent.appendChild(lineNumberEl);
+                                        });
+                                        
+                                        return lineData.length;
+                                    };
                                     
-                                    // 恢復書籤狀態
-                                    bookmarks.forEach(bookmarkKey => {
-                                        const [bPanel, bLine] = bookmarkKey.split('-');
-                                        if (bPanel === panel) {
-                                            const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
-                                            if (lineEl) {
-                                                lineEl.classList.add('bookmarked');
+                                    // 等待內容載入的函數
+                                    const waitForContent = function(callback) {
+                                        const checkInterval = setInterval(() => {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            
+                                            if (leftPanel && leftPanel.scrollHeight > 100) {
+                                                clearInterval(checkInterval);
+                                                callback();
                                             }
+                                        }, 100);
+                                        
+                                        setTimeout(() => {
+                                            clearInterval(checkInterval);
+                                            callback();
+                                        }, 3000);
+                                    };
+                                    
+                                    // 等待內容載入完成後測量行高
+                                    waitForContent(() => {
+                                        const lineData = measureActualLines();
+                                        const lineCount = generateDynamicLineNumbers(lineData);
+                                        
+                                        // 保存行數和行數據
+                                        window[`${panel}LineCount`] = lineCount;
+                                        window[`${panel}LineData`] = lineData;
+                                        
+                                        // 修改捲動同步邏輯
+                                        const bindScrollEvents = function() {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            const container = document.getElementById(`${panel}LineNumbersContainer`);
+                                            
+                                            if (leftPanel && container) {
+                                                // 當 iframe 內容捲動時，更新行號位置
+                                                const syncScroll = function() {
+                                                    const scrollTop = leftPanel.scrollTop;
+                                                    lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
+                                                };
+                                                
+                                                leftPanel.addEventListener('scroll', syncScroll);
+                                                
+                                                // 當視窗捲動時也同步
+                                                iframeWindow.addEventListener('scroll', function() {
+                                                    const scrollTop = iframeWindow.pageYOffset || 
+                                                                iframeDoc.documentElement.scrollTop || 
+                                                                iframeDoc.body.scrollTop || 0;
+                                                    lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
+                                                });
+                                            }
+                                        };
+                                        
+                                        bindScrollEvents();
+                                        
+                                        // 監聽 iframe 內容變化，重新計算行高
+                                        const observer = new MutationObserver(function() {
+                                            const newLineData = measureActualLines();
+                                            if (newLineData.length !== lineData.length) {
+                                                generateDynamicLineNumbers(newLineData);
+                                                window[`${panel}LineData`] = newLineData;
+                                            }
+                                        });
+                                        
+                                        const leftPanel = iframeDoc.querySelector('.left-panel');
+                                        if (leftPanel) {
+                                            observer.observe(leftPanel, {
+                                                childList: true,
+                                                subtree: true,
+                                                characterData: true
+                                            });
                                         }
+                                        
+                                        // 滑鼠追蹤
+                                        const trackMouse = function(e) {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            const scrollTop = leftPanel ? leftPanel.scrollTop : 0;
+                                            const y = e.clientY + scrollTop - 20;
+                                            
+                                            // 根據滑鼠位置找到對應的行
+                                            let targetLine = null;
+                                            for (let i = 0; i < lineData.length; i++) {
+                                                const data = lineData[i];
+                                                if (y >= data.top && y < data.top + data.height) {
+                                                    targetLine = data.index;
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            if (targetLine) {
+                                                window.currentFocusedLine = targetLine;
+                                                window.currentFocusedPanel = panel;
+                                                highlightCurrentLineNumber(panel, targetLine);
+                                            }
+                                        };
+                                        
+                                        iframeDoc.addEventListener('mousemove', trackMouse);
+                                        
+                                        // 設置其他事件
+                                        setupIframeContextMenu(iframe, panel);
+                                        
+                                        // 恢復書籤狀態
+                                        bookmarks.forEach(bookmarkKey => {
+                                            const [bPanel, bLine] = bookmarkKey.split('-');
+                                            if (bPanel === panel) {
+                                                const lineEl = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${bLine}"]`);
+                                                if (lineEl) {
+                                                    lineEl.classList.add('bookmarked');
+                                                }
+                                            }
+                                        });
+                                        
+                                        updateStatus(`載入完成 - 共 ${lineCount} 行`);
                                     });
                                     
-                                    updateStatus(`載入完成 - 共 ${lineCount} 行`);
-                                });
+                                } else {
+                                    // 右側或非分析報告 - 使用原有的固定行高方式
+                                    
+                                    // 計算行數的函數
+                                    const calculateLines = function() {
+                                        const leftPanel = iframeDoc.querySelector('.left-panel');
+                                        let contentHeight = 0;
+                                        
+                                        if (leftPanel) {
+                                            contentHeight = leftPanel.scrollHeight;
+                                            console.log('使用 left-panel scrollHeight:', contentHeight);
+                                        } else {
+                                            const body = iframeDoc.body;
+                                            contentHeight = body.scrollHeight;
+                                            console.log('使用 body scrollHeight:', contentHeight);
+                                        }
+                                        
+                                        const lineHeight = 20.8;
+                                        const lineCount = Math.ceil(contentHeight / lineHeight);
+                                        console.log(`計算出 ${lineCount} 行`);
+                                        
+                                        return lineCount;
+                                    };
+                                    
+                                    // 生成行號的函數
+                                    const generateLineNumbers = function(count) {
+                                        lineNumbersContent.innerHTML = '';
+                                        for (let i = 1; i <= count; i++) {
+                                            const lineNumberEl = document.createElement('span');
+                                            lineNumberEl.className = 'line-number';
+                                            lineNumberEl.setAttribute('data-line', String(i));
+                                            lineNumberEl.setAttribute('data-panel', panel);
+                                            lineNumberEl.textContent = i;
+                                            
+                                            lineNumberEl.addEventListener('click', function(e) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleBookmark(this);
+                                            });
+                                            
+                                            lineNumberEl.addEventListener('mouseenter', function() {
+                                                window.currentFocusedLine = i;
+                                                window.currentFocusedPanel = panel;
+                                                highlightCurrentLineNumber(panel, i);
+                                            });
+                                            
+                                            lineNumbersContent.appendChild(lineNumberEl);
+                                        }
+                                        
+                                        lineNumbersContent.style.paddingTop = '20px';
+                                        lineNumbersContent.style.paddingBottom = '20px';
+                                    };
+                                    
+                                    // 延遲執行以確保內容載入完成
+                                    const waitForContent = function(callback) {
+                                        const checkInterval = setInterval(() => {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            
+                                            if (leftPanel && leftPanel.scrollHeight > 100) {
+                                                clearInterval(checkInterval);
+                                                callback();
+                                            }
+                                        }, 100);
+                                        
+                                        setTimeout(() => {
+                                            clearInterval(checkInterval);
+                                            callback();
+                                        }, 3000);
+                                    };
+                                    
+                                    // 等待內容載入完成後再計算行數
+                                    waitForContent(() => {
+                                        const lineCount = calculateLines();
+                                        generateLineNumbers(lineCount);
+                                        
+                                        window[`${panel}LineCount`] = lineCount;
+                                        
+                                        // 捲動同步函數
+                                        const bindScrollEvents = function() {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            const container = document.getElementById(`${panel}LineNumbersContainer`);
+                                            
+                                            if (leftPanel && container) {
+                                                console.log('找到 left-panel，設置滾動同步');
+                                                
+                                                container.style.overflowY = 'auto';
+                                                container.style.overflowX = 'hidden';
+                                                container.style.height = '100%';
+                                                
+                                                const syncScroll = function() {
+                                                    container.scrollTop = leftPanel.scrollTop;
+                                                };
+                                                
+                                                leftPanel.addEventListener('scroll', syncScroll);
+                                                
+                                                syncScroll();
+                                            } else {
+                                                console.log('未找到滾動元素，500ms 後重試');
+                                                setTimeout(bindScrollEvents, 500);
+                                            }
+                                        };
+                                        
+                                        bindScrollEvents();
+                                        
+                                        // 滑鼠追蹤
+                                        const trackMouse = function(e) {
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            const scrollTop = leftPanel ? leftPanel.scrollTop : 0;
+                                            const y = e.clientY + scrollTop - 20;
+                                            const lineHeight = 20.8;
+                                            const lineNum = Math.floor(y / lineHeight) + 1;
+                                            
+                                            if (lineNum > 0 && lineNum <= lineCount) {
+                                                window.currentFocusedLine = lineNum;
+                                                window.currentFocusedPanel = panel;
+                                                highlightCurrentLineNumber(panel, lineNum);
+                                            }
+                                        };
+                                        
+                                        iframeDoc.addEventListener('mousemove', trackMouse);
+                                        
+                                        // 監聽窗口大小變化
+                                        let resizeTimer;
+                                        iframeWindow.addEventListener('resize', function() {
+                                            clearTimeout(resizeTimer);
+                                            resizeTimer = setTimeout(() => {
+                                                const newLineCount = calculateLines();
+                                                if (newLineCount !== window[`${panel}LineCount`]) {
+                                                    window[`${panel}LineCount`] = newLineCount;
+                                                    generateLineNumbers(newLineCount);
+                                                    
+                                                    // 恢復書籤
+                                                    bookmarks.forEach(bookmarkKey => {
+                                                        const [bPanel, bLine] = bookmarkKey.split('-');
+                                                        if (bPanel === panel) {
+                                                            const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
+                                                            if (lineEl) {
+                                                                lineEl.classList.add('bookmarked');
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            }, 300);
+                                        });
+                                        
+                                        // 設置其他事件
+                                        setupIframeContextMenu(iframe, panel);
+                                        
+                                        // 恢復書籤狀態
+                                        bookmarks.forEach(bookmarkKey => {
+                                            const [bPanel, bLine] = bookmarkKey.split('-');
+                                            if (bPanel === panel) {
+                                                const lineEl = lineNumbersContent.querySelector(`.line-number[data-line="${bLine}"]`);
+                                                if (lineEl) {
+                                                    lineEl.classList.add('bookmarked');
+                                                }
+                                            }
+                                        });
+                                        
+                                        updateStatus(`載入完成 - 共 ${lineCount} 行`);
+                                    });
+                                }
                             }
                         } catch (e) {
                             console.error('處理 iframe 時發生錯誤:', e);
                         }
-                    }, 1000); // 延遲從 300ms 改為 1000ms
+                    }, 1000);
                 };
                 
                 // 初始化焦點
                 window.currentFocusedPanel = panel;
                 window.currentFocusedLine = 1;
+                
             } else {
                 // 原始檔案處理 - 分離行號和內容
                 if (panel === 'left' && currentLeftType === 'original') {
@@ -1847,6 +2052,25 @@
 
         // 高亮當前行號
         function highlightCurrentLineNumber(panel, lineNumber) {
+            
+            if (panel === 'left' && currentLeftType === 'analysis') {
+                const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+                if (lineNumbers && lineNumbers.className === 'analysis-line-numbers') {
+                    // 處理動態行號
+                    lineNumbers.querySelectorAll('.analysis-line-number').forEach(el => {
+                        if (!el.classList.contains('bookmarked')) {
+                            el.style.backgroundColor = '';
+                        }
+                    });
+                    
+                    const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${lineNumber}"]`);
+                    if (lineElement && !lineElement.classList.contains('bookmarked')) {
+                        lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.1)';
+                    }
+                    return;
+                }
+            }
+                        
             // 嘗試新結構
             let lineNumbers = document.getElementById(`${panel}LineNumbers`);
             
@@ -2861,7 +3085,7 @@
             const panelType = (panel === 'left') ? currentLeftType : currentRightType;
             
             if (panelType === 'original') {
-                // 原始檔案 - 查找內容行並捲動
+                // 原始檔案 - 查找內容行並捲動（保持原有邏輯）
                 const targetElement = document.querySelector(`#${panel}ContentArea .content-line[data-line="${line}"]`);
                 if (targetElement) {
                     targetElement.scrollIntoView({
@@ -2870,16 +3094,30 @@
                     });
                 }
             } else {
-                // 分析報告 - 捲動 iframe
-                const iframe = document.querySelector(`#${panel}Content iframe`);
-                if (iframe && iframe.contentWindow) {
-                    const lineHeight = 20.8; // 1.6em * 13px
-                    const scrollTop = (parseInt(line) - 1) * lineHeight;
-                    
-                    iframe.contentWindow.scrollTo({
-                        top: scrollTop,
-                        behavior: 'smooth'
-                    });
+                // 分析報告 - 使用動態行高數據捲動
+                const lineData = window[`${panel}LineData`];
+                if (lineData) {
+                    const targetLine = lineData.find(data => data.index === parseInt(line));
+                    if (targetLine) {
+                        const iframe = document.querySelector(`#${panel}Content iframe`);
+                        if (iframe && iframe.contentWindow) {
+                            iframe.contentWindow.scrollTo({
+                                top: targetLine.top - 100, // 留一些上方空間
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                } else {
+                    // 備用方案：使用固定行高
+                    const iframe = document.querySelector(`#${panel}Content iframe`);
+                    if (iframe && iframe.contentWindow) {
+                        const lineHeight = 20.8;
+                        const scrollTop = (parseInt(line) - 1) * lineHeight;
+                        iframe.contentWindow.scrollTo({
+                            top: scrollTop,
+                            behavior: 'smooth'
+                        });
+                    }
                 }
             }
             
