@@ -748,14 +748,20 @@
             height: 1.6em;
             line-height: 1.6em;
             cursor: text;
+            position: relative;
         }
 
+        /* 調試用：顯示內容行的邊界 */
+        .content-line:hover {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+                
         /* 自定義捲軸樣式 - 只在內容區域 */
         .content-container::-webkit-scrollbar,
         .original-content-wrapper::-webkit-scrollbar,
         .panel-content::-webkit-scrollbar {
-            height: 12px;
-            width: 12px;
+            height: 8px;
+            width: 8px;
         }
 
         .content-container::-webkit-scrollbar-track,
@@ -768,7 +774,7 @@
         .original-content-wrapper::-webkit-scrollbar-thumb,
         .panel-content::-webkit-scrollbar-thumb {
             background: #444;
-            border-radius: 6px;
+            border-radius: 4px;
         }
 
         .content-container::-webkit-scrollbar-thumb:hover,
@@ -1057,7 +1063,20 @@
         let currentLeftType = 'analysis';
         let currentRightType = 'original';
         let startTime = Date.now();
-        
+        let currentFocusedPanel = 'left';
+        let currentFocusedLine = 1;
+        let bookmarks = new Set();
+        let currentBookmarkIndex = -1;
+        let bookmarkArray = [];
+
+        // 確保全域變數被正確初始化
+        if (typeof window.currentFocusedPanel === 'undefined') {
+            window.currentFocusedPanel = 'left';
+        }
+        if (typeof window.currentFocusedLine === 'undefined') {
+            window.currentFocusedLine = 1;
+        }
+
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
             updateFilename();
@@ -1169,11 +1188,37 @@
                             if (iframeDoc) {
                                 const style = iframeDoc.createElement('style');
                                 style.textContent = `
+                                    /* 高亮樣式 */
                                     .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
                                     .highlight-4 { background: rgba(255, 165, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-5 { background: rgba(255, 192, 203, 0.4) !important; color: #000 !important; }
+                                    
+                                    /* 統一捲軸樣式 */
+                                    ::-webkit-scrollbar {
+                                        height: 12px;
+                                        width: 12px;
+                                    }
+                                    
+                                    ::-webkit-scrollbar-track {
+                                        background: #1a1a1a;
+                                    }
+                                    
+                                    ::-webkit-scrollbar-thumb {
+                                        background: #444;
+                                        border-radius: 6px;
+                                    }
+                                    
+                                    ::-webkit-scrollbar-thumb:hover {
+                                        background: #555;
+                                    }
+                                    
+                                    /* Firefox 捲軸 */
+                                    * {
+                                        scrollbar-width: thin;
+                                        scrollbar-color: #444 #1a1a1a;
+                                    }
                                 `;
                                 iframeDoc.head.appendChild(style);
                             }
@@ -1225,19 +1270,20 @@
                 lines.forEach((line, index) => {
                     const lineNum = index + 1;
                     
-                    // 建立行號
+                    // 建立行號 - 確保設置所有必要的屬性
                     const lineNumberEl = document.createElement('span');
                     lineNumberEl.className = 'line-number';
                     lineNumberEl.setAttribute('data-line', lineNum);
-                    lineNumberEl.setAttribute('data-panel', panel);
+                    lineNumberEl.setAttribute('data-panel', panel);  // 確保這行存在
                     lineNumberEl.textContent = lineNum;
                     lineNumbersContent.appendChild(lineNumberEl);
                     
                     // 建立內容行
                     const contentLineEl = document.createElement('div');
                     contentLineEl.className = 'content-line';
-                    contentLineEl.setAttribute('data-line', lineNum);
-                    contentLineEl.innerHTML = escapeHtml(line) || ' ';
+                    contentLineEl.setAttribute('data-line', String(lineNum)); // 確保是字串
+                    contentLineEl.setAttribute('data-panel', panel);
+                    contentLineEl.innerHTML = escapeHtml(line) || '&nbsp;'; // 使用 &nbsp; 而不是空格
                     contentArea.appendChild(contentLineEl);
                 });
                 
@@ -1255,10 +1301,23 @@
                 
                 // 設置事件（延遲以確保 DOM 已更新）
                 setTimeout(() => {
+                    console.log(`開始設置 ${panel} 面板的事件處理`);
+                    
+                    // 設置行號事件
                     setupLineNumberHandlers(panel);
+                    
+                    // 設置內容行追蹤
                     setupContentLineTracking(panel);
+                    
+                    // 設置右鍵選單
                     setupContentContextMenu(panel);
-                }, 0);
+                    
+                    // 初始化焦點
+                    window.currentFocusedPanel = panel;
+                    window.currentFocusedLine = 1;
+                    
+                    console.log(`${panel} 面板事件設置完成`);
+                }, 200); // 增加延遲時間
                 
                 updateStatus(`載入完成 - 共 ${lines.length} 行`);
             }
@@ -1275,34 +1334,92 @@
             }
         }
 
-        // 為表格佈局設置內容行追蹤
+        // 設置內容行追蹤（完全重寫）
         function setupContentLineTracking(panel) {
-            const contentArea = document.getElementById(`${panel}ContentArea`);
-            const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+            console.log(`開始設置 ${panel} 面板的行追蹤`);
             
-            if (!contentArea || !lineNumbers) return;
-            
-            const contentLines = contentArea.querySelectorAll('.content-line');
-            const lineNumberEls = lineNumbers.querySelectorAll('.line-number');
+            // 方法1：直接在每個內容行上設置事件
+            const contentLines = document.querySelectorAll(`#${panel}ContentArea .content-line`);
+            console.log(`找到 ${contentLines.length} 個內容行`);
             
             contentLines.forEach((line, index) => {
-                line.addEventListener('mouseenter', function() {
-                    const lineNum = parseInt(this.getAttribute('data-line'));
-                    currentFocusedLine = lineNum;
-                    currentFocusedPanel = panel;
-                    
-                    // 高亮對應的行號
-                    if (lineNumberEls[index]) {
+                // 如果沒有 data-line 屬性，設置它
+                if (!line.getAttribute('data-line')) {
+                    line.setAttribute('data-line', index + 1);
+                }
+                
+                const lineNum = parseInt(line.getAttribute('data-line'));
+                
+                // 滑鼠移動到該行時
+                line.addEventListener('mousemove', function(e) {
+                    e.stopPropagation();
+                    if (window.currentFocusedLine !== lineNum || window.currentFocusedPanel !== panel) {
+                        window.currentFocusedLine = lineNum;
+                        window.currentFocusedPanel = panel;
+                        console.log(`滑鼠在: ${panel} 面板，第 ${lineNum} 行`);
                         highlightCurrentLineNumber(panel, lineNum);
                     }
                 });
                 
-                line.addEventListener('click', function() {
-                    currentFocusedPanel = panel;
-                    currentFocusedLine = parseInt(this.getAttribute('data-line'));
+                // 滑鼠進入該行時
+                line.addEventListener('mouseenter', function(e) {
+                    e.stopPropagation();
+                    window.currentFocusedLine = lineNum;
+                    window.currentFocusedPanel = panel;
+                    console.log(`進入: ${panel} 面板，第 ${lineNum} 行`);
+                    highlightCurrentLineNumber(panel, lineNum);
+                });
+                
+                // 點擊該行時
+                line.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    window.currentFocusedLine = lineNum;
+                    window.currentFocusedPanel = panel;
+                    console.log(`點擊: ${panel} 面板，第 ${lineNum} 行`);
                 });
             });
-        }
+            
+            // 方法2：也在行號上設置事件
+            const lineNumbers = document.querySelectorAll(`#${panel}LineNumbers .line-number`);
+            console.log(`找到 ${lineNumbers.length} 個行號`);
+            
+            lineNumbers.forEach((lineNumEl, index) => {
+                // 如果沒有屬性，設置它們
+                if (!lineNumEl.getAttribute('data-line')) {
+                    lineNumEl.setAttribute('data-line', index + 1);
+                }
+                if (!lineNumEl.getAttribute('data-panel')) {
+                    lineNumEl.setAttribute('data-panel', panel);
+                }
+                
+                const lineNum = parseInt(lineNumEl.getAttribute('data-line'));
+                
+                // 滑鼠在行號上
+                lineNumEl.addEventListener('mouseenter', function(e) {
+                    e.stopPropagation();
+                    window.currentFocusedLine = lineNum;
+                    window.currentFocusedPanel = panel;
+                    console.log(`行號: ${panel} 面板，第 ${lineNum} 行`);
+                    highlightCurrentLineNumber(panel, lineNum);
+                });
+                
+                // 點擊行號切換書籤
+                lineNumEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleBookmark(this);
+                });
+            });
+            
+            // 設置容器的焦點
+            const container = document.getElementById(`${panel}ContentContainer`);
+            if (container) {
+                container.addEventListener('mouseenter', function() {
+                    window.currentFocusedPanel = panel;
+                    console.log(`進入 ${panel} 容器`);
+                });
+            }
+        }          
 
         // 設置內容右鍵選單
         function setupContentContextMenu(panel) {
@@ -1329,65 +1446,39 @@
             });
         }
 
-        // 追蹤滑鼠所在的內容行
-        function setupContentLineTracking(panel) {
-            const contentEl = document.getElementById(`${panel}OriginalContent`);
-            const lineNumbersEl = document.getElementById(`${panel}LineNumbers`);
-            
-            if (!contentEl || !lineNumbersEl) return;
-            
-            // 獲取準確的行高
-            const lineNumbers = lineNumbersEl.querySelectorAll('.line-number');
-            if (lineNumbers.length === 0) return;
-            
-            const firstLineNumber = lineNumbers[0];
-            const lineHeight = firstLineNumber.getBoundingClientRect().height;
-            
-            let lastHighlightedLine = null;
-            
-            // 使用更精確的方法追蹤行號
-            contentEl.addEventListener('mousemove', function(e) {
-                const contentRect = contentEl.getBoundingClientRect();
-                const lineNumbersRect = lineNumbersEl.getBoundingClientRect();
-                
-                // 計算相對於第一行的偏移
-                const relativeY = e.clientY - lineNumbersRect.top;
-                
-                // 計算行號（從1開始）
-                let line = Math.floor(relativeY / lineHeight) + 1;
-                
-                // 確保行號在有效範圍內
-                line = Math.max(1, Math.min(line, lineNumbers.length));
-                
-                if (line !== lastHighlightedLine) {
-                    currentFocusedLine = line;
-                    currentFocusedPanel = panel;
-                    highlightCurrentLineNumber(panel, line);
-                    lastHighlightedLine = line;
-                }
-            });
-            
-            // 內容區域獲得焦點時更新面板
-            contentEl.addEventListener('click', function() {
-                currentFocusedPanel = panel;
-            });
-        }
-
         // 高亮當前行號
         function highlightCurrentLineNumber(panel, lineNumber) {
-            // 確保元素存在
-            const wrapper = document.getElementById(`${panel}ContentWrapper`);
-            if (!wrapper) return;
+            // 嘗試新結構
+            let lineNumbers = document.getElementById(`${panel}LineNumbers`);
             
-            // 清除該面板之前的高亮
-            wrapper.querySelectorAll('.line-number').forEach(el => {
+            // 如果新結構不存在，嘗試舊結構
+            if (!lineNumbers) {
+                const wrapper = document.getElementById(`${panel}ContentWrapper`);
+                if (wrapper) {
+                    // 清除該面板之前的高亮
+                    wrapper.querySelectorAll('.line-number').forEach(el => {
+                        if (!el.classList.contains('bookmarked')) {
+                            el.style.backgroundColor = '';
+                        }
+                    });
+                    
+                    // 高亮當前行號
+                    const lineElement = wrapper.querySelector(`.line-number[data-line="${lineNumber}"]`);
+                    if (lineElement && !lineElement.classList.contains('bookmarked')) {
+                        lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.1)';
+                    }
+                }
+                return;
+            }
+            
+            // 新結構的處理
+            lineNumbers.querySelectorAll('.line-number').forEach(el => {
                 if (!el.classList.contains('bookmarked')) {
                     el.style.backgroundColor = '';
                 }
             });
             
-            // 高亮當前行號
-            const lineElement = wrapper.querySelector(`.line-number[data-line="${lineNumber}"]`);
+            const lineElement = lineNumbers.querySelector(`.line-number[data-line="${lineNumber}"]`);
             if (lineElement && !lineElement.classList.contains('bookmarked')) {
                 lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.1)';
             }
@@ -1836,19 +1927,54 @@
                 if (e.key === 'F2') {
                     e.preventDefault();
                     
-                    // 使用當前焦點面板
+                    // 使用當前焦點面板和行號
                     const panel = window.currentFocusedPanel || 'left';
+                    const line = window.currentFocusedLine || 1;
                     
-                    // 找到當前行的行號元素
-                    const lineElement = document.querySelector(
-                        `#${panel}ContentWrapper .line-number[data-line="${currentFocusedLine}"]`
-                    );
+                    console.log(`F2 按下: Panel=${panel}, Line=${line}`);
+                    
+                    // 嘗試多種選擇器找到行號元素
+                    let lineElement = null;
+                    
+                    // 方法1：新結構 - 分離的行號區域
+                    lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
+                    if (lineElement) {
+                        console.log('找到元素（新結構）');
+                    }
+                    
+                    // 方法2：舊結構 - 表格式
+                    if (!lineElement) {
+                        lineElement = document.querySelector(`#${panel}ContentWrapper .line-number[data-line="${line}"]`);
+                        if (lineElement) {
+                            console.log('找到元素（舊結構）');
+                        }
+                    }
+                    
+                    // 方法3：直接搜尋所有行號
+                    if (!lineElement) {
+                        const allLineNumbers = document.querySelectorAll(`.line-number[data-line="${line}"][data-panel="${panel}"]`);
+                        if (allLineNumbers.length > 0) {
+                            lineElement = allLineNumbers[0];
+                            console.log('找到元素（全域搜尋）');
+                        }
+                    }
                     
                     if (lineElement) {
                         toggleBookmark(lineElement);
-                        console.log(`F2: 在 ${panel} 面板第 ${currentFocusedLine} 行切換書籤`);
+                        updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行切換書籤`);
                     } else {
-                        console.log(`F2: 找不到行號元素 - Panel: ${panel}, Line: ${currentFocusedLine}`);
+                        console.error(`F2: 找不到行號元素`, {
+                            panel: panel,
+                            line: line,
+                            嘗試的選擇器: [
+                                `#${panel}LineNumbers .line-number[data-line="${line}"]`,
+                                `#${panel}ContentWrapper .line-number[data-line="${line}"]`,
+                                `.line-number[data-line="${line}"][data-panel="${panel}"]`
+                            ]
+                        });
+                        
+                        // 列出所有找到的行號元素以便調試
+                        console.log('所有行號元素：', document.querySelectorAll('.line-number'));
                     }
                 }
 
@@ -1898,23 +2024,26 @@
         }
     </script>
     <script>
-        // 書籤相關變數
-        let bookmarks = new Set();
-        let currentBookmarkIndex = -1;
-        let bookmarkArray = [];
-
         // 設置行號處理器
         function setupLineNumberHandlers(panel) {
-            // 確保元素存在
-            const wrapper = document.getElementById(`${panel}ContentWrapper`);
-            if (!wrapper) {
-                console.log(`找不到 ${panel}ContentWrapper`);
+            const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+            
+            if (!lineNumbers) {
+                console.log(`找不到 ${panel}LineNumbers`);
                 return;
             }
             
-            const lineNumbers = wrapper.querySelectorAll('.line-number');
+            const lineNumberEls = lineNumbers.querySelectorAll('.line-number');
+            console.log(`${panel} 面板找到 ${lineNumberEls.length} 個行號元素`);
             
-            lineNumbers.forEach(lineNum => {
+            lineNumberEls.forEach(lineNum => {
+                // 確保有正確的屬性
+                if (!lineNum.getAttribute('data-line')) {
+                    const lineNumber = lineNum.textContent.trim();
+                    lineNum.setAttribute('data-line', lineNumber);
+                    lineNum.setAttribute('data-panel', panel);
+                }
+                
                 // 點擊行號切換書籤
                 lineNum.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -1924,8 +2053,8 @@
                 // 滑鼠進入時更新當前行
                 lineNum.addEventListener('mouseenter', function() {
                     const line = parseInt(this.getAttribute('data-line'));
-                    currentFocusedLine = line;
-                    currentFocusedPanel = panel;
+                    window.currentFocusedLine = line;
+                    window.currentFocusedPanel = panel;
                 });
             });
         }
@@ -2233,12 +2362,22 @@
             currentBookmarkIndex = (currentBookmarkIndex + 1) % bookmarkArray.length;
             const [panel, line] = bookmarkArray[currentBookmarkIndex].split('-');
             
-            // 找到對應的行
-            const row = document.querySelector(
-                `#${panel}ContentWrapper .line-number[data-line="${line}"]`
-            )?.closest('.content-row');
+            // 嘗試新結構
+            let targetElement = document.querySelector(`#${panel}ContentArea .content-line[data-line="${line}"]`);
+            let lineElement = document.querySelector(`#${panel}LineNumbers .line-number[data-line="${line}"]`);
             
-            if (row) {
+            // 如果新結構找不到，嘗試舊的表格結構
+            if (!targetElement) {
+                const row = document.querySelector(
+                    `#${panel}ContentWrapper .line-number[data-line="${line}"]`
+                )?.closest('.content-row');
+                if (row) {
+                    targetElement = row;
+                    lineElement = row.querySelector('.line-number');
+                }
+            }
+            
+            if (targetElement) {
                 // 確保面板是可見的
                 const panelEl = document.getElementById(`${panel}Panel`);
                 if (panelEl && panelEl.classList.contains('hidden')) {
@@ -2247,13 +2386,12 @@
                 }
                 
                 // 滾動到書籤位置
-                row.scrollIntoView({
+                targetElement.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
                 
                 // 閃爍效果
-                const lineElement = row.querySelector('.line-number');
                 if (lineElement) {
                     lineElement.style.transition = 'background-color 0.3s';
                     const originalBg = lineElement.style.backgroundColor;
@@ -2263,17 +2401,22 @@
                     }, 500);
                 }
                 
+                // 更新當前焦點
+                currentFocusedPanel = panel;
+                currentFocusedLine = parseInt(line);
+                
                 updateStatus(`跳轉到書籤: ${panel === 'left' ? '左側' : '右側'}面板第 ${line} 行`);
             }
         }
 
-        // 確保全域變數被正確初始化
-        if (typeof currentFocusedPanel === 'undefined') {
+        // 監聽面板的點擊事件
+        document.getElementById('leftPanel').addEventListener('click', function() {
             window.currentFocusedPanel = 'left';
-        }
-        if (typeof currentFocusedLine === 'undefined') {
-            window.currentFocusedLine = 1;
-        }
+        });
+
+        document.getElementById('rightPanel').addEventListener('click', function() {
+            window.currentFocusedPanel = 'right';
+        });
     </script>
     <script>
         // 高亮管理器類別
