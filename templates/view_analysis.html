@@ -1360,21 +1360,24 @@
                                 
                                 // 計算行數的函數
                                 const calculateLines = function() {
-                                    // 強制重新計算佈局
-                                    const body = iframeDoc.body;
-                                    body.style.display = 'none';
-                                    body.offsetHeight; // 觸發重排
-                                    body.style.display = '';
+                                    // 等待 left-panel 元素出現
+                                    const leftPanel = iframeDoc.querySelector('.left-panel');
+                                    let contentHeight = 0;
                                     
-                                    // 獲取所有文字內容的實際高度
-                                    const computedStyle = iframeWindow.getComputedStyle(body);
-                                    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
-                                    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
-                                    const contentHeight = body.scrollHeight - paddingTop - paddingBottom;
+                                    if (leftPanel) {
+                                        // 使用 left-panel 的 scrollHeight
+                                        contentHeight = leftPanel.scrollHeight;
+                                        console.log('使用 left-panel scrollHeight:', contentHeight);
+                                    } else {
+                                        // 備用：使用 body 的 scrollHeight
+                                        const body = iframeDoc.body;
+                                        contentHeight = body.scrollHeight;
+                                        console.log('使用 body scrollHeight:', contentHeight);
+                                    }
                                     
-                                    // 計算實際需要的行數
-                                    const lineHeight = 20.8; // 1.6em * 13px
+                                    const lineHeight = 20.8;
                                     const lineCount = Math.ceil(contentHeight / lineHeight);
+                                    console.log(`計算出 ${lineCount} 行`);
                                     
                                     return lineCount;
                                 };
@@ -1409,8 +1412,28 @@
                                     lineNumbersContent.style.paddingBottom = '20px';
                                 };
                                 
-                                // 延遲計算以確保內容完全渲染
-                                setTimeout(() => {
+                                // 延遲執行以確保內容載入完成
+                                const waitForContent = function(callback) {
+                                    const checkInterval = setInterval(() => {
+                                        const leftPanel = iframeDoc.querySelector('.left-panel');
+                                        
+                                        // 檢查 left-panel 是否存在且有內容
+                                        if (leftPanel && leftPanel.scrollHeight > 100) {
+                                            clearInterval(checkInterval);
+                                            callback();
+                                        }
+                                    }, 100);
+                                    
+                                    // 最多等待 3 秒
+                                    setTimeout(() => {
+                                        clearInterval(checkInterval);
+                                        // 即使沒找到 left-panel 也執行
+                                        callback();
+                                    }, 3000);
+                                };
+                                
+                                // 等待內容載入完成後再計算行數
+                                waitForContent(() => {
                                     const lineCount = calculateLines();
                                     generateLineNumbers(lineCount);
                                     
@@ -1418,85 +1441,42 @@
                                     window[`${panel}LineCount`] = lineCount;
                                     
                                     // 捲動同步函數
-                                    const getScrollTop = function() {
-                                        return iframeWindow.pageYOffset ||
-                                            iframeDoc.documentElement.scrollTop ||
-                                            iframeDoc.body.scrollTop ||
-                                            (iframeDoc.scrollingElement && iframeDoc.scrollingElement.scrollTop) ||
-                                            0;
-                                    };
-                                    
-                                    const syncScroll = function() {
-                                        const scrollTop = getScrollTop();
-                                        lineNumbersContent.style.transform = `translateY(-${scrollTop}px)`;
-                                    };
-                                    
-                                    // 綁定所有可能的捲動事件
                                     const bindScrollEvents = function() {
-                                        // 1. window scroll
-                                        iframeWindow.addEventListener('scroll', syncScroll, true);
+                                        // 查找實際的滾動容器
+                                        const leftPanel = iframeDoc.querySelector('.left-panel');
+                                        const container = document.getElementById(`${panel}LineNumbersContainer`);
                                         
-                                        // 2. document scroll
-                                        iframeDoc.addEventListener('scroll', syncScroll, true);
-                                        
-                                        // 3. documentElement scroll
-                                        if (iframeDoc.documentElement) {
-                                            iframeDoc.documentElement.addEventListener('scroll', syncScroll, true);
+                                        if (leftPanel && container) {
+                                            console.log('找到 left-panel，設置滾動同步');
+                                            
+                                            // 設置容器可以滾動
+                                            container.style.overflowY = 'auto';
+                                            container.style.overflowX = 'hidden';
+                                            container.style.height = '100%';
+                                            
+                                            // 同步滾動函數
+                                            const syncScroll = function() {
+                                                container.scrollTop = leftPanel.scrollTop;
+                                            };
+                                            
+                                            // 綁定滾動事件
+                                            leftPanel.addEventListener('scroll', syncScroll);
+                                            
+                                            // 初始同步
+                                            syncScroll();
+                                        } else {
+                                            console.log('未找到滾動元素，500ms 後重試');
+                                            setTimeout(bindScrollEvents, 500);
                                         }
-                                        
-                                        // 4. body scroll
-                                        if (iframeDoc.body) {
-                                            iframeDoc.body.addEventListener('scroll', syncScroll, true);
-                                        }
-                                        
-                                        // 5. wheel 事件（滑鼠滾輪）
-                                        iframeDoc.addEventListener('wheel', function() {
-                                            requestAnimationFrame(syncScroll);
-                                        }, { passive: true });
-                                        
-                                        // 6. 使用 MutationObserver 監測 DOM 變化
-                                        const observer = new MutationObserver(function(mutations) {
-                                            let needSync = false;
-                                            for (let mutation of mutations) {
-                                                if (mutation.type === 'attributes' && 
-                                                    mutation.attributeName === 'style') {
-                                                    needSync = true;
-                                                    break;
-                                                }
-                                            }
-                                            if (needSync) {
-                                                syncScroll();
-                                            }
-                                        });
-                                        
-                                        // 監測屬性變化
-                                        observer.observe(iframeDoc.documentElement, {
-                                            attributes: true,
-                                            attributeFilter: ['style']
-                                        });
-                                        
-                                        if (iframeDoc.body) {
-                                            observer.observe(iframeDoc.body, {
-                                                attributes: true,
-                                                attributeFilter: ['style']
-                                            });
-                                        }
-                                        
-                                        // 7. 定時器作為最後手段
-                                        let scrollTimer = setInterval(syncScroll, 50);
-                                        
-                                        // 10秒後停止定時器
-                                        setTimeout(() => {
-                                            clearInterval(scrollTimer);
-                                        }, 10000);
                                     };
                                     
-                                    // 立即綁定事件
+                                    // 綁定滾動事件
                                     bindScrollEvents();
                                     
                                     // 滑鼠追蹤
                                     const trackMouse = function(e) {
-                                        const scrollTop = getScrollTop();
+                                        const leftPanel = iframeDoc.querySelector('.left-panel');
+                                        const scrollTop = leftPanel ? leftPanel.scrollTop : 0;
                                         const y = e.clientY + scrollTop - 20;
                                         const lineHeight = 20.8;
                                         const lineNum = Math.floor(y / lineHeight) + 1;
@@ -1549,16 +1529,12 @@
                                     });
                                     
                                     updateStatus(`載入完成 - 共 ${lineCount} 行`);
-                                    
-                                    // 初始同步
-                                    syncScroll();
-                                    
-                                }, 500); // 延遲確保內容完全渲染
+                                });
                             }
                         } catch (e) {
                             console.error('處理 iframe 時發生錯誤:', e);
                         }
-                    }, 300);
+                    }, 1000); // 延遲從 300ms 改為 1000ms
                 };
                 
                 // 初始化焦點
