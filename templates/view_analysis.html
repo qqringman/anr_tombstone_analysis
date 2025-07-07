@@ -703,22 +703,21 @@
         /* 高亮控制按鈕 - 修正位置 */
         .highlight-controls {
             position: absolute;
-            top: 10px;
-            right: 100px;
+            right: 130px;
             display: flex;
             gap: 5px;
             z-index: 100;
             background: #1a1a1a;
             padding: 5px;
             border-radius: 4px;
-            border: 1px solid #333;
+            /* border: 1px solid #333;*/
         }
 
         .highlight-control-btn {
             width: 25px;
             height: 25px;
             border: 1px solid #555;
-            border-radius: 3px;
+            border-radius: 20px;
             cursor: pointer;
             display: none;
             position: relative;
@@ -756,7 +755,7 @@
             </button>
             <button class="btn" onclick="switchPanels()">
                 <span>🔄</span>
-                <span>切換內容</span>
+                <span>左右交換</span>
             </button>
             <button class="btn" onclick="toggleFullscreenMode()">
                 <span>⛶</span>
@@ -819,8 +818,16 @@
                     <span id="rightPanelIcon">📄</span>
                     <span id="rightPanelTitle">原始檔案</span>
                 </div>
+                <!-- 高亮控制按鈕 -->
+                <div class="highlight-controls" id="highlightControls">
+                    <div class="highlight-control-btn" id="highlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1)" title="清除黃色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2)" title="清除綠色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3)" title="清除藍色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4)" title="清除橙色高亮"></div>
+                    <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5)" title="清除粉紅高亮"></div>
+                </div>                
                 <div class="panel-controls">
-                    <div style="position: relative;">
+                    <div style="position: relative;">                        
                         <button class="icon-btn" onclick="toggleExportMenu('right')" title="匯出">
                             💾
                         </button>
@@ -891,14 +898,6 @@
         <div class="context-menu-item" onclick="clearAllHighlights()">
             <span>清除所有高亮</span>
         </div>
-    </div>
-    <!-- 高亮控制按鈕 -->
-    <div class="highlight-controls" id="highlightControls">
-        <div class="highlight-control-btn" id="highlightBtn1" style="background: rgba(255, 255, 0, 0.6);" onclick="clearHighlightColor(1)" title="清除黃色高亮"></div>
-        <div class="highlight-control-btn" id="highlightBtn2" style="background: rgba(0, 255, 0, 0.6);" onclick="clearHighlightColor(2)" title="清除綠色高亮"></div>
-        <div class="highlight-control-btn" id="highlightBtn3" style="background: rgba(0, 191, 255, 0.6);" onclick="clearHighlightColor(3)" title="清除藍色高亮"></div>
-        <div class="highlight-control-btn" id="highlightBtn4" style="background: rgba(255, 165, 0, 0.6);" onclick="clearHighlightColor(4)" title="清除橙色高亮"></div>
-        <div class="highlight-control-btn" id="highlightBtn5" style="background: rgba(255, 192, 203, 0.6);" onclick="clearHighlightColor(5)" title="清除粉紅高亮"></div>
     </div>
     <!-- 高亮導航提示 -->
     <div class="highlight-nav-hint" id="highlightNavHint">
