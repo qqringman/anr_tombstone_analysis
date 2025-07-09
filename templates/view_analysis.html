@@ -1200,6 +1200,20 @@
             overflow: visible !important;
         }
 
+        /* 統一左右視窗的行號 hover 效果 */
+        #leftPanel .line-number:hover,
+        #leftPanel .analysis-line-number:hover,
+        #rightPanel .line-number:hover,
+        #rightPanel .analysis-line-number:hover {
+            background-color: var(--line-hover-color) !important;
+        }
+
+        /* 確保 hover 時游標正確 */
+        .line-number,
+        .analysis-line-number {
+            cursor: pointer;
+        }
+
     </style>   
 </head>
 <body>
@@ -1899,14 +1913,16 @@
                                         
                                         // 創建當前行高亮
                                         const currentLineHighlight = document.createElement('div');
+                                        currentLineHighlight.className = 'current-line-highlight';
                                         currentLineHighlight.style.position = 'absolute';
                                         currentLineHighlight.style.left = '0';
                                         currentLineHighlight.style.right = '0';
                                         currentLineHighlight.style.height = '20.8px';
                                         currentLineHighlight.style.backgroundColor = 'var(--line-hover-color)';
                                         currentLineHighlight.style.opacity = '0';
-                                        currentLineHighlight.style.transition = 'opacity 0.2s ease';
+                                        currentLineHighlight.style.transition = 'opacity 0.2s ease, top 0.1s ease';
                                         currentLineHighlight.style.pointerEvents = 'none';
+                                        currentLineHighlight.style.willChange = 'transform, top';
                                         hoverContainer.appendChild(currentLineHighlight);
                                         
                                         // 更新hover效果的函數
@@ -1926,16 +1942,57 @@
                                             }
                                         };
                                         
-                                        // 監聽滑鼠移動
-                                        const originalTrackMouse = trackMouse;
-                                        trackMouse = function(e) {
-                                            originalTrackMouse(e);
-                                            updateHover(window.currentFocusedLine);
-                                        };
+                                        // 追蹤滑鼠移動
+                                        let lastLineNumber = null;
+                                        
+                                        // iframe 內的滑鼠移動事件
+                                        iframeDoc.addEventListener('mousemove', function(e) {
+                                            const lineData = window[`${panel}LineData`];
+                                            if (!lineData) return;
+                                            
+                                            const leftPanel = iframeDoc.querySelector('.left-panel');
+                                            const scrollTop = leftPanel ? leftPanel.scrollTop : 
+                                                            (iframeWindow.pageYOffset || 
+                                                            iframeDoc.documentElement.scrollTop || 
+                                                            iframeDoc.body.scrollTop || 0);
+                                            
+                                            const rect = iframe.getBoundingClientRect();
+                                            const y = e.clientY - rect.top + scrollTop - 20;
+                                            
+                                            let targetLine = null;
+                                            for (let i = 0; i < lineData.length; i++) {
+                                                const data = lineData[i];
+                                                if (y >= data.top && y < data.top + data.height) {
+                                                    targetLine = data.index;
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            if (targetLine && targetLine !== lastLineNumber) {
+                                                lastLineNumber = targetLine;
+                                                window.currentFocusedLine = targetLine;
+                                                window.currentFocusedPanel = panel;
+                                                highlightCurrentLineNumber(panel, targetLine);
+                                                updateHover(targetLine);
+                                            }
+                                        });
+                                        
+                                        // 容器的滑鼠移動事件（補充 iframe 外的區域）
+                                        contentContainer.addEventListener('mousemove', function(e) {
+                                            window.currentFocusedPanel = panel;
+                                            // 可以在這裡添加額外的邏輯
+                                        });
                                         
                                         // 滑鼠離開時隱藏hover
                                         contentContainer.addEventListener('mouseleave', function() {
                                             currentLineHighlight.style.opacity = '0';
+                                            lastLineNumber = null;
+                                        });
+                                        
+                                        // iframe 離開時也隱藏
+                                        iframeDoc.addEventListener('mouseleave', function() {
+                                            currentLineHighlight.style.opacity = '0';
+                                            lastLineNumber = null;
                                         });
                                         
                                         // 同步捲動
@@ -2250,19 +2307,24 @@
                     highlightManager.currentPanel = panel;
                     window.currentFocusedPanel = panel;
                     
-                    // 獲取選擇
+                    // 獲取選擇 - 重要：在顯示選單前就保存選擇內容
                     const selection = window.getSelection();
-                    highlightManager.selectedText = selection.toString();
+                    const selectedText = selection.toString();
+                    
+                    // 保存選擇的文字和範圍
+                    highlightManager.selectedText = selectedText;
+                    contextMenuManager.selectedText = selectedText;  // 添加這行
                     contextMenuManager.currentSelection = selection;
                     
                     if (selection.rangeCount > 0) {
                         highlightManager.selectedRange = selection.getRangeAt(0);
+                        contextMenuManager.selectedRange = selection.getRangeAt(0);  // 添加這行
                     }
                     
                     contextMenuManager.show(e.clientX, e.clientY);
                 });
             }
-        }       
+        }      
 
         // 為表格佈局設置右鍵選單
         function setupContextMenuForTable(panel) {
@@ -4144,6 +4206,11 @@
         class ContextMenuManager {
             constructor() {
                 this.menu = null;
+                this.currentPanel = null;
+                this.currentIframe = null;
+                this.currentSelection = null;
+                this.selectedText = '';      // 添加
+                this.selectedRange = null;    // 添加
                 this.setupMenu();
             }
 
@@ -4255,28 +4322,31 @@
 
             copyText() {
                 let textToCopy = '';
-                let selection = null;
                 
-                // 優先使用當前的選擇
-                if (this.currentPanel) {
-                    const panelType = (this.currentPanel === 'left') ? currentLeftType : currentRightType;
-                    
-                    if (panelType === 'analysis' && this.currentIframe) {
-                        // 分析報告的選擇
-                        selection = this.currentIframe.contentWindow.getSelection();
-                    } else {
-                        // 原始檔案的選擇
-                        selection = window.getSelection();
-                    }
+                // 優先使用保存的選中文字
+                if (this.selectedText && this.selectedText.trim()) {
+                    textToCopy = this.selectedText;
                 } else {
-                    selection = window.getSelection();
+                    // 嘗試獲取當前選擇
+                    let selection = null;
+                    
+                    if (this.currentPanel) {
+                        const panelType = (this.currentPanel === 'left') ? currentLeftType : currentRightType;
+                        
+                        if (panelType === 'analysis' && this.currentIframe) {
+                            selection = this.currentIframe.contentWindow.getSelection();
+                        } else {
+                            selection = window.getSelection();
+                        }
+                        
+                        if (selection && selection.toString().trim()) {
+                            textToCopy = selection.toString();
+                        }
+                    }
                 }
                 
-                // 獲取選中的文字
-                if (selection && selection.toString().trim()) {
-                    textToCopy = selection.toString();
-                    
-                    // 使用 Clipboard API
+                // 只有在有選中文字時才複製
+                if (textToCopy) {
                     if (navigator.clipboard) {
                         navigator.clipboard.writeText(textToCopy).then(() => {
                             updateStatus('已複製選中的文字');
@@ -4287,51 +4357,14 @@
                         this.fallbackCopy(textToCopy);
                     }
                 } else {
-                    // 如果沒有選中文字，複製整個面板內容
-                    const panel = this.currentPanel || window.currentFocusedPanel || 'left';
-                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
-                    
-                    if (panelType === 'analysis') {
-                        const iframe = document.querySelector(`#${panel}Content iframe`);
-                        if (iframe && iframe.contentDocument) {
-                            try {
-                                const iframeDoc = iframe.contentDocument;
-                                // 只複製報告內容，排除UI元素
-                                const reportContent = iframeDoc.querySelector('.report-content') || 
-                                                    iframeDoc.querySelector('.left-panel') ||
-                                                    iframeDoc.querySelector('pre') ||
-                                                    iframeDoc.body;
-                                
-                                if (reportContent) {
-                                    textToCopy = reportContent.innerText || reportContent.textContent || '';
-                                }
-                            } catch (e) {
-                                console.log('無法存取 iframe 內容:', e);
-                            }
-                        }
-                    } else {
-                        const contentArea = document.querySelector(`#${panel}ContentArea`);
-                        if (contentArea) {
-                            textToCopy = contentArea.innerText || contentArea.textContent || '';
-                        }
-                    }
-                    
-                    if (textToCopy) {
-                        if (navigator.clipboard) {
-                            navigator.clipboard.writeText(textToCopy).then(() => {
-                                updateStatus('已複製面板內容');
-                            }).catch(() => {
-                                this.fallbackCopy(textToCopy);
-                            });
-                        } else {
-                            this.fallbackCopy(textToCopy);
-                        }
-                    }
+                    updateStatus('請先選取要複製的文字');
                 }
                 
                 // 清理
+                this.selectedText = '';
                 this.currentIframe = null;
                 this.currentSelection = null;
+                this.selectedRange = null;
                 this.hide();
             }
 
