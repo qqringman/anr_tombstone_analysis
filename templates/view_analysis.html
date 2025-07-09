@@ -1898,118 +1898,79 @@
                                         }
                                     });
                                     
-                                    // 添加行hover效果
+                                    // 添加行hover效果 - 修正版本
                                     const setupLineHover = function() {
-                                        // 創建hover層容器
-                                        const hoverContainer = document.createElement('div');
-                                        hoverContainer.style.position = 'absolute';
-                                        hoverContainer.style.top = '0';
-                                        hoverContainer.style.left = '60px'; // 行號寬度
-                                        hoverContainer.style.right = '0';
-                                        hoverContainer.style.bottom = '0';
-                                        hoverContainer.style.pointerEvents = 'none';
-                                        hoverContainer.style.zIndex = '1';
-                                        contentContainer.appendChild(hoverContainer);
-                                        
-                                        // 創建當前行高亮
-                                        const currentLineHighlight = document.createElement('div');
-                                        currentLineHighlight.className = 'current-line-highlight';
-                                        currentLineHighlight.style.position = 'absolute';
-                                        currentLineHighlight.style.left = '0';
-                                        currentLineHighlight.style.right = '0';
-                                        currentLineHighlight.style.height = '20.8px';
-                                        currentLineHighlight.style.backgroundColor = 'var(--line-hover-color)';
-                                        currentLineHighlight.style.opacity = '0';
-                                        currentLineHighlight.style.transition = 'opacity 0.2s ease, top 0.1s ease';
-                                        currentLineHighlight.style.pointerEvents = 'none';
-                                        currentLineHighlight.style.willChange = 'transform, top';
-                                        hoverContainer.appendChild(currentLineHighlight);
-                                        
-                                        // 更新hover效果的函數
-                                        const updateHover = function(lineNumber) {
-                                            const lineData = window[`${panel}LineData`];
-                                            if (!lineData || !lineNumber) {
-                                                currentLineHighlight.style.opacity = '0';
-                                                return;
-                                            }
-                                            
-                                            const targetLine = lineData.find(data => data.index === lineNumber);
-                                            if (targetLine) {
-                                                currentLineHighlight.style.top = (targetLine.top + 20) + 'px'; // 20px是padding
-                                                currentLineHighlight.style.opacity = '0.3';
-                                            } else {
-                                                currentLineHighlight.style.opacity = '0';
-                                            }
-                                        };
-                                        
-                                        // 追蹤滑鼠移動
-                                        let lastLineNumber = null;
+                                        // 不要創建額外的 hover 層，直接使用虛擬行號定位
                                         
                                         // iframe 內的滑鼠移動事件
                                         iframeDoc.addEventListener('mousemove', function(e) {
                                             const lineData = window[`${panel}LineData`];
-                                            if (!lineData) return;
+                                            if (!lineData || lineData.length === 0) return;
                                             
-                                            const leftPanel = iframeDoc.querySelector('.left-panel');
-                                            const scrollTop = leftPanel ? leftPanel.scrollTop : 
-                                                            (iframeWindow.pageYOffset || 
-                                                            iframeDoc.documentElement.scrollTop || 
-                                                            iframeDoc.body.scrollTop || 0);
+                                            // 獲取內容區域的位置
+                                            const contentRect = iframe.getBoundingClientRect();
                                             
-                                            const rect = iframe.getBoundingClientRect();
-                                            const y = e.clientY - rect.top + scrollTop - 20;
+                                            // 計算滑鼠相對於內容的位置
+                                            const relativeY = e.clientY;
                                             
-                                            let targetLine = null;
-                                            for (let i = 0; i < lineData.length; i++) {
-                                                const data = lineData[i];
-                                                if (y >= data.top && y < data.top + data.height) {
-                                                    targetLine = data.index;
-                                                    break;
-                                                }
-                                            }
+                                            // 獲取當前捲動位置
+                                            const scrollElement = iframeDoc.querySelector('.left-panel') || 
+                                                                iframeDoc.documentElement || 
+                                                                iframeDoc.body;
+                                            const scrollTop = scrollElement.scrollTop || 0;
                                             
-                                            if (targetLine && targetLine !== lastLineNumber) {
-                                                lastLineNumber = targetLine;
+                                            // 計算實際的 Y 位置（考慮捲動）
+                                            const actualY = relativeY + scrollTop;
+                                            
+                                            // 找出滑鼠所在的行
+                                            let targetLine = 1;
+                                            const lineHeight = 20.8; // 1.6em * 13px
+                                            const paddingTop = 20;
+                                            
+                                            // 簡單計算：基於固定行高
+                                            targetLine = Math.floor((actualY - paddingTop) / lineHeight) + 1;
+                                            
+                                            // 確保行號在有效範圍內
+                                            targetLine = Math.max(1, Math.min(targetLine, lineData.length));
+                                            
+                                            // 更新當前行
+                                            if (targetLine !== window.currentFocusedLine) {
                                                 window.currentFocusedLine = targetLine;
                                                 window.currentFocusedPanel = panel;
                                                 highlightCurrentLineNumber(panel, targetLine);
-                                                updateHover(targetLine);
+                                                
+                                                // 為 iframe 內容添加 hover 效果
+                                                // 移除之前的 hover
+                                                const prevHovered = iframeDoc.querySelector('.line-hover');
+                                                if (prevHovered) {
+                                                    prevHovered.classList.remove('line-hover');
+                                                }
+                                                
+                                                // 添加新的 hover（如果可能）
+                                                const targetData = lineData.find(d => d.index === targetLine);
+                                                if (targetData && targetData.element) {
+                                                    targetData.element.classList.add('line-hover');
+                                                }
                                             }
                                         });
                                         
-                                        // 容器的滑鼠移動事件（補充 iframe 外的區域）
-                                        contentContainer.addEventListener('mousemove', function(e) {
-                                            window.currentFocusedPanel = panel;
-                                            // 可以在這裡添加額外的邏輯
-                                        });
+                                        // 添加 hover 樣式到 iframe
+                                        const hoverStyle = iframeDoc.createElement('style');
+                                        hoverStyle.textContent = `
+                                            .line-hover {
+                                                background-color: rgba(45, 90, 142, 0.3) !important;
+                                                transition: background-color 0.2s ease;
+                                            }
+                                        `;
+                                        iframeDoc.head.appendChild(hoverStyle);
                                         
-                                        // 滑鼠離開時隱藏hover
-                                        contentContainer.addEventListener('mouseleave', function() {
-                                            currentLineHighlight.style.opacity = '0';
-                                            lastLineNumber = null;
-                                        });
-                                        
-                                        // iframe 離開時也隱藏
+                                        // 滑鼠離開時清除 hover
                                         iframeDoc.addEventListener('mouseleave', function() {
-                                            currentLineHighlight.style.opacity = '0';
-                                            lastLineNumber = null;
+                                            const hovered = iframeDoc.querySelector('.line-hover');
+                                            if (hovered) {
+                                                hovered.classList.remove('line-hover');
+                                            }
                                         });
-                                        
-                                        // 同步捲動
-                                        const scrollableElement = iframeDoc.querySelector('.left-panel') || 
-                                                                iframeDoc.documentElement || 
-                                                                iframeDoc.body;
-                                        
-                                        if (scrollableElement) {
-                                            scrollableElement.addEventListener('scroll', function() {
-                                                const scrollTop = this.scrollTop || 
-                                                                iframeWindow.pageYOffset || 
-                                                                iframeDoc.documentElement.scrollTop || 
-                                                                iframeDoc.body.scrollTop || 0;
-                                                
-                                                hoverContainer.style.transform = `translateY(-${scrollTop}px)`;
-                                            });
-                                        }
                                     };
                                              
                                     // 在所有事件設置完成後，設置hover效果
