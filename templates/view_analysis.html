@@ -1117,6 +1117,63 @@
             color: #ff6666;
             left: 2px;
         }
+
+        /* 全域選取樣式 - 統一左右視窗 */
+        ::selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        ::-moz-selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        /* 右側原始檔案的選取樣式 */
+        #rightContent ::selection,
+        #rightContentArea ::selection,
+        .content-line ::selection,
+        .content-cell ::selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        #rightContent ::-moz-selection,
+        #rightContentArea ::-moz-selection,
+        .content-line ::-moz-selection,
+        .content-cell ::-moz-selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        /* 左側分析報告的選取樣式（當不是 iframe 時） */
+        #leftContent ::selection,
+        #leftContentArea ::selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        #leftContent ::-moz-selection,
+        #leftContentArea ::-moz-selection {
+            background-color: rgba(78, 201, 176, 0.3);
+            color: inherit;
+        }
+
+        /* 確保行號不被選取 */
+        .line-numbers ::selection,
+        .line-number ::selection,
+        .analysis-line-number ::selection,
+        .line-number-cell ::selection {
+            background: none !important;
+        }
+
+        .line-numbers ::-moz-selection,
+        .line-number ::-moz-selection,
+        .analysis-line-number ::-moz-selection,
+        .line-number-cell ::-moz-selection {
+            background: none !important;
+        }
+
     </style>   
 </head>
 <body>
@@ -1445,6 +1502,25 @@
                                         overflow-wrap: break-word;
                                         max-width: 100%;
                                         background: transparent;
+                                    }
+
+                                    /* 選取樣式 */
+                                    ::selection {
+                                        background-color: rgba(78, 201, 176, 0.3);
+                                        color: inherit;
+                                    }
+                                    
+                                    ::-moz-selection {
+                                        background-color: rgba(78, 201, 176, 0.3);
+                                        color: inherit;
+                                    }
+                                    
+                                    /* 確保選取時文字保持可讀 */
+                                    .report-content ::selection,
+                                    .left-panel ::selection,
+                                    pre ::selection {
+                                        background-color: rgba(78, 201, 176, 0.3);
+                                        color: inherit;
                                     }
                                     
                                     .report-content,
@@ -3061,6 +3137,18 @@
                     }
                 }
                 
+                // Ctrl+A - 全選
+                if (e.ctrlKey && e.key === 'a') {
+                    e.preventDefault();
+                    
+                    const panel = window.currentFocusedPanel || 'left';
+                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+                    
+                    // 創建一個新的 context menu manager 實例方法調用
+                    contextMenuManager.currentPanel = panel;
+                    contextMenuManager.selectAll();
+                }
+
                 // F2 - 在當前行加書籤
                 if (e.key === 'F2') {
                     e.preventDefault();
@@ -4255,16 +4343,57 @@
             }
 
             selectAll() {
-                if (window.currentFocusedPanel) {
-                    const panel = document.getElementById(`${window.currentFocusedPanel}Content`);
-                    if (panel) {
+                const panel = this.currentPanel || window.currentFocusedPanel || 'left';
+                const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+                
+                if (panelType === 'analysis') {
+                    // 分析報告 - 選取 iframe 內的內容
+                    const iframe = document.querySelector(`#${panel}Content iframe`);
+                    if (iframe && iframe.contentWindow && iframe.contentDocument) {
+                        try {
+                            const iframeWindow = iframe.contentWindow;
+                            const iframeDoc = iframe.contentDocument;
+                            
+                            // 在 iframe 內建立選取範圍
+                            const selection = iframeWindow.getSelection();
+                            selection.removeAllRanges();
+                            
+                            // 找到主要內容區域
+                            const contentElement = iframeDoc.querySelector('.report-content') || 
+                                                iframeDoc.querySelector('.left-panel') ||
+                                                iframeDoc.querySelector('.analysis-content') ||
+                                                iframeDoc.querySelector('pre') ||
+                                                iframeDoc.body;
+                            
+                            if (contentElement) {
+                                const range = iframeDoc.createRange();
+                                range.selectNodeContents(contentElement);
+                                selection.addRange(range);
+                                
+                                // 讓 iframe 獲得焦點
+                                iframe.contentWindow.focus();
+                                
+                                updateStatus('已選取所有內容');
+                            }
+                        } catch (e) {
+                            console.error('無法在 iframe 內選取內容:', e);
+                            updateStatus('選取失敗');
+                        }
+                    }
+                } else {
+                    // 原始檔案 - 選取內容區域
+                    const contentArea = document.getElementById(`${panel}ContentArea`);
+                    if (contentArea) {
                         const selection = window.getSelection();
                         selection.removeAllRanges();
                         const range = document.createRange();
-                        range.selectNodeContents(panel);
+                        range.selectNodeContents(contentArea);
                         selection.addRange(range);
+                        
+                        updateStatus('已選取所有內容');
                     }
                 }
+                
                 this.hide();
             }
 
