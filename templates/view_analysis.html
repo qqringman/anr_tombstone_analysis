@@ -1174,6 +1174,32 @@
             background: none !important;
         }
 
+        /* 書籤導航動畫 - 加在其他樣式的最後面 */
+        .line-number.bookmark-flash,
+        .analysis-line-number.bookmark-flash {
+            animation: bookmarkFlash 0.6s ease-in-out;
+        }
+
+        @keyframes bookmarkFlash {
+            0% { 
+                background-color: transparent; 
+                transform: scale(1);
+            }
+            50% { 
+                background-color: #4ec9b0; 
+                transform: scale(1.05);
+            }
+            100% { 
+                background-color: transparent;
+                transform: scale(1);
+            }
+        }
+
+        /* 確保動畫時不影響其他元素 */
+        .line-numbers-container {
+            overflow: visible !important;
+        }
+
     </style>   
 </head>
 <body>
@@ -3655,6 +3681,7 @@
 
         // 在書籤間導航
         function navigateBookmarks() {
+
             // 取得當前焦點面板
             const currentPanel = window.currentFocusedPanel || 'left';
             
@@ -3778,18 +3805,29 @@
                 }
             }
             
-            // 閃爍效果
+            // 閃爍效果 - 使用 CSS 動畫
             if (lineElement) {
-                lineElement.style.transition = 'background-color 0.3s';
-                const originalBg = lineElement.style.backgroundColor;
-                lineElement.style.backgroundColor = '#4ec9b0';
-                setTimeout(() => {
-                    lineElement.style.backgroundColor = originalBg || '';
-                }, 500);
+                // 清除之前所有的動畫類
+                document.querySelectorAll('.bookmark-flash').forEach(el => {
+                    el.classList.remove('bookmark-flash');
+                });
+                
+                // 強制瀏覽器重新計算樣式（重要！）
+                void lineElement.offsetWidth;
+                
+                // 添加動畫類
+                lineElement.classList.add('bookmark-flash');
+                
+                // 動畫結束後自動移除類
+                lineElement.addEventListener('animationend', function handleAnimationEnd() {
+                    this.classList.remove('bookmark-flash');
+                    // 移除事件監聽器，避免記憶體洩漏
+                    this.removeEventListener('animationend', handleAnimationEnd);
+                });
             }
             
             updateStatus(`${panel === 'left' ? '左側' : '右側'}面板書籤 ${currentIndex + 1}/${panelBookmarks.length}: 第 ${line} 行`);
-        }        
+        }
 
         // 監聽面板的焦點切換
         document.getElementById('leftPanel').addEventListener('mouseenter', function() {
@@ -4444,79 +4482,91 @@
     <script>
         // 複製面板內容
         function copyPanelContent(panel) {
-            let textContent = '';
             const panelType = (panel === 'left') ? currentLeftType : currentRightType;
             
+            // 先執行全選
             if (panelType === 'analysis') {
-                // 嘗試從 iframe 中提取純文字
+                // 分析報告 - 選取 iframe 內的內容
                 const iframe = document.querySelector(`#${panel}Content iframe`);
-                if (iframe && iframe.contentDocument) {
+                if (iframe && iframe.contentWindow && iframe.contentDocument) {
                     try {
+                        const iframeWindow = iframe.contentWindow;
                         const iframeDoc = iframe.contentDocument;
-                        // 只提取報告內容，不包括UI元素
-                        const reportContent = iframeDoc.querySelector('.report-content') || 
+                        
+                        // 在 iframe 內建立選取範圍
+                        const selection = iframeWindow.getSelection();
+                        selection.removeAllRanges();
+                        
+                        // 找到主要內容區域
+                        const contentElement = iframeDoc.querySelector('.report-content') || 
                                             iframeDoc.querySelector('.left-panel') ||
                                             iframeDoc.querySelector('.analysis-content') ||
-                                            iframeDoc.querySelector('pre');
+                                            iframeDoc.querySelector('pre') ||
+                                            iframeDoc.body;
                         
-                        if (reportContent) {
-                            // 創建臨時元素來過濾內容
-                            const tempDiv = document.createElement('div');
-                            tempDiv.innerHTML = reportContent.innerHTML;
+                        if (contentElement) {
+                            const range = iframeDoc.createRange();
+                            range.selectNodeContents(contentElement);
+                            selection.addRange(range);
                             
-                            // 移除所有按鈕和UI元素
-                            tempDiv.querySelectorAll('button, .icon-btn, .panel-controls, .loading').forEach(el => {
-                                el.remove();
-                            });
+                            // 讓 iframe 獲得焦點
+                            iframe.contentWindow.focus();
                             
-                            textContent = tempDiv.innerText || tempDiv.textContent || '';
-                        } else {
-                            // 如果找不到特定元素，使用整個body但過濾掉UI
-                            textContent = iframeDoc.body.innerText || iframeDoc.body.textContent || '';
+                            // 延遲一下確保選取完成，然後執行複製
+                            setTimeout(() => {
+                                // 使用 iframe 內的 document 執行複製
+                                try {
+                                    const success = iframeDoc.execCommand('copy');
+                                    if (success) {
+                                        showPanelCopySuccess(panel);
+                                        // 清除選取
+                                        selection.removeAllRanges();
+                                    } else {
+                                        // 如果 execCommand 失敗，使用備用方法
+                                        const textContent = contentElement.innerText || contentElement.textContent || '';
+                                        fallbackPanelCopy(textContent, panel);
+                                    }
+                                } catch (e) {
+                                    // 備用方法：手動獲取文字
+                                    const textContent = contentElement.innerText || contentElement.textContent || '';
+                                    fallbackPanelCopy(textContent, panel);
+                                }
+                            }, 50);
                         }
                     } catch (e) {
-                        console.log('無法存取 iframe 內容:', e);
-                        // 使用備用方法
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = analysisContent;
-                        tempDiv.querySelectorAll('button, .icon-btn, .panel-controls, .loading').forEach(el => {
-                            el.remove();
-                        });
-                        textContent = tempDiv.innerText || tempDiv.textContent || '';
+                        console.error('無法存取 iframe 內容:', e);
+                        updateStatus('複製失敗');
                     }
-                } else {
-                    // 從原始HTML提取
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = analysisContent;
-                    tempDiv.querySelectorAll('button, .icon-btn, .panel-controls, .loading').forEach(el => {
-                        el.remove();
-                    });
-                    textContent = tempDiv.innerText || tempDiv.textContent || '';
                 }
             } else {
-                // 原始內容 - 只複製內容區域
-                const contentArea = document.querySelector(`#${panel}ContentArea`);
+                // 原始檔案 - 選取內容區域並複製
+                const contentArea = document.getElementById(`${panel}ContentArea`);
                 if (contentArea) {
-                    textContent = contentArea.innerText || contentArea.textContent || '';
-                } else {
-                    textContent = originalContent;
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    
+                    const range = document.createRange();
+                    range.selectNodeContents(contentArea);
+                    selection.addRange(range);
+                    
+                    // 延遲執行複製
+                    setTimeout(() => {
+                        try {
+                            const success = document.execCommand('copy');
+                            if (success) {
+                                showPanelCopySuccess(panel);
+                                // 清除選取
+                                selection.removeAllRanges();
+                            } else {
+                                const textContent = contentArea.innerText || contentArea.textContent || '';
+                                fallbackPanelCopy(textContent, panel);
+                            }
+                        } catch (e) {
+                            const textContent = contentArea.innerText || contentArea.textContent || '';
+                            fallbackPanelCopy(textContent, panel);
+                        }
+                    }, 50);
                 }
-            }
-            
-            if (!textContent) {
-                updateStatus('沒有內容可供複製');
-                return;
-            }
-            
-            // 使用 Clipboard API
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(textContent).then(() => {
-                    showPanelCopySuccess(panel);
-                }).catch(() => {
-                    fallbackPanelCopy(textContent, panel);
-                });
-            } else {
-                fallbackPanelCopy(textContent, panel);
             }
         }
 
@@ -4534,36 +4584,66 @@
                 iconElement.style.transform = 'scale(1.2)';
                 iconElement.style.transition = 'all 0.2s ease';
                 
-                updateStatus('內容已複製到剪貼簿');
+                updateStatus('已複製所有內容到剪貼簿');
                 
-                // 0.5秒後恢復原始圖標
+                // 1秒後恢復原始圖標
                 setTimeout(() => {
                     iconElement.textContent = originalIcon;
                     iconElement.style.color = '';
                     iconElement.style.transform = '';
-                }, 500);
+                }, 1000);
             } else {
-                updateStatus('內容已複製到剪貼簿');
+                updateStatus('已複製所有內容到剪貼簿');
             }
         }
 
         // 備用的面板複製方法
         function fallbackPanelCopy(text, panel) {
+            if (!text) {
+                updateStatus('沒有內容可供複製');
+                return;
+            }
+            
+            // 使用 Clipboard API 作為首選
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showPanelCopySuccess(panel);
+                }).catch(() => {
+                    // 如果 Clipboard API 失敗，使用傳統方法
+                    useTextareaCopy(text, panel);
+                });
+            } else {
+                // 使用傳統的 textarea 方法
+                useTextareaCopy(text, panel);
+            }
+        }
+
+        // 使用 textarea 的複製方法
+        function useTextareaCopy(text, panel) {
             const textarea = document.createElement('textarea');
             textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
+            textarea.style.left = '-9999px';
             document.body.appendChild(textarea);
-            textarea.select();
-            const success = document.execCommand('copy');
-            document.body.removeChild(textarea);
             
-            if (success) {
-                showPanelCopySuccess(panel);
-            } else {
-                updateStatus('複製失敗');
+            // 選取並複製
+            textarea.select();
+            textarea.setSelectionRange(0, text.length);
+            
+            try {
+                const success = document.execCommand('copy');
+                if (success) {
+                    showPanelCopySuccess(panel);
+                } else {
+                    updateStatus('複製失敗，請手動選取並複製');
+                }
+            } catch (e) {
+                updateStatus('複製失敗: ' + e.message);
             }
-        }
+            
+            document.body.removeChild(textarea);
+        }        
     </script>  
 </body>
 </html>
