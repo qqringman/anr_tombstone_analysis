@@ -2215,7 +2215,7 @@ HTML_TEMPLATE = r'''
                 document.getElementById('exportCsvBtn').disabled = false;
                 document.getElementById('exportHtmlBtn').style.display = 'block';
                 
-                let message = `分析完成！共掃描 ${data.total_files} 個檔案，找到 ${data.files_with_cmdline} 個包含 Cmdline 的檔案`;
+                let message = `分析完成！共掃描 ${data.total_files} 個檔案，找到 ${data.anr_subject_count} 個包含 ANR 的檔案，找到 ${data.files_with_cmdline - data.anr_subject_count} 個包含 Tombstone 的檔案`;
                 message += `<br>分析耗時: ${data.analysis_time} 秒`;
                 if (data.used_grep) {
                     message += '<span class="grep-badge">使用 grep 加速</span>';
@@ -2341,13 +2341,13 @@ HTML_TEMPLATE = r'''
                     <p>總掃描檔案數</p>
                 </div>
                 <div class="stat-card highlight">
-                    <h3>${data.files_with_cmdline}</h3>
-                    <p>包含 Cmdline</p>
-                </div>
-                <div class="stat-card">
                     <h3>${data.anr_subject_count || 0}</h3>
-                    <p>ANR Subject</p>
-                </div>                
+                    <p>ANR (Grep Subject)</p>
+                </div>
+                <div class="stat-card highlight">
+                    <h3>${data.files_with_cmdline - data.anr_subject_count || 0}</h3>
+                    <p>Tombstone (Grep Cmdline)</p>
+                </div>              
                 <div class="stat-card">
                     <h3>${uniqueProcesses}</h3>
                     <p>不同的程序</p>

@@ -60,6 +60,7 @@ class AndroidLogAnalyzer:
         self.cmdline_pattern = re.compile(r'(?:Cmd line|Cmdline):\s+(.+)', re.IGNORECASE)
         self.subject_pattern = re.compile(r'Subject:\s+(.+)')
         self.timestamp_pattern = re.compile(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})')
+        self.process_pattern = re.compile(r'Cmd line:\s+(.+)', re.IGNORECASE)
         self.use_grep = self.check_grep_availability()
         self.use_unzip = self.check_unzip_availability()
         
@@ -253,6 +254,7 @@ class AndroidLogAnalyzer:
     def grep_cmdline_files(self, folder_path: str) -> List[Tuple[str, str, int]]:
         """Use grep to find files containing 'Cmd line:', 'Cmdline:', or 'Subject:' and extract the content with line number"""
         results = []
+        seen_files = set()  # 用完整路徑判斷唯一性
         
         try:
             # 判斷是否為 ANR 資料夾
@@ -267,10 +269,10 @@ class AndroidLogAnalyzer:
             
             # Run grep in the target folder
             result = subprocess.run(cmd, 
-                                cwd=folder_path,
-                                capture_output=True, 
-                                text=True,
-                                timeout=30)
+                                  cwd=folder_path,
+                                  capture_output=True, 
+                                  text=True,
+                                  timeout=30)
             
             if result.returncode == 0 and result.stdout.strip():
                 # Parse grep output
@@ -279,9 +281,13 @@ class AndroidLogAnalyzer:
                         # Format: filename:linenumber:content
                         parts = line.split(':', 3)  # Split into max 4 parts
                         if len(parts) >= 4:
-                            filename = parts[0].lstrip('./')  # Remove ./ prefix if present
+                            relative_filename = parts[0].lstrip('./')  # 例如 foo.txt 或 subdir/foo.txt
+                            filepath = os.path.normpath(os.path.join(folder_path, relative_filename))
+                            if filepath in seen_files:
+                                continue  # 只抓第一次
+                            seen_files.add(filepath)
+                            
                             line_number = int(parts[1])
-                            filepath = os.path.join(folder_path, filename)
                             content = parts[3] if len(parts) > 3 else parts[2]
                             
                             if is_anr_folder:
@@ -300,7 +306,7 @@ class AndroidLogAnalyzer:
                                 if cmdline_match:
                                     cmdline = cmdline_match.group(1).strip()
                                     results.append((filepath, cmdline, line_number))
-                
+            
             print(f"grep found {len(results)} files in {folder_path}")
             
         except subprocess.TimeoutExpired:
@@ -341,10 +347,16 @@ class AndroidLogAnalyzer:
                 # Tombstone: 從 Cmdline 提取 process name
                 info['process'] = self.extract_process_name(cmdline)
         
+        # === 新增：一開始就檢查是否需要搜尋 process ===
+        need_process_search = is_anr and cmdline and not info['process']
+        
         try:
             # Read file to get timestamp and line number if not provided
             with open(file_path, 'r', errors='ignore') as f:
                 lines = f.readlines()
+                
+                # 新增：用於 ANR 檔案的特殊處理
+                found_subject = False
                 
                 for line_no, line in enumerate(lines, 1):
                     # Extract timestamp
@@ -362,6 +374,10 @@ class AndroidLogAnalyzer:
                                 info['cmdline'] = subject_match.group(1).strip()
                                 info['line_number'] = line_no
                                 info['process'] = self.extract_process_name_from_subject(info['cmdline'])
+                                found_subject = True
+                                # 如果從 Subject 提取不到 process，標記需要搜尋
+                                if not info['process']:
+                                    need_process_search = True
                         else:
                             # Tombstone: 搜尋 Cmdline
                             cmdline_match = self.cmdline_pattern.search(line)
@@ -380,6 +396,14 @@ class AndroidLogAnalyzer:
                             cmdline_match = self.cmdline_pattern.search(line)
                             if cmdline_match and cmdline_match.group(1).strip() == info['cmdline']:
                                 info['line_number'] = line_no
+                    
+                    # 新增：對於 ANR，如果需要搜尋 process
+                    if is_anr and need_process_search and not info['process']:
+                        process_match = self.process_pattern.search(line)
+                        if process_match:
+                            info['process'] = process_match.group(1)
+                            info['line_number'] = line_no
+                            need_process_search = False  # 找到了，停止搜尋
             
             # Get file modification time if timestamp not found
             if not info['timestamp']:
@@ -417,6 +441,10 @@ class AndroidLogAnalyzer:
             with open(file_path, 'r', errors='ignore') as f:
                 lines = f.readlines()
                 
+                # 新增：用於 ANR 檔案的特殊處理
+                found_subject = False
+                need_process_search = False
+                
                 for line_no, line in enumerate(lines, 1):
                     # Extract command line/subject with line number
                     if not info['cmdline']:
@@ -427,6 +455,10 @@ class AndroidLogAnalyzer:
                                 info['cmdline'] = subject_match.group(1).strip()
                                 info['line_number'] = line_no
                                 info['process'] = self.extract_process_name_from_subject(info['cmdline'])
+                                found_subject = True
+                                # 如果從 Subject 提取不到 process，標記需要搜尋
+                                if not info['process']:
+                                    need_process_search = True
                         else:
                             # Tombstone: 搜尋 Cmdline
                             cmdline_match = self.cmdline_pattern.search(line)
@@ -434,6 +466,14 @@ class AndroidLogAnalyzer:
                                 info['cmdline'] = cmdline_match.group(1).strip()
                                 info['line_number'] = line_no
                                 info['process'] = self.extract_process_name(info['cmdline'])
+                    
+                    # 新增：對於 ANR，如果需要搜尋 process
+                    elif is_anr and need_process_search and not info['process']:
+                        process_match = self.process_pattern.search(line)
+                        if process_match:
+                            info['process'] = process_match.group(1)
+                            info['line_number'] = line_no
+                            need_process_search = False  # 找到了，停止搜尋
                     
                     # Extract timestamp
                     if not info['timestamp']:
