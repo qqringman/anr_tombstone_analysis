@@ -1211,7 +1211,111 @@ HTML_TEMPLATE = r'''
         .nav-toggle-btn {
             bottom: 150px;  /* 再往上移 */
         }
-    }    
+    }
+
+    /* Tooltip styles */
+    .folder-path-cell {
+        font-size: 0.9em;
+        color: #999;
+        font-family: monospace;
+        cursor: help;
+        position: relative;
+        display: inline-block;  /* 加入這行 */
+        line-height: 1.5;       /* 加入這行 */
+        vertical-align: middle; /* 加入這行 */
+    }
+
+    /* Tooltip 容器 */
+    .tooltip-container {
+        position: relative;
+        display: table-cell;    /* 改為 table-cell */
+        cursor: help;
+        vertical-align: middle; /* 加入這行 */
+    }
+
+    .tooltip-container:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+        animation: fadeIn 0.3s ease-in-out;
+    }
+
+    .tooltip-text {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        bottom: 125%;  /* 預設在上方 */
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.95);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        z-index: 1000;
+        transition: opacity 0.3s, visibility 0.3s;
+        min-width: 300px;
+        max-width: 800px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -8px;
+        border-width: 8px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.95) transparent transparent transparent;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    }
+
+    /* 針對前幾行，將 tooltip 顯示在下方 */
+    tr:nth-child(-n+3) .tooltip-text {
+        bottom: auto;
+        top: 125%;
+    }
+
+    /* 調整箭頭方向 - 預設向下 */
+    .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -8px;
+        border-width: 8px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.95) transparent transparent transparent;
+    }
+
+    /* 前幾行的箭頭向上 */
+    tr:nth-child(-n+3) .tooltip-text::after {
+        top: auto;
+        bottom: 100%;
+        border-color: transparent transparent rgba(0, 0, 0, 0.95) transparent;
+    }
+
+    /* 當 tooltip 在下方時的箭頭樣式 */
+    .tooltip-text.tooltip-below::after {
+        top: auto;
+        bottom: 100%;
+        border-color: transparent transparent rgba(0, 0, 0, 0.95) transparent;
+    }
+    
     </style>      
 </head>
 <body>
@@ -1382,6 +1486,9 @@ HTML_TEMPLATE = r'''
                                         <th class="sortable" onclick="sortProcessSummaryTable('process')">
                                             程序 <span class="sort-indicator" data-column="process"></span>
                                         </th>
+                                        <th class="sortable" onclick="sortProcessSummaryTable('set')">
+                                            問題 set <span class="sort-indicator" data-column="set"></span>
+                                        </th>                                        
                                         <th style="width: 100px; text-align: center;" class="sortable" onclick="sortProcessSummaryTable('count')">
                                             次數 <span class="sort-indicator" data-column="count">▼</span>
                                         </th>
@@ -1438,6 +1545,9 @@ HTML_TEMPLATE = r'''
                                         </th>
                                         <th class="sortable" onclick="sortSummaryTable('process')">
                                             程序 <span class="sort-indicator" data-column="process"></span>
+                                        </th>
+                                        <th class="sortable" onclick="sortSummaryTable('set')">
+                                            問題 set <span class="sort-indicator" data-column="set"></span>
                                         </th>
                                         <th style="width: 100px; text-align: center;" class="sortable" onclick="sortSummaryTable('count')">
                                             次數 <span class="sort-indicator" data-column="count">▼</span>
@@ -1496,6 +1606,9 @@ HTML_TEMPLATE = r'''
                                         <th class="sortable" onclick="sortFilesTable('processes')">
                                             相關程序 <span class="sort-indicator" data-column="processes"></span>
                                         </th>
+                                        <th class="sortable" onclick="sortFilesTable('set')">
+                                            問題 set <span class="sort-indicator" data-column="set"></span>
+                                        </th>                                  
                                         <th style="width: 200px;" class="sortable" onclick="sortFilesTable('folder_path')">
                                             資料夾路徑 <span class="sort-indicator" data-column="folder_path"></span>
                                         </th>
@@ -1565,6 +1678,9 @@ HTML_TEMPLATE = r'''
                                         <th style="width: 80px;" class="sortable" onclick="sortLogsTable('line_number')">
                                             行號 <span class="sort-indicator" data-column="line_number"></span>
                                         </th>
+                                        <th class="sortable" onclick="sortLogsTable('set')">
+                                            問題 set <span class="sort-indicator" data-column="set"></span>
+                                        </th>                                        
                                         <th style="width: 200px;" class="sortable" onclick="sortLogsTable('folder_path')">
                                             資料夾路徑 <span class="sort-indicator" data-column="folder_path"></span>
                                         </th>
@@ -1842,7 +1958,35 @@ HTML_TEMPLATE = r'''
                     }
                 }
             });
-            
+
+            const tooltipContainers = document.querySelectorAll('.tooltip-container');
+            tooltipContainers.forEach(container => {
+                container.addEventListener('mouseenter', function(e) {
+                    const tooltip = this.querySelector('.tooltip-text');
+                    if (!tooltip) return;
+                    
+                    const rect = this.getBoundingClientRect();
+                    const tooltipHeight = 150; // 預估的 tooltip 高度
+                    
+                    // 如果上方空間不足，改為顯示在下方
+                    if (rect.top < tooltipHeight) {
+                        tooltip.style.bottom = 'auto';
+                        tooltip.style.top = '125%';
+                        
+                        // 調整箭頭
+                        const arrow = window.getComputedStyle(tooltip, '::after');
+                        if (arrow) {
+                            tooltip.classList.add('tooltip-below');
+                        }
+                    } else {
+                        // 恢復預設（顯示在上方）
+                        tooltip.style.bottom = '125%';
+                        tooltip.style.top = 'auto';
+                        tooltip.classList.remove('tooltip-below');
+                    }
+                });
+            });
+
             // 為右下角浮動按鈕添加 tooltip
             const globalToggleBtn = document.getElementById('globalToggleBtn');
             const backToTopBtn = document.getElementById('backToTop');
@@ -2415,7 +2559,7 @@ HTML_TEMPLATE = r'''
             
             if (pageData.length === 0) {
                 const row = tbody.insertRow();
-                row.innerHTML = `<td colspan="3" style="text-align: center; padding: 20px; color: #666;">
+                row.innerHTML = `<td colspan="4" style="text-align: center; padding: 20px; color: #666;">
                     ${filteredProcessSummary.length === 0 && document.getElementById('processSummarySearchInput').value ? 
                       '沒有找到符合搜尋條件的資料' : '沒有資料'}
                 </td>`;
@@ -2426,10 +2570,15 @@ HTML_TEMPLATE = r'''
                 pageData.forEach((item, index) => {
                     const row = tbody.insertRow();
                     const globalIndex = startIndex + index + 1;
-                    
+
+                    // 處理問題 sets 顯示
+                    const problemSetsHtml = item.problem_sets && item.problem_sets.length > 0 ? 
+                        item.problem_sets.join(', ') : '-';
+
                     row.innerHTML = `
                         <td class="rank-number" style="text-align: center;">${globalIndex}</td>
                         <td class="process-name">${highlightText(item.process, searchTerm, useRegex)}</td>
+                        <td style="color: #667eea; font-weight: 600;">${highlightText(problemSetsHtml, searchTerm, useRegex)}</td>
                         <td style="text-align: center; font-weight: bold; color: #e53e3e;">${item.count}</td>
                     `;
                 });
@@ -2467,6 +2616,10 @@ HTML_TEMPLATE = r'''
                         aVal = a.count;
                         bVal = b.count;
                         break;
+                    case 'set':
+                        aVal = a.set;
+                        bVal = b.set;
+                        break;                        
                 }
                 
                 if (typeof aVal === 'string') {
@@ -2516,12 +2669,20 @@ HTML_TEMPLATE = r'''
                         if (useRegex) {
                             const regex = new RegExp(searchTerm, 'i');
                             searchFunction = item => 
-                                regex.test(item.type) || regex.test(item.process);
+                                regex.test(item.type) || regex.test(item.process) ||
+                                (item.problem_sets && (
+                                    regex.test(item.problem_sets.join(', ')) ||
+                                    item.problem_sets.some(ps => regex.test(ps))
+                                ));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = item => 
                                 item.type.toLowerCase().includes(lowerSearchTerm) ||
-                                item.process.toLowerCase().includes(lowerSearchTerm);
+                                item.process.toLowerCase().includes(lowerSearchTerm) ||
+                                (item.problem_sets && (
+                                    item.problem_sets.join(', ').toLowerCase().includes(lowerSearchTerm) ||
+                                    item.problem_sets.some(ps => ps.toLowerCase().includes(lowerSearchTerm))
+                                ));
                         }
                         
                         filteredSummary = allSummary.filter(searchFunction);
@@ -2763,6 +2924,10 @@ HTML_TEMPLATE = r'''
                         aVal = a.count;
                         bVal = b.count;
                         break;
+                    case 'set':
+                        aVal = a.set;
+                        bVal = b.set;
+                        break;                        
                 }
                 
                 if (typeof aVal === 'string') {
@@ -2867,6 +3032,10 @@ HTML_TEMPLATE = r'''
                         aVal = a.timestamp || '';
                         bVal = b.timestamp || '';
                         break;
+                    case 'set':
+                        aVal = a.set || 0;
+                        bVal = b.set || 0;
+                        break;                        
                 }
                 
                 if (typeof aVal === 'string') {
@@ -2924,6 +3093,10 @@ HTML_TEMPLATE = r'''
                         aVal = a.timestamp || '';
                         bVal = b.timestamp || '';
                         break;
+                    case 'set':
+                        aVal = a.set || '';
+                        bVal = b.set || '';
+                        break;                        
                 }
                 
                 if (typeof aVal === 'string') {
@@ -2963,7 +3136,7 @@ HTML_TEMPLATE = r'''
             if (pageData.length === 0) {
                 // Show no data message
                 const row = tbody.insertRow();
-                row.innerHTML = `<td colspan="4" style="text-align: center; padding: 20px; color: #666;">
+                row.innerHTML = `<td colspan="5" style="text-align: center; padding: 20px; color: #666;">
                     ${filteredSummary.length === 0 && document.getElementById('summarySearchInput').value ? 
                       '沒有找到符合搜尋條件的資料' : '沒有資料'}
                 </td>`;
@@ -2973,11 +3146,16 @@ HTML_TEMPLATE = r'''
                     const globalIndex = startIndex + index + 1;
                     const searchTerm = document.getElementById('summarySearchInput').value;
                     const useRegex = document.getElementById('summaryRegexToggle').checked;
-                    
+
+                    // 處理問題 sets 顯示
+                    const problemSetsHtml = item.problem_sets && item.problem_sets.length > 0 ? 
+                        item.problem_sets.join(', ') : '-';
+
                     row.innerHTML = `
                         <td class="rank-number" style="text-align: center;">${globalIndex}</td>
                         <td>${highlightText(item.type, searchTerm, useRegex)}</td>
                         <td class="process-name">${highlightText(item.process, searchTerm, useRegex)}</td>
+                        <td style="color: #667eea; font-weight: 600;">${highlightText(problemSetsHtml, searchTerm, useRegex)}</td>
                         <td style="text-align: center; font-weight: bold; color: #e53e3e;">${item.count}</td>
                     `;
                 });
@@ -3013,7 +3191,7 @@ HTML_TEMPLATE = r'''
             if (pageData.length === 0) {
                 // Show no data message
                 const row = tbody.insertRow();
-                row.innerHTML = `<td colspan="7" style="text-align: center; padding: 20px; color: #666;">
+                row.innerHTML = `<td colspan="8" style="text-align: center; padding: 20px; color: #666;">
                     ${filteredLogs.length === 0 && document.getElementById('logsSearchInput').value ? 
                       '沒有找到符合搜尋條件的資料' : '沒有資料'}
                 </td>`;
@@ -3059,12 +3237,18 @@ HTML_TEMPLATE = r'''
                     // Folder path display
                     const folderPath = log.folder_path || '-';
                     
+                    const problemSet = log.problem_set || '-';
+
                     row.innerHTML = `
                         <td style="text-align: center; color: #666;">${globalIndex}</td>
                         <td>${highlightText(log.type, searchTerm, useRegex)}</td>
                         <td class="process-name">${highlightText(processDisplay, searchTerm, useRegex)}</td>
                         <td style="text-align: center; font-weight: bold; color: #667eea;">${lineNumber}</td>
-                        <td style="color: #999; font-size: 0.9em;">${highlightText(folderPath, searchTerm, useRegex)}</td>
+                        <td style="text-align: center; color: #667eea; font-weight: 600;">${highlightText(problemSet, searchTerm, useRegex)}</td>
+                        <td class="tooltip-container">
+                            <span class="folder-path-cell">${highlightText(folderPath, searchTerm, useRegex)}</span>
+                            <span class="tooltip-text">完整路徑：<br>${escapeHtml(log.file || '')}</span>
+                        </td>
                         <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(log.filename, searchTerm, useRegex)}</a>${analyzeReportLink}</td>
                         <td>${log.timestamp || '-'}</td>
                     `;
@@ -3128,7 +3312,7 @@ HTML_TEMPLATE = r'''
             if (pageData.length === 0) {
                 // Show no data message
                 const row = tbody.insertRow();
-                row.innerHTML = `<td colspan="7" style="text-align: center; padding: 20px; color: #666;">
+                row.innerHTML = `<td colspan="8" style="text-align: center; padding: 20px; color: #666;">
                     ${filteredFiles.length === 0 && document.getElementById('filesSearchInput').value ? 
                       '沒有找到符合搜尋條件的資料' : '沒有資料'}
                 </td>`;
@@ -3143,7 +3327,8 @@ HTML_TEMPLATE = r'''
                     // 直接使用 file.filepath
                     const fileLink = `/view-file?path=${encodeURIComponent(file.filepath || '')}`;
                     const folderPath = file.folder_path || '-';
-                    
+                    const problemSet = file.problem_set || '-';
+
                     // === 新增：建立分析報告連結 ===
                     let analyzeReportLink = '';
                     if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {
@@ -3186,7 +3371,11 @@ HTML_TEMPLATE = r'''
                         <td style="text-align: center; color: #666;">${globalIndex}</td>
                         <td>${highlightText(file.type, searchTerm, useRegex)}</td>
                         <td class="process-name">${processesHtml}</td>
-                        <td style="color: #999; font-size: 0.9em;">${highlightText(folderPath, searchTerm, useRegex)}</td>
+                        <td style="text-align: center; color: #667eea; font-weight: 600;">${highlightText(problemSet, searchTerm, useRegex)}</td>
+                        <td class="tooltip-container">
+                            <span class="folder-path-cell">${highlightText(folderPath, searchTerm, useRegex)}</span>
+                            <span class="tooltip-text">完整路徑：<br>${escapeHtml(file.full_path || file.filepath || '')}</span>
+                        </td>
                         <td><a href="${fileLink}" target="_blank" class="file-link">${highlightText(file.filename, searchTerm, useRegex)}</a>${analyzeReportLink}</td>
                         <td style="text-align: center; font-weight: bold; color: #e53e3e;">${file.count}</td>
                         <td>${timestamp}</td>
@@ -3817,7 +4006,15 @@ def analyze():
             print(vp_analyze_error)
             import traceback
             traceback.print_exc()
+
+        # 在每個 log 中添加完整路徑
+        for log in results['logs']:
+            log['full_path'] = log.get('file', '')
         
+        # 在每個 file_stat 中添加完整路徑  
+        for file_stat in results['file_statistics']:
+            file_stat['full_path'] = file_stat.get('filepath', '')
+
         # 將分析輸出路徑加入結果中
         results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
         results['vp_analyze_success'] = vp_analyze_success

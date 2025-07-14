@@ -315,7 +315,21 @@ class AndroidLogAnalyzer:
             print(f"grep error in {folder_path}: {e}")
         
         return results
-    
+
+    def extract_problem_set_from_path(self, folder_path: str) -> str:
+        """從資料夾路徑中提取問題 set"""
+        if not folder_path:
+            return '-'
+        
+        path_parts = folder_path.split('/')
+        if path_parts and path_parts[0]:
+            # 檢查第一部分是否符合格式（如 7L09, 7L52）
+            first_part = path_parts[0]
+            if len(first_part) == 4 and first_part[0].isdigit() and first_part[1].isalpha():
+                return first_part
+        
+        return '-'
+        
     def extract_full_info_from_file(self, file_path: str, cmdline: str = None, line_number: int = None) -> Dict:
         """Extract full information from a file (timestamp, etc.)"""
         is_anr = 'anr' in file_path.lower()
@@ -329,7 +343,8 @@ class AndroidLogAnalyzer:
             'timestamp': None,
             'filesize': 0,
             'line_number': line_number,
-            'folder_path': self.shorten_folder_path(os.path.dirname(file_path))
+            'folder_path': self.shorten_folder_path(os.path.dirname(file_path)),
+            'problem_set': self.extract_problem_set_from_file_path(file_path, self.base_path)  # 新的方法
         }
         
         # Get file size
@@ -428,7 +443,8 @@ class AndroidLogAnalyzer:
             'timestamp': None,
             'filesize': 0,
             'line_number': None,
-            'folder_path': self.shorten_folder_path(os.path.dirname(file_path))
+            'folder_path': self.shorten_folder_path(os.path.dirname(file_path)),
+            'problem_set': self.extract_problem_set_from_file_path(file_path, self.base_path)  # 新的方法
         }
         
         # Get file size
@@ -494,7 +510,10 @@ class AndroidLogAnalyzer:
     def analyze_logs(self, path: str) -> Dict:
         """Analyze all files in anr/ and tombstones/ folders"""
         start_time = time.time()
-            
+        
+        # 保存基礎路徑
+        self.base_path = path
+
         # First, extract any zip files
         extracted_paths = self.extract_and_process_zip_files(path)
         
@@ -648,24 +667,27 @@ class AndroidLogAnalyzer:
     
     def generate_file_statistics(self, logs: List[Dict]) -> List[Dict]:
         """Generate statistics by file"""
-        # 使用檔案路徑作為唯一識別，而不只是檔案名稱
         file_stats = defaultdict(lambda: {
             'type': '',
             'filesize': 0,
-            'processes_count': defaultdict(int),  # 改為記錄每個程序的次數
+            'processes_count': defaultdict(int),
             'timestamps': [],
             'folder_path': '',
-            'filepath': ''  # 新增完整路徑
+            'filepath': '',
+            'problem_set': ''  # 新增
         })
         
         for log in logs:
-            filepath = log['file']  # 使用完整路徑作為 key
+            filepath = log['file']
             file_stats[filepath]['type'] = log['type']
             file_stats[filepath]['filesize'] = log['filesize']
             file_stats[filepath]['folder_path'] = log.get('folder_path', '')
             file_stats[filepath]['filepath'] = filepath
             
-            # 統計每個程序在此檔案中的出現次數
+            # 使用第一個 log 的 problem_set
+            if not file_stats[filepath]['problem_set'] and log.get('problem_set'):
+                file_stats[filepath]['problem_set'] = log.get('problem_set', '-')
+            
             if log['process']:
                 file_stats[filepath]['processes_count'][log['process']] += 1
             
@@ -675,29 +697,57 @@ class AndroidLogAnalyzer:
         # Convert to list
         result = []
         for filepath, stats in file_stats.items():
-            # 格式化程序列表：程序名稱 (次數)
             process_list = []
             for process, count in sorted(stats['processes_count'].items()):
                 process_list.append(f"{process} ({count})")
             
-            # Get the earliest timestamp for this file
             timestamps = sorted(stats['timestamps']) if stats['timestamps'] else []
             
             result.append({
                 'filename': os.path.basename(filepath),
                 'filepath': filepath,
                 'type': stats['type'],
-                'count': sum(stats['processes_count'].values()),  # 總次數
+                'count': sum(stats['processes_count'].values()),
                 'filesize': stats['filesize'],
-                'processes': process_list,  # 改為格式化的列表
+                'processes': process_list,
                 'timestamp': timestamps[0] if timestamps else '-',
-                'folder_path': stats['folder_path']
+                'folder_path': stats['folder_path'],
+                'problem_set': stats['problem_set']  # 新增
             })
         
         # Sort by count descending
         result.sort(key=lambda x: x['count'], reverse=True)
         
         return result
+
+    def extract_problem_set_from_file_path(self, file_path: str, base_path: str) -> str:
+        """從檔案完整路徑中基於基礎路徑提取問題 set（第一層資料夾）"""
+        if not file_path or not base_path:
+            return '-'
+        
+        # 正規化路徑
+        file_path = os.path.normpath(file_path)
+        base_path = os.path.normpath(base_path)
+        
+        # 確保檔案路徑包含基礎路徑
+        if not file_path.startswith(base_path):
+            return '-'
+        
+        # 取得相對路徑
+        relative_path = os.path.relpath(file_path, base_path)
+        
+        # 分割路徑並取得第一層
+        path_parts = relative_path.split(os.sep)
+        if path_parts and path_parts[0] and path_parts[0] != '.':
+            # 檢查第一部分是否符合格式（如 7L09, 7L52）
+            first_part = path_parts[0]
+            if len(first_part) >= 4 and first_part[0].isdigit() and first_part[1].isalpha():
+                return first_part
+            # 即使不符合格式，也返回第一層資料夾名稱
+            return first_part
+        
+        return '-'
+    
     
     def generate_statistics(self, logs: List[Dict]) -> Dict:
         """Generate statistics from parsed logs"""
@@ -707,6 +757,9 @@ class AndroidLogAnalyzer:
         daily_count = defaultdict(int)
         hourly_count = defaultdict(int)
         folder_count = defaultdict(int)
+        
+        # 新增：用於追蹤每個 type+process 組合出現在哪些問題 set
+        type_process_sets = defaultdict(set)
             
         # 新增：按類型分開統計
         process_by_type = {
@@ -732,23 +785,17 @@ class AndroidLogAnalyzer:
             
             log_type = log['type']  # ANR or Tombstone
             
-            # Count by process
-            if log['process']:
-                process_count[log['process']] += 1
-                # 按類型分開統計
-                process_by_type[log_type][log['process']] += 1
-            
-            # Count by full cmdline
-            if log['cmdline']:
-                cmdline_count[log['cmdline']] += 1
-            
-            # Count by type
-            type_count[log_type] += 1
+            # 使用已經存在的 problem_set，不需要再次提取
+            problem_set = log.get('problem_set', '-')
             
             # Count by type + process combination
             if log['process']:
                 key = f"{log_type}|{log['process']}"
                 type_process_count[key] += 1
+                
+                # 記錄問題 set
+                if problem_set and problem_set != '-':
+                    type_process_sets[key].add(problem_set)
             
             # Count by folder
             folder_path = os.path.dirname(log['file'])
@@ -775,6 +822,7 @@ class AndroidLogAnalyzer:
             print(f"  - {proc}: {process_count[proc]} occurrences")
         if len(unique_processes) > 20:
             print(f"  ... and {len(unique_processes) - 20} more")
+        
         # Debug: Check if by_process and type_process_summary are consistent
         print("\n=== DEBUG: Checking data consistency ===")
         # Sum up counts from type_process_summary by process
@@ -796,10 +844,14 @@ class AndroidLogAnalyzer:
         type_process_summary = []
         for key, count in sorted(type_process_count.items(), key=lambda x: x[1], reverse=True):
             type_name, process_name = key.split('|')
+            # 獲取這個組合出現的問題 sets
+            problem_sets = sorted(list(type_process_sets.get(key, [])))
+            
             type_process_summary.append({
                 'type': type_name,
                 'process': process_name,
-                'count': count
+                'count': count,
+                'problem_sets': problem_sets  # 新增問題 sets
             })
         
         return {
