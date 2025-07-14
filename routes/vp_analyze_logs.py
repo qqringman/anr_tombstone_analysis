@@ -5328,6 +5328,23 @@ class LogAnalyzerSystem:
         print(json.dumps(index_data, indent=2, ensure_ascii=False)[:1000])
         print("...")
         
+        # 統計實際的 HTML 檔案
+        anr_html_count = 0
+        tombstone_html_count = 0
+        
+        for root, dirs, files in os.walk(self.output_folder):
+            for file in files:
+                if file.endswith('.analyzed.html'):
+                    # rel_path = os.path.relpath(root, self.output_folder).lower()
+                    if 'anr' in file:
+                        anr_html_count += 1
+                    elif 'tombstone' in file:
+                        tombstone_html_count += 1
+        
+        # 更新統計數據
+        self.stats['anr_count'] = anr_html_count
+        self.stats['tombstone_count'] = tombstone_html_count
+        
         html_content = self._generate_html_index(index_data)
         
         index_file = os.path.join(self.output_folder, 'index.html')
@@ -5854,14 +5871,30 @@ class LogAnalyzerSystem:
         print("✅ 分析完成！")
         print("=" * 60)
         
+        # 統計實際生成的 HTML 檔案
+        anr_html_count = 0
+        tombstone_html_count = 0
+        
+        for root, dirs, files in os.walk(self.output_folder):
+            for file in files:
+                if file.endswith('.analyzed.html'):
+                    # 根據路徑判斷是 ANR 還是 Tombstone
+                    rel_path = os.path.relpath(root, self.output_folder).lower()
+                    if 'anr' in rel_path:
+                        anr_html_count += 1
+                    elif 'tombstone' in rel_path:
+                        tombstone_html_count += 1
+        
         print(f"\n📊 分析統計:")
-        print(f"  • ANR 檔案: {self.stats['anr_count']} 個")
-        print(f"  • Tombstone 檔案: {self.stats['tombstone_count']} 個")
+        print(f"  • ANR HTML 報告: {anr_html_count} 個")
+        print(f"  • Tombstone HTML 報告: {tombstone_html_count} 個")
+        print(f"  • 總 HTML 報告: {anr_html_count + tombstone_html_count} 個")
         print(f"  • 錯誤數量: {self.stats['error_count']} 個")
         print(f"  • 總執行時間: {self.stats['total_time']:.2f} 秒")
         
-        if self.stats['anr_count'] + self.stats['tombstone_count'] > 0:
-            avg_time = self.stats['total_time'] / (self.stats['anr_count'] + self.stats['tombstone_count'])
+        total_html = anr_html_count + tombstone_html_count
+        if total_html > 0:
+            avg_time = self.stats['total_time'] / total_html
             print(f"  • 平均處理時間: {avg_time:.3f} 秒/檔案")
         
         print(f"\n🎯 輸出目錄: {self.output_folder}")
