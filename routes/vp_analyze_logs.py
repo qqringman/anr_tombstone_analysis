@@ -4888,6 +4888,17 @@ class LogAnalyzerSystem:
                         continue
 
                     file_path = os.path.join(root, filename)
+
+                    # 檢查檔案大小，排除 0KB 的檔案
+                    try:
+                        file_size = os.path.getsize(file_path)
+                        if file_size == 0:
+                            print(f"  跳過空檔案 (0KB): {filename}")
+                            continue
+                    except OSError as e:
+                        print(f"  無法讀取檔案大小: {filename} - {str(e)}")
+                        continue
+
                     file_type = "anr" if base_dir == "anr" else "tombstone"
                     
                     files.append({
