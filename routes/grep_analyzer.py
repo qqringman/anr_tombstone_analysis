@@ -228,6 +228,9 @@ class AndroidLogAnalyzer:
         
         # Walk through all directories recursively
         for root, dirs, files in os.walk(base_path):
+            # 排除隱藏資料夾
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+
             for dir_name in dirs:
                 dir_lower = dir_name.lower()
                 full_path = os.path.join(root, dir_name)

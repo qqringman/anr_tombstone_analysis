@@ -4874,6 +4874,9 @@ class LogAnalyzerSystem:
         files = []
         
         for root, dirs, filenames in os.walk(self.input_folder):
+            # 過濾掉隱藏資料夾（以 . 開頭的資料夾）
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            
             base_dir = os.path.basename(root).lower()
             
             if base_dir in ["anr", "tombstones", "tombstone"]:
@@ -4881,7 +4884,9 @@ class LogAnalyzerSystem:
                     # 跳過特定檔案
                     if filename.endswith('.pb') or filename.endswith('.txt.analyzed'):
                         continue
-                    
+                    if base_dir == "anr" and not filename.lower().startswith('anr'):
+                        continue
+
                     file_path = os.path.join(root, filename)
                     file_type = "anr" if base_dir == "anr" else "tombstone"
                     
@@ -5335,10 +5340,10 @@ class LogAnalyzerSystem:
         for root, dirs, files in os.walk(self.output_folder):
             for file in files:
                 if file.endswith('.analyzed.html'):
-                    # rel_path = os.path.relpath(root, self.output_folder).lower()
-                    if 'anr' in file:
+                    rel_path = os.path.relpath(root, self.output_folder).lower()
+                    if 'anr' in rel_path:
                         anr_html_count += 1
-                    elif 'tombstone' in file:
+                    elif 'tombstone' in rel_path:
                         tombstone_html_count += 1
         
         # 更新統計數據
