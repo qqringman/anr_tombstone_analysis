@@ -1959,8 +1959,7 @@
                                             }
                                             
                                             // 調試輸出
-                                            console.log('Scroll:', currentScrollTop, 'MouseY:', e.clientY, 'MouseInDoc:', mouseYInDocument, 'Target:', targetLine);
-                                            
+                                            //console.log('Scroll:', currentScrollTop, 'MouseY:', e.clientY, 'MouseInDoc:', mouseYInDocument, 'Target:', targetLine);
                                             if (targetLine && targetLine !== window.currentFocusedLine) {
                                                 // 更新行號高亮
                                                 const lineNumbers = document.getElementById(`${panel}LineNumbers`);
@@ -1971,7 +1970,7 @@
                                                         }
                                                     });
                                                     
-                                                    const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${targetLine}"]`);
+                                                    const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${targetLine-1}"]`);
                                                     if (lineElement && !lineElement.classList.contains('bookmarked')) {
                                                         lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.3)';
                                                         lineElement.style.color = 'inherit';
@@ -1984,7 +1983,7 @@
                                                 });
                                                 
                                                 // 高亮對應的內容行
-                                                const targetLineData = lineData[targetLine - 1];
+                                                const targetLineData = lineData[targetLine -1];
                                                 if (targetLineData) {
                                                     // 查找在當前視窗中可見的元素
                                                     const elements = iframeDoc.body.getElementsByTagName('*');
