@@ -2462,17 +2462,31 @@ HTML_TEMPLATE = r'''
         
         function updateResults(data) {
             // 生成程序統計（不分類型）
-            const processOnlyCount = {};
+            const processOnlyData = {};
             data.statistics.type_process_summary.forEach(item => {
-                if (!processOnlyCount[item.process]) {
-                    processOnlyCount[item.process] = 0;
+                if (!processOnlyData[item.process]) {
+                    processOnlyData[item.process] = {
+                        count: 0,
+                        problem_sets: new Set()
+                    };
                 }
-                processOnlyCount[item.process] += item.count;
+                processOnlyData[item.process].count += item.count;
+                
+                // 收集問題 sets
+                if (item.problem_sets && Array.isArray(item.problem_sets)) {
+                    item.problem_sets.forEach(set => {
+                        processOnlyData[item.process].problem_sets.add(set);
+                    });
+                }
             });
             
             // 轉換為陣列格式
-            allProcessSummary = Object.entries(processOnlyCount)
-                .map(([process, count]) => ({ process, count }))
+            allProcessSummary = Object.entries(processOnlyData)
+                .map(([process, data]) => ({ 
+                    process, 
+                    count: data.count,
+                    problem_sets: Array.from(data.problem_sets).sort()
+                }))
                 .sort((a, b) => b.count - a.count);
             
             filteredProcessSummary = [...allProcessSummary];
@@ -2617,9 +2631,9 @@ HTML_TEMPLATE = r'''
                         bVal = b.count;
                         break;
                     case 'set':
-                        aVal = a.set;
-                        bVal = b.set;
-                        break;                        
+                        aVal = a.problem_sets ? a.problem_sets.join(', ') : '';
+                        bVal = b.problem_sets ? b.problem_sets.join(', ') : '';
+                        break;                   
                 }
                 
                 if (typeof aVal === 'string') {
@@ -2731,7 +2745,8 @@ HTML_TEMPLATE = r'''
                                 (log.filename && regex.test(log.filename)) ||
                                 (log.folder_path && regex.test(log.folder_path)) ||
                                 (log.timestamp && regex.test(log.timestamp)) ||
-                                (log.line_number && regex.test(String(log.line_number)));
+                                (log.line_number && regex.test(String(log.line_number))) ||
+                                (log.problem_set && regex.test(log.problem_set));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = log => 
@@ -2740,7 +2755,8 @@ HTML_TEMPLATE = r'''
                                 (log.filename && log.filename.toLowerCase().includes(lowerSearchTerm)) ||
                                 (log.folder_path && log.folder_path.toLowerCase().includes(lowerSearchTerm)) ||
                                 (log.timestamp && log.timestamp.toLowerCase().includes(lowerSearchTerm)) ||
-                                (log.line_number && String(log.line_number).includes(lowerSearchTerm));
+                                (log.line_number && String(log.line_number).includes(lowerSearchTerm)) ||
+                                (log.problem_set && log.problem_set.toLowerCase().includes(lowerSearchTerm));
                         }
                         
                         filteredLogs = allLogs.filter(searchFunction);
@@ -2786,6 +2802,7 @@ HTML_TEMPLATE = r'''
                                 regex.test(file.folder_path || '') ||
                                 regex.test(file.timestamp || '') ||
                                 regex.test(String(file.count)) ||
+                                (file.problem_set && regex.test(file.problem_set)) ||
                                 file.processes.some(proc => regex.test(proc));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
@@ -2795,6 +2812,7 @@ HTML_TEMPLATE = r'''
                                 (file.folder_path && file.folder_path.toLowerCase().includes(lowerSearchTerm)) ||
                                 (file.timestamp && file.timestamp.toLowerCase().includes(lowerSearchTerm)) ||
                                 String(file.count).includes(lowerSearchTerm) ||
+                                (file.problem_set && file.problem_set.toLowerCase().includes(lowerSearchTerm)) ||
                                 file.processes.some(proc => proc.toLowerCase().includes(lowerSearchTerm));
                         }
                         
@@ -2845,6 +2863,7 @@ HTML_TEMPLATE = r'''
                 filesSearchHandler({ target: document.getElementById('filesSearchInput') });
             });
             
+            // Process Summary search with regex support
             const processSummarySearchHandler = (e) => {
                 const searchTerm = e.target.value;
                 const countElement = document.getElementById('processSummarySearchCount');
@@ -2859,15 +2878,21 @@ HTML_TEMPLATE = r'''
                         if (useRegex) {
                             const regex = new RegExp(searchTerm, 'i');
                             searchFunction = item => 
-                                regex.test(item.type) || 
                                 regex.test(item.process) ||
-                                regex.test(String(item.count));
+                                regex.test(String(item.count)) ||
+                                (item.problem_sets && (
+                                    regex.test(item.problem_sets.join(', ')) ||
+                                    item.problem_sets.some(ps => regex.test(ps))
+                                ));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = item => 
-                                item.type.toLowerCase().includes(lowerSearchTerm) ||
                                 item.process.toLowerCase().includes(lowerSearchTerm) ||
-                                String(item.count).includes(lowerSearchTerm);
+                                String(item.count).includes(lowerSearchTerm) ||
+                                (item.problem_sets && (
+                                    item.problem_sets.join(', ').toLowerCase().includes(lowerSearchTerm) ||
+                                    item.problem_sets.some(ps => ps.toLowerCase().includes(lowerSearchTerm))
+                                ));
                         }
                         
                         filteredProcessSummary = allProcessSummary.filter(searchFunction);
@@ -2925,8 +2950,8 @@ HTML_TEMPLATE = r'''
                         bVal = b.count;
                         break;
                     case 'set':
-                        aVal = a.set;
-                        bVal = b.set;
+                        aVal = a.problem_sets ? a.problem_sets.join(', ') : '';
+                        bVal = b.problem_sets ? b.problem_sets.join(', ') : '';
                         break;                        
                 }
                 
@@ -2944,51 +2969,6 @@ HTML_TEMPLATE = r'''
             // 重置到第一頁
             summaryPage = 1;
             updateSummaryTable();
-        }
-
-        function sortFilesTable(column) {
-            if (filesSort.column === column) {
-                filesSort.order = filesSort.order === 'asc' ? 'desc' : 'asc';
-            } else {
-                filesSort.column = column;
-                filesSort.order = column === 'count' ? 'desc' : 'asc';
-            }
-            
-            filteredFiles.sort((a, b) => {
-                let aVal, bVal;
-                
-                switch (column) {
-                    case 'type':
-                        aVal = a.type;
-                        bVal = b.type;
-                        break;
-                    case 'filename':
-                        aVal = a.filename;
-                        bVal = b.filename;
-                        break;
-                    case 'count':
-                        aVal = a.count;
-                        bVal = b.count;
-                        break;
-                    case 'timestamp':
-                        aVal = a.timestamp;
-                        bVal = b.timestamp;
-                        break;
-                }
-                
-                if (typeof aVal === 'string') {
-                    return filesSort.order === 'asc' ? 
-                        aVal.localeCompare(bVal) : 
-                        bVal.localeCompare(aVal);
-                } else {
-                    return filesSort.order === 'asc' ? 
-                        aVal - bVal : 
-                        bVal - aVal;
-                }
-            });
-            
-            filesPage = 1;
-            updateFilesTable();
         }
 
         function sortFilesTable(column) {
@@ -3033,8 +3013,8 @@ HTML_TEMPLATE = r'''
                         bVal = b.timestamp || '';
                         break;
                     case 'set':
-                        aVal = a.set || 0;
-                        bVal = b.set || 0;
+                        aVal = a.problem_set || '';
+                        bVal = b.problem_set || '';
                         break;                        
                 }
                 
@@ -3094,8 +3074,8 @@ HTML_TEMPLATE = r'''
                         bVal = b.timestamp || '';
                         break;
                     case 'set':
-                        aVal = a.set || '';
-                        bVal = b.set || '';
+                        aVal = a.problem_set || '';
+                        bVal = b.problem_set || '';
                         break;                        
                 }
                 
@@ -4263,7 +4243,8 @@ def export(format, analysis_id):
         'logs': data['logs'],
         'analysis_time': data['analysis_time'],
         'used_grep': data['used_grep'],
-        'zip_files_extracted': data.get('zip_files_extracted', 0)
+        'zip_files_extracted': data.get('zip_files_extracted', 0),
+        'anr_subject_count': data.get('anr_subject_count', 0)
     })};
     
     // Auto-load the data when page loads
@@ -4277,6 +4258,34 @@ def export(format, analysis_id):
         }});
         allSummary = window.injectedData.statistics.type_process_summary || [];
         allFileStats = window.injectedData.file_statistics || [];
+        
+        // 生成程序統計資料
+        const processOnlyData = {{}};
+        window.injectedData.statistics.type_process_summary.forEach(item => {{
+            if (!processOnlyData[item.process]) {{
+                processOnlyData[item.process] = {{
+                    count: 0,
+                    problem_sets: new Set()
+                }};
+            }}
+            processOnlyData[item.process].count += item.count;
+            
+            // 收集問題 sets
+            if (item.problem_sets && Array.isArray(item.problem_sets)) {{
+                item.problem_sets.forEach(set => {{
+                    processOnlyData[item.process].problem_sets.add(set);
+                }});
+            }}
+        }});
+        
+        // 轉換為陣列格式
+        allProcessSummary = Object.entries(processOnlyData)
+            .map(([process, data]) => ({{ 
+                process, 
+                count: data.count,
+                problem_sets: Array.from(data.problem_sets).sort()
+            }}))
+            .sort((a, b) => b.count - a.count);
         
         // Reset filters and pagination
         resetFiltersAndPagination();
@@ -4292,7 +4301,7 @@ def export(format, analysis_id):
         document.getElementById('navBar').classList.add('show');
         
         // Show analysis info
-        let message = `分析完成！共掃描 ${{window.injectedData.total_files}} 個檔案，找到 ${{window.injectedData.files_with_cmdline}} 個包含 Cmdline 的檔案`;
+        let message = `分析完成！共掃描 ${{window.injectedData.total_files}} 個檔案，找到 ${{window.injectedData.anr_subject_count || 0}} 個包含 ANR 的檔案，找到 ${{window.injectedData.files_with_cmdline - (window.injectedData.anr_subject_count || 0)}} 個包含 Tombstone 的檔案`;
         message += `<br>分析耗時: ${{window.injectedData.analysis_time}} 秒`;
         if (window.injectedData.used_grep) {{
             message += '<span class="grep-badge">使用 grep 加速</span>';
