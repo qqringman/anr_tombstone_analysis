@@ -2568,14 +2568,18 @@ HTML_TEMPLATE = r'''
                                 (log.process && regex.test(log.process)) ||
                                 (log.type && regex.test(log.type)) ||
                                 (log.filename && regex.test(log.filename)) ||
-                                (log.folder_path && regex.test(log.folder_path));
+                                (log.folder_path && regex.test(log.folder_path)) ||
+                                (log.timestamp && regex.test(log.timestamp)) ||
+                                (log.line_number && regex.test(String(log.line_number)));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = log => 
                                 (log.process && log.process.toLowerCase().includes(lowerSearchTerm)) ||
                                 (log.type && log.type.toLowerCase().includes(lowerSearchTerm)) ||
                                 (log.filename && log.filename.toLowerCase().includes(lowerSearchTerm)) ||
-                                (log.folder_path && log.folder_path.toLowerCase().includes(lowerSearchTerm));
+                                (log.folder_path && log.folder_path.toLowerCase().includes(lowerSearchTerm)) ||
+                                (log.timestamp && log.timestamp.toLowerCase().includes(lowerSearchTerm)) ||
+                                (log.line_number && String(log.line_number).includes(lowerSearchTerm));
                         }
                         
                         filteredLogs = allLogs.filter(searchFunction);
@@ -2617,11 +2621,19 @@ HTML_TEMPLATE = r'''
                             const regex = new RegExp(searchTerm, 'i');
                             searchFunction = file => 
                                 regex.test(file.filename) ||
+                                regex.test(file.type) ||
+                                regex.test(file.folder_path || '') ||
+                                regex.test(file.timestamp || '') ||
+                                regex.test(String(file.count)) ||
                                 file.processes.some(proc => regex.test(proc));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = file => 
                                 file.filename.toLowerCase().includes(lowerSearchTerm) ||
+                                file.type.toLowerCase().includes(lowerSearchTerm) ||
+                                (file.folder_path && file.folder_path.toLowerCase().includes(lowerSearchTerm)) ||
+                                (file.timestamp && file.timestamp.toLowerCase().includes(lowerSearchTerm)) ||
+                                String(file.count).includes(lowerSearchTerm) ||
                                 file.processes.some(proc => proc.toLowerCase().includes(lowerSearchTerm));
                         }
                         
@@ -2685,11 +2697,16 @@ HTML_TEMPLATE = r'''
                         let searchFunction;
                         if (useRegex) {
                             const regex = new RegExp(searchTerm, 'i');
-                            searchFunction = item => regex.test(item.process);
+                            searchFunction = item => 
+                                regex.test(item.type) || 
+                                regex.test(item.process) ||
+                                regex.test(String(item.count));
                         } else {
                             const lowerSearchTerm = searchTerm.toLowerCase();
                             searchFunction = item => 
-                                item.process.toLowerCase().includes(lowerSearchTerm);
+                                item.type.toLowerCase().includes(lowerSearchTerm) ||
+                                item.process.toLowerCase().includes(lowerSearchTerm) ||
+                                String(item.count).includes(lowerSearchTerm);
                         }
                         
                         filteredProcessSummary = allProcessSummary.filter(searchFunction);
@@ -3713,7 +3730,7 @@ def analyze():
         # 取得路徑的最後一個資料夾名稱
         last_folder_name = os.path.basename(path.rstrip(os.sep))
         # 建立輸出目錄名稱
-        output_dir_name = f"{last_folder_name}_anr_tombstones_analyze"
+        output_dir_name = f".{last_folder_name}_anr_tombstones_analyze"
         output_path = os.path.join(path, output_dir_name)
 
         # 檢查輸出目錄是否已存在，如果存在則刪除
