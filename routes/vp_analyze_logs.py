@@ -3640,6 +3640,9 @@ class TombstoneAnalyzer(BaseAnalyzer):
                 else:
                     info['fault_addr'] = match.group(1)
                 break
+        else:
+            # 如果沒有找到故障地址，設為 Unknown
+            info['fault_addr'] = 'Unknown'
         
         # 檢查特殊故障地址
         if info.get('fault_addr'):
@@ -4203,16 +4206,27 @@ class TombstoneReportGenerator:
         """分析故障地址"""
         addr = self.info.fault_addr.lower()
         
+        # 檢查是否為 Unknown 或無效地址
+        if addr in ['unknown', 'n/a', 'none', '']:
+            return None
+        
         if addr in ['0x0', '0', '00000000', '0000000000000000']:
             return "空指針 - 嘗試訪問 NULL"
         elif addr == '0xdeadbaad':
             return "Bionic libc abort 標記"
         elif addr.startswith('0xdead'):
             return "可能是調試標記或損壞的指針"
-        elif int(addr, 16) < 0x1000:
+        
+        # 安全地嘗試轉換為整數
+        try:
+            addr_int = int(addr, 16)
+            if addr_int < 0x1000:
             return "低地址 - 可能是空指針加偏移"
-        elif int(addr, 16) > 0x7fffffffffff:
+            elif addr_int > 0x7fffffffffff:
             return "內核地址空間 - 可能是內核錯誤"
+        except ValueError:
+            # 如果無法解析為十六進制，返回 None
+            return None
         
         # 檢查是否在記憶體映射中
         for mem_line in self.info.memory_map[:20]:
@@ -4221,9 +4235,12 @@ class TombstoneReportGenerator:
                 if parts:
                     range_str = parts[0]
                     if '-' in range_str:
-                        start, end = range_str.split('-')
+                        start_str, end_str = range_str.split('-')
                         try:
-                            if int(start, 16) <= int(addr, 16) <= int(end, 16):
+                            start = int(start_str, 16)
+                            end = int(end_str, 16)
+                            addr_int = int(addr, 16)
+                            if start <= addr_int <= end:
                                 # 找到對應的記憶體區域
                                 if len(parts) > 6:
                                     return f"位於 {parts[6]}"
@@ -6339,6 +6356,11 @@ class IntelligentAnalysisEngine:
             'nearby_regions': [],
             'analysis': None
         }
+        
+        # 檢查是否為無效地址
+        if fault_addr.lower() in ['unknown', 'n/a', 'none', '']:
+            context['analysis'] = '無法確定故障地址'
+            return context
         
         try:
             fault_int = int(fault_addr, 16)
