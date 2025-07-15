@@ -5938,7 +5938,7 @@ class LogAnalyzerSystem:
         """
             
     def _generate_html_index(self, index_data: Dict, similarity_groups: List[Dict] = None) -> str:
-        """生成 HTML 索引內容 - Dark ChatGPT 風格"""
+        """生成 HTML 索引內容 - 增強美化版"""
         
         def render_tree(data, prefix=""):
             html_str = ""
@@ -6121,19 +6121,43 @@ class LogAnalyzerSystem:
             }}
             
             :root {{
-                --bg-primary: #212121;
-                --bg-secondary: #2a2a2a;
-                --bg-hover: #343434;
-                --text-primary: #ececec;
-                --text-secondary: #a0a0a0;
-                --text-muted: #6e6e6e;
-                --border: #424242;
-                --accent: #10a37f;
-                --accent-hover: #0e8e6f;
-                --anr-color: #ff9800;
-                --tombstone-color: #ab47bc;
-                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-                --radius: 8px;
+                --bg-primary: #0d1117;
+                --bg-secondary: #161b22;
+                --bg-hover: #1f2937;
+                --bg-header: #010409;
+                --text-primary: #f0f6fc;
+                --text-secondary: #8b949e;
+                --text-muted: #6e7681;
+                --border: #30363d;
+                --border-light: #21262d;
+                --accent: #58a6ff;
+                --accent-hover: #79c0ff;
+                --anr-color: #f97316;
+                --tombstone-color: #a855f7;
+                --shadow: 0 0 0 1px rgba(48, 54, 61, 0.5);
+                --shadow-hover: 0 0 0 1px rgba(88, 166, 255, 0.5);
+                --radius: 10px;
+                --header-height: 60px;
+                --footer-height: 60px;
+            }}
+            
+            /* Light theme */
+            :root.light-theme {{
+                --bg-primary: #ffffff;
+                --bg-secondary: #f6f8fa;
+                --bg-hover: #f3f4f6;
+                --bg-header: #ffffff;
+                --text-primary: #24292f;
+                --text-secondary: #57606a;
+                --text-muted: #8c959f;
+                --border: #d0d7de;
+                --border-light: #e2e8f0;
+                --accent: #0969da;
+                --accent-hover: #0860ca;
+                --anr-color: #ea580c;
+                --tombstone-color: #9333ea;
+                --shadow: 0 0 0 1px rgba(208, 215, 222, 0.5);
+                --shadow-hover: 0 0 0 1px rgba(9, 105, 218, 0.5);
             }}
             
             body {{
@@ -6142,39 +6166,172 @@ class LogAnalyzerSystem:
                 color: var(--text-primary);
                 line-height: 1.6;
                 min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                transition: background-color 0.3s ease, color 0.3s ease;
+            }}
+            
+            /* Scrollbar Styling */
+            ::-webkit-scrollbar {{
+                width: 12px;
+                height: 12px;
+            }}
+            
+            ::-webkit-scrollbar-track {{
+                background: var(--bg-secondary);
+                border-radius: 6px;
+            }}
+            
+            ::-webkit-scrollbar-thumb {{
+                background: var(--border);
+                border-radius: 6px;
+                border: 2px solid var(--bg-secondary);
+            }}
+            
+            ::-webkit-scrollbar-thumb:hover {{
+                background: var(--text-muted);
+            }}
+            
+            /* Firefox Scrollbar */
+            * {{
+                scrollbar-width: thin;
+                scrollbar-color: var(--border) var(--bg-secondary);
+            }}
+            
+            .main-wrapper {{
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }}
+            
+            /* Header Bar */
+            .top-bar {{
+                position: sticky;
+                top: 0;
+                z-index: 1000;
+                background: var(--bg-header);
+                border-bottom: 1px solid var(--border);
+                height: var(--header-height);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 24px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }}
+            
+            .top-bar-left {{
+                display: flex;
+                align-items: center;
+                gap: 24px;
+            }}
+            
+            .top-bar-title {{
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--text-primary);
+                letter-spacing: -0.5px;
+            }}
+            
+            .top-bar-actions {{
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }}
+            
+            /* Theme Toggle */
+            .theme-toggle {{
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: 20px;
+                padding: 4px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                transition: all 0.3s ease;
+            }}
+            
+            .theme-toggle:hover {{
+                border-color: var(--accent);
+            }}
+            
+            .theme-toggle-option {{
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-size: 14px;
+                color: var(--text-secondary);
+                transition: all 0.3s ease;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }}
+            
+            .theme-toggle-option.active {{
+                background: var(--accent);
+                color: white;
+            }}
+            
+            /* Export Button */
+            .export-btn {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                background: var(--accent);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }}
+            
+            .export-btn:hover {{
+                background: var(--accent-hover);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+            }}
+            
+            .export-btn:active {{
+                transform: translateY(0);
             }}
             
             .container {{
-                max-width: 1000px;
+                max-width: 1200px;
+                width: 100%;
                 margin: 0 auto;
-                padding: 20px;
+                padding: 32px 24px;
+                flex: 1;
             }}
             
             /* Header */
             .header {{
                 text-align: center;
-                padding: 60px 0 40px;
-                border-bottom: 1px solid var(--border);
+                padding: 48px 0 32px;
                 margin-bottom: 40px;
             }}
             
             .header h1 {{
-                font-size: 32px;
-                font-weight: 600;
+                font-size: 36px;
+                font-weight: 700;
                 margin-bottom: 12px;
                 color: var(--text-primary);
+                letter-spacing: -1px;
             }}
             
             .header .subtitle {{
                 font-size: 16px;
                 color: var(--text-secondary);
+                font-weight: 400;
             }}
             
             /* Stats */
             .stats {{
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 16px;
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                gap: 20px;
                 margin: 40px 0;
             }}
             
@@ -6182,26 +6339,108 @@ class LogAnalyzerSystem:
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
-                padding: 20px;
+                padding: 24px;
                 text-align: center;
-                transition: all 0.2s ease;
+                transition: all 0.3s ease;
+                position: relative;
+                overflow: hidden;
+            }}
+            
+            .stat-card::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
             }}
             
             .stat-card:hover {{
-                border-color: var(--accent);
                 transform: translateY(-2px);
+                box-shadow: var(--shadow-hover);
+            }}
+            
+            .stat-card:hover::before {{
+                transform: translateX(0);
             }}
             
             .stat-value {{
-                font-size: 28px;
-                font-weight: 600;
+                font-size: 32px;
+                font-weight: 700;
                 color: var(--accent);
+                margin-bottom: 4px;
             }}
             
             .stat-label {{
                 font-size: 14px;
                 color: var(--text-secondary);
-                margin-top: 4px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+            
+            /* Controls */
+            .controls {{
+                display: flex;
+                gap: 12px;
+                margin-bottom: 24px;
+                flex-wrap: wrap;
+            }}
+            
+            .control-btn {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 20px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                color: var(--text-primary);
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }}
+            
+            .control-btn:hover {{
+                background: var(--bg-hover);
+                border-color: var(--accent);
+                color: var(--accent);
+                transform: translateY(-1px);
+            }}
+            
+            .control-btn:active {{
+                transform: translateY(0);
+            }}
+            
+            .view-toggle {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 20px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                color: var(--text-primary);
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }}
+            
+            .view-toggle:hover {{
+                background: var(--bg-hover);
+                border-color: var(--accent);
+                color: var(--accent);
+            }}
+            
+            .view-toggle.active {{
+                background: var(--accent);
+                color: white;
+                border-color: var(--accent);
             }}
             
             /* File Browser */
@@ -6210,13 +6449,29 @@ class LogAnalyzerSystem:
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
                 overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            }}
+            
+            /* Table Header */
+            .table-header {{
+                background: var(--bg-header);
+                border-bottom: 2px solid var(--border);
+                padding: 16px 20px;
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
             }}
             
             /* File Item */
             .file-item {{
-                border-bottom: 1px solid var(--border);
+                border-bottom: 1px solid var(--border-light);
                 position: relative;
-                transition: background 0.2s ease;
+                transition: all 0.2s ease;
             }}
             
             .file-item:last-child {{
@@ -6225,6 +6480,7 @@ class LogAnalyzerSystem:
             
             .file-item:hover {{
                 background: var(--bg-hover);
+                box-shadow: inset 0 0 0 1px var(--accent);
             }}
             
             .file-link {{
@@ -6237,12 +6493,13 @@ class LogAnalyzerSystem:
                 padding: 16px 20px;
                 display: flex;
                 align-items: center;
-                gap: 12px;
+                gap: 16px;
             }}
             
             .file-icon {{
                 font-size: 24px;
                 flex-shrink: 0;
+                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
             }}
             
             .file-info {{
@@ -6251,38 +6508,42 @@ class LogAnalyzerSystem:
             }}
             
             .file-name {{
-                font-size: 14px;
+                font-size: 15px;
                 color: var(--text-primary);
                 margin-bottom: 4px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+                font-weight: 500;
             }}
             
             .file-meta {{
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                font-size: 12px;
+                font-size: 13px;
                 color: var(--text-secondary);
             }}
             
             .file-type {{
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-weight: 500;
+                padding: 3px 10px;
+                border-radius: 6px;
+                font-weight: 600;
                 text-transform: uppercase;
                 font-size: 11px;
+                letter-spacing: 0.5px;
             }}
             
             .file-type-anr {{
-                background: rgba(255, 152, 0, 0.15);
+                background: rgba(249, 115, 22, 0.15);
                 color: var(--anr-color);
+                border: 1px solid rgba(249, 115, 22, 0.3);
             }}
             
             .file-type-tombstone {{
-                background: rgba(171, 71, 188, 0.2);
+                background: rgba(168, 85, 247, 0.15);
                 color: var(--tombstone-color);
+                border: 1px solid rgba(168, 85, 247, 0.3);
             }}
             
             .source-link {{
@@ -6292,7 +6553,7 @@ class LogAnalyzerSystem:
                 transform: translateY(-50%);
                 color: var(--text-secondary);
                 padding: 8px;
-                border-radius: 4px;
+                border-radius: 6px;
                 transition: all 0.2s ease;
                 opacity: 0;
             }}
@@ -6302,23 +6563,24 @@ class LogAnalyzerSystem:
             }}
             
             .source-link:hover {{
-                color: var(--text-primary);
+                color: var(--accent);
                 background: var(--bg-hover);
             }}
             
             /* Folder */
             .folder-item {{
-                border-bottom: 1px solid var(--border);
+                border-bottom: 1px solid var(--border-light);
             }}
             
             .folder-header {{
                 padding: 16px 20px;
                 display: flex;
                 align-items: center;
-                gap: 12px;
+                gap: 16px;
                 cursor: pointer;
                 user-select: none;
-                transition: background 0.2s ease;
+                transition: all 0.2s ease;
+                background: var(--bg-secondary);
             }}
             
             .folder-header:hover {{
@@ -6327,7 +6589,7 @@ class LogAnalyzerSystem:
             
             .folder-arrow {{
                 color: var(--text-secondary);
-                transition: transform 0.2s ease;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 flex-shrink: 0;
             }}
             
@@ -6338,116 +6600,64 @@ class LogAnalyzerSystem:
             .folder-icon {{
                 font-size: 20px;
                 flex-shrink: 0;
+                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
             }}
             
             .folder-name {{
-                font-size: 14px;
+                font-size: 15px;
                 color: var(--text-primary);
                 flex: 1;
+                font-weight: 500;
             }}
             
             .folder-count {{
                 font-size: 12px;
                 color: var(--text-muted);
                 background: var(--bg-primary);
-                padding: 2px 8px;
-                border-radius: 12px;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 600;
             }}
             
             .folder-content {{
-                background: rgba(0, 0, 0, 0.2);
+                background: rgba(0, 0, 0, 0.05);
+            }}
+            
+            .light-theme .folder-content {{
+                background: rgba(0, 0, 0, 0.02);
             }}
             
             .folder-content .file-item {{
-                margin-left: 32px;
+                margin-left: 36px;
             }}
             
             /* Footer */
             .footer {{
+                background: var(--bg-header);
+                border-top: 1px solid var(--border);
+                padding: 20px 0;
                 text-align: center;
-                padding: 40px 0;
                 color: var(--text-secondary);
                 font-size: 14px;
+                margin-top: auto;
             }}
             
-            /* Responsive */
-            @media (max-width: 768px) {{
-                .container {{
-                    padding: 16px;
-                }}
-                
-                .header {{
-                    padding: 40px 0 30px;
-                }}
-                
-                .header h1 {{
-                    font-size: 24px;
-                }}
-                
-                .stats {{
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 12px;
-                }}
-                
-                .file-content {{
-                    padding: 14px 16px;
-                }}
-                
-                .source-link {{
-                    opacity: 1;
-                    right: 16px;
-                }}
-            }}
-
-            /* Controls */
-            .controls {{
+            .footer-content {{
                 display: flex;
-                gap: 12px;
-                margin-bottom: 20px;
-            }}
-
-            .control-btn {{
-                display: flex;
+                flex-direction: column;
                 align-items: center;
-                gap: 6px;
-                padding: 8px 16px;
-                background: var(--bg-secondary);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                color: var(--text-primary);
-                font-size: 14px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }}
-
-            .control-btn:hover {{
-                background: var(--bg-hover);
-                border-color: var(--accent);
-            }}
-
-            .control-btn:active {{
-                transform: scale(0.98);
-            }}
-
-            .control-btn svg {{
-                flex-shrink: 0;
-            }}
-
-            .file-formats {{
-                display: inline-flex;
                 gap: 8px;
             }}
-
-            .file-formats a {{
-                text-decoration: none;
-                opacity: 0.7;
-                transition: opacity 0.2s;
+            
+            .footer-copyright {{
+                font-weight: 500;
             }}
-
-            .file-formats a:hover {{
-                opacity: 1;
+            
+            .footer-info {{
+                font-size: 13px;
+                color: var(--text-muted);
             }}
-
+            
             /* View Mode */
             .view-mode {{
                 display: none;
@@ -6457,34 +6667,7 @@ class LogAnalyzerSystem:
                 display: block;
             }}
             
-            /* View Toggle Button */
-            .view-toggle {{
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 16px;
-                background: var(--bg-secondary);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                color: var(--text-primary);
-                font-size: 14px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }}
-
-            .view-toggle:hover {{
-                background: var(--bg-hover);
-                border-color: var(--accent);
-                color: var(--accent);
-            }}
-
-            .view-toggle.active {{
-                background: var(--accent);
-                color: white;
-                border-color: var(--accent);
-            }}
-            
-            /* 相似問題視圖專屬樣式 */
+            /* 相似問題視圖樣式保持不變 */
             .similarity-view {{
                 padding: 20px 0;
             }}
@@ -6495,12 +6678,12 @@ class LogAnalyzerSystem:
                 border-radius: 12px;
                 margin-bottom: 20px;
                 overflow: hidden;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
                 transition: all 0.3s ease;
             }}
             
             .similarity-group:hover {{
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             }}
             
             .similarity-group .group-header {{
@@ -6510,13 +6693,13 @@ class LogAnalyzerSystem:
                 gap: 16px;
                 cursor: pointer;
                 user-select: none;
-                background: linear-gradient(135deg, rgba(16, 163, 127, 0.05) 0%, rgba(16, 163, 127, 0.02) 100%);
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.05) 0%, rgba(88, 166, 255, 0.02) 100%);
                 border-bottom: 1px solid var(--border);
                 transition: all 0.2s ease;
             }}
             
             .similarity-group .group-header:hover {{
-                background: linear-gradient(135deg, rgba(16, 163, 127, 0.08) 0%, rgba(16, 163, 127, 0.04) 100%);
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.04) 100%);
             }}
             
             .group-arrow {{
@@ -6550,12 +6733,12 @@ class LogAnalyzerSystem:
             }}
             
             .group-info > span:first-child {{
-                background: rgba(16, 163, 127, 0.1);
+                background: rgba(88, 166, 255, 0.1);
                 color: var(--accent);
                 padding: 4px 12px;
                 border-radius: 20px;
                 font-weight: 600;
-                border: 1px solid rgba(16, 163, 127, 0.2);
+                border: 1px solid rgba(88, 166, 255, 0.2);
             }}
             
             .group-info > span:last-child {{
@@ -6589,7 +6772,7 @@ class LogAnalyzerSystem:
             }}
             
             .similarity-item:hover {{
-                background: rgba(16, 163, 127, 0.02);
+                background: rgba(88, 166, 255, 0.02);
             }}
             
             .report-header {{
@@ -6667,6 +6850,19 @@ class LogAnalyzerSystem:
                 }}
             }}
             
+            @keyframes fadeIn {{
+                from {{
+                    opacity: 0;
+                }}
+                to {{
+                    opacity: 1;
+                }}
+            }}
+            
+            .file-browser {{
+                animation: fadeIn 0.3s ease;
+            }}
+            
             .similarity-group {{
                 animation: slideDown 0.3s ease forwards;
             }}
@@ -6685,71 +6881,205 @@ class LogAnalyzerSystem:
                 padding: 60px 20px;
                 font-size: 16px;
             }}
+            
+            /* Responsive */
+            @media (max-width: 768px) {{
+                .container {{
+                    padding: 16px;
+                }}
+                
+                .header {{
+                    padding: 32px 0 24px;
+                }}
+                
+                .header h1 {{
+                    font-size: 28px;
+                }}
+                
+                .stats {{
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                }}
+                
+                .file-content {{
+                    padding: 14px 16px;
+                }}
+                
+                .source-link {{
+                    opacity: 1;
+                    right: 16px;
+                }}
+                
+                .top-bar {{
+                    padding: 0 16px;
+                }}
+                
+                .top-bar-title {{
+                    font-size: 16px;
+                }}
+                
+                .theme-toggle-option {{
+                    padding: 4px 8px;
+                    font-size: 12px;
+                }}
+                
+                .export-btn {{
+                    padding: 6px 12px;
+                    font-size: 13px;
+                }}
+            }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <header class="header">
-                <h1>Android Log 分析報告</h1>
-                <p class="subtitle">智能分析系統 • 深度解析 ANR 和 Tombstone 問題</p>
-            </header>
-            
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-value">{self.stats['anr_count']}</div>
-                    <div class="stat-label">ANR 檔案</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{self.stats['tombstone_count']}</div>
-                    <div class="stat-label">Tombstone 檔案</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{self.stats['anr_count'] + self.stats['tombstone_count']}</div>
-                    <div class="stat-label">總檔案數</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{self.stats['total_time']:.1f}s</div>
-                    <div class="stat-label">分析時間</div>
-                </div>
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <h2 class="top-bar-title">📊 線程數據分析</h2>
             </div>
-            
-            <div class="controls">
-                <button onclick="expandAll()" class="control-btn">
+            <div class="top-bar-actions">
+                <div class="theme-toggle" onclick="toggleTheme()">
+                    <div class="theme-toggle-option" id="darkMode">
+                        🌙 Dark
+                    </div>
+                    <div class="theme-toggle-option active" id="lightMode">
+                        ☀️ Light
+                    </div>
+                </div>
+                <button class="export-btn" onclick="exportHTML()">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3M8 2v8m0 0L5 7m3 3l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    全部展開
-                </button>
-                <button onclick="collapseAll()" class="control-btn">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    全部收合
-                </button>
-                <button onclick="toggleView('similarity')" class="view-toggle" id="similarityBtn">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M8 2v6m0 0l3-3m-3 3L5 5m7 6v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    相似問題
+                    匯出 HTML
                 </button>
             </div>
-            
-            <!-- 檔案瀏覽視圖 -->
-            <main class="file-browser view-mode active" id="fileView">
-                {render_tree(index_data)}
-            </main>
-            
-            <!-- 相似問題視圖 -->
-            <main class="similarity-view view-mode" id="similarityView">
-                {render_similarity_groups(similarity_groups)}
-            </main>
-            
-            <footer class="footer">
-                <p>生成時間: {time.strftime('%Y-%m-%d %H:%M:%S')} • Android Log Analyzer v5</p>
-            </footer>
+        </div>
+
+        <div class="main-wrapper">
+            <div class="container">
+                <header class="header">
+                    <h1>Android Log 分析報告</h1>
+                    <p class="subtitle">智能分析系統 • 深度解析 ANR 和 Tombstone 問題</p>
+                </header>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value">{self.stats['anr_count']}</div>
+                        <div class="stat-label">ANR 檔案</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{self.stats['tombstone_count']}</div>
+                        <div class="stat-label">Tombstone 檔案</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{self.stats['anr_count'] + self.stats['tombstone_count']}</div>
+                        <div class="stat-label">總檔案數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{self.stats['total_time']:.1f}s</div>
+                        <div class="stat-label">分析時間</div>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button onclick="expandAll()" class="control-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        全部展開
+                    </button>
+                    <button onclick="collapseAll()" class="control-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        全部收合
+                    </button>
+                    <button onclick="toggleView('similarity')" class="view-toggle" id="similarityBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 2v6m0 0l3-3m-3 3L5 5m7 6v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        相似問題
+                    </button>
+                </div>
+                
+                <!-- 檔案瀏覽視圖 -->
+                <main class="file-browser view-mode active" id="fileView">
+                    <div class="table-header">
+                        <span class="folder-icon">📂</span>
+                        檔案列表
+                    </div>
+                    {render_tree(index_data)}
+                </main>
+                
+                <!-- 相似問題視圖 -->
+                <main class="similarity-view view-mode" id="similarityView">
+                    {render_similarity_groups(similarity_groups)}
+                </main>
+            </div>
         </div>
         
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-copyright">
+                    © 2025 Copyright by Vince. All rights reserved.
+                </div>
+                <div class="footer-info">
+                    生成時間: {time.strftime('%Y-%m-%d %H:%M:%S')} • Android Log Analyzer v5
+                </div>
+            </div>
+        </footer>
+        
         <script>
+            // Theme Management
+            const initTheme = () => {{
+                const savedTheme = localStorage.getItem('theme') || 'dark';
+                const root = document.documentElement;
+                const darkBtn = document.getElementById('darkMode');
+                const lightBtn = document.getElementById('lightMode');
+                
+                if (savedTheme === 'light') {{
+                    root.classList.add('light-theme');
+                    lightBtn.classList.add('active');
+                    darkBtn.classList.remove('active');
+                }} else {{
+                    root.classList.remove('light-theme');
+                    darkBtn.classList.add('active');
+                    lightBtn.classList.remove('active');
+                }}
+            }};
+            
+            const toggleTheme = () => {{
+                const root = document.documentElement;
+                const darkBtn = document.getElementById('darkMode');
+                const lightBtn = document.getElementById('lightMode');
+                
+                if (root.classList.contains('light-theme')) {{
+                    root.classList.remove('light-theme');
+                    localStorage.setItem('theme', 'dark');
+                    darkBtn.classList.add('active');
+                    lightBtn.classList.remove('active');
+                }} else {{
+                    root.classList.add('light-theme');
+                    localStorage.setItem('theme', 'light');
+                    lightBtn.classList.add('active');
+                    darkBtn.classList.remove('active');
+                }}
+            }};
+            
+            // Export HTML
+            const exportHTML = () => {{
+                const htmlContent = document.documentElement.outerHTML;
+                const blob = new Blob([htmlContent], {{ type: 'text/html;charset=utf-8' }});
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'android_log_analysis_' + new Date().toISOString().slice(0,10) + '.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }};
+            
             let currentView = 'file';
             
             // 定義為全局函數
@@ -6912,8 +7242,9 @@ class LogAnalyzerSystem:
                 }}
             }}
             
-            // 預設展開檔案視圖
+            // 初始化
             document.addEventListener('DOMContentLoaded', function() {{
+                initTheme();
                 expandAll();
                 
                 // 為所有 iframe 設置 onload 事件
@@ -6930,7 +7261,7 @@ class LogAnalyzerSystem:
             }});
         </script>
     </body>
-    </html>"""
+    </html>"""    
 
     def _show_statistics(self):
         """顯示統計資訊"""
