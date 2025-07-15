@@ -4862,7 +4862,8 @@ class LogAnalyzerSystem:
             'severity': '',
             'process_name': '',
             'features': [],
-            'content': html_content  # 直接保存內容
+            'content': html_content,  # 直接保存內容
+            'rel_path': os.path.relpath(file_path, self.input_folder)  # 新增相對路徑
         }
         
         # 使用正則表達式提取關鍵信息
@@ -6002,7 +6003,7 @@ class LogAnalyzerSystem:
                 return '<p>沒有發現相似問題</p>'
             
             html_str = ''
-            report_counter = 0  # 添加全局計數器確保唯一 ID
+            report_counter = 0
             
             for group_idx, group in enumerate(groups):
                 html_str += f'''
@@ -6023,28 +6024,38 @@ class LogAnalyzerSystem:
                 
                 # 渲染組內的報告
                 for report_idx, report in enumerate(group['reports']):
-                    # 使用更唯一的 ID 生成方式
                     report_counter += 1
                     report_id = f"report_{group_idx}_{report_idx}_{report_counter}"
                     escaped_filename = html.escape(report['filename'])
                     
+                    # 提取第二層目錄名稱
+                    if 'path' in report:
+                        path_parts = report['path'].split(os.sep)
+                        # 找出輸入目錄後的第二層目錄
+                        second_dir = None
+                        if self.input_folder:
+                            input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
+                            # 確保有足夠的層級
+                            if len(path_parts) > len(input_parts) + 2:
+                                # 取第二層目錄（跳過第一層）
+                                second_dir = path_parts[len(input_parts) + 1]
+                            elif len(path_parts) > len(input_parts) + 1:
+                                # 如果只有一層，就用第一層
+                                second_dir = path_parts[len(input_parts)]
+                    
                     # 讀取檔案內容並轉換為 data URL
                     try:
-                        # 如果已經有內容，直接使用
                         if 'content' in report and report['content']:
                             report_content = report['content']
                         else:
-                            # 否則從檔案讀取
                             with open(report['path'], 'r', encoding='utf-8') as f:
                                 report_content = f.read()
                         
-                        # Base64 編碼
                         import base64
                         encoded_content = base64.b64encode(report_content.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_content}"
                     except Exception as e:
                         print(f"無法讀取檔案 {report['path']}: {e}")
-                        # 顯示錯誤訊息
                         error_html = f'''
                         <html>
                         <head>
@@ -6068,6 +6079,11 @@ class LogAnalyzerSystem:
                         encoded_error = base64.b64encode(error_html.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_error}"
                     
+                    # 顯示檔案名稱和問題集
+                    display_name = escaped_filename
+                    if second_dir and second_dir not in ['.', '..', '']:
+                        display_name = f'{escaped_filename} <span class="problem-set">(問題 set: {second_dir})</span>'
+                    
                     html_str += f'''
                     <div class="similarity-item">
                         <div class="report-header" onclick="toggleReport('{report_id}')">
@@ -6075,7 +6091,13 @@ class LogAnalyzerSystem:
                                 <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                             </svg>
                             <span class="report-icon">📄</span>
-                            <span class="report-name">{escaped_filename}</span>
+                            <span class="report-name">{display_name}</span>
+                            <a href="{iframe_src}" target="_blank" class="source-link" title="在新視窗開啟" onclick="event.stopPropagation();">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
+                                    <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
+                                </svg>
+                            </a>
                         </div>
                         <div class="report-content" id="content-{report_id}" style="display: block;">
                             <iframe src="{iframe_src}" 
@@ -6088,9 +6110,9 @@ class LogAnalyzerSystem:
                     '''
                 
                 html_str += '''
+                        </div>
                     </div>
-                </div>
-                '''
+                    '''
             
             return html_str
         
@@ -6178,30 +6200,46 @@ class LogAnalyzerSystem:
             }}
             
             ::-webkit-scrollbar-track {{
-                background: var(--bg-secondary);
+                background: rgba(88, 166, 255, 0.08);
                 border-radius: 10px;
-                margin: 5px;
             }}
             
             ::-webkit-scrollbar-thumb {{
-                background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+                background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
                 border-radius: 10px;
-                border: 2px solid var(--bg-secondary);
-                transition: all 0.3s ease;
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                box-shadow: inset 0 0 3px rgba(88, 166, 255, 0.1);
             }}
             
             ::-webkit-scrollbar-thumb:hover {{
-                background: linear-gradient(180deg, var(--accent-hover), var(--accent));
-                border-color: var(--accent);
-                box-shadow: 0 0 5px rgba(88, 166, 255, 0.5);
+                background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
+                border-color: rgba(88, 166, 255, 0.4);
+                box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
             }}
-            
+
+            ::-webkit-scrollbar-corner {{
+                background: transparent;
+            }}
+
             /* Firefox Scrollbar */
             * {{
                 scrollbar-width: thin;
-                scrollbar-color: var(--accent) var(--bg-secondary);
+                scrollbar-color: #58a6ff rgba(88, 166, 255, 0.08);
             }}
             
+            /* 確保所有區域的 scrollbar 都使用相同樣式 */
+            .file-browser::-webkit-scrollbar-track,
+            .similarity-view::-webkit-scrollbar-track,
+            .report-content::-webkit-scrollbar-track {{
+                background: rgba(88, 166, 255, 0.08);
+            }}
+
+            .file-browser::-webkit-scrollbar-thumb,
+            .similarity-view::-webkit-scrollbar-thumb,
+            .report-content::-webkit-scrollbar-thumb {{
+                background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
+            }}
+
             .main-wrapper {{
                 flex: 1;
                 display: flex;
@@ -6944,6 +6982,166 @@ class LogAnalyzerSystem:
                     font-size: 13px;
                 }}
             }}
+
+            /* 問題集標籤 */
+            .problem-set {{
+                color: var(--accent);
+                font-size: 12px;
+                font-weight: 500;
+                margin-left: 12px;
+                padding: 2px 10px;
+                background: rgba(88, 166, 255, 0.1);
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                border-radius: 12px;
+                display: inline-block;
+                vertical-align: middle;
+            }}
+
+            /* 調整報告項目樣式以適應新視窗連結 */
+            .similarity-item .report-header {{
+                padding: 16px 60px 16px 48px; /* 右側留更多空間給連結 */
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                position: relative;
+            }}
+
+            .similarity-item .source-link {{
+                position: absolute;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--text-secondary);
+                padding: 8px;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                z-index: 10;
+            }}
+
+            .similarity-item .source-link:hover {{
+                color: var(--accent);
+                background: var(--bg-hover);
+            }}
+
+            /* 搜尋框樣式 */
+
+            .search-container {{
+                position: relative;
+                flex: 1;
+                max-width: 400px;
+                margin-left: auto;
+            }}
+
+            .search-box {{
+                position: relative;
+                width: 100%;
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(88, 166, 255, 0.05) 100%);
+                border: 1px solid rgba(88, 166, 255, 0.3);
+                border-radius: 12px;
+                transition: all 0.3s ease;
+                overflow: hidden;
+            }}
+
+            .search-box:hover {{
+                border-color: rgba(88, 166, 255, 0.5);
+                box-shadow: 0 0 20px rgba(88, 166, 255, 0.1);
+            }}
+
+            .search-box:focus-within {{
+                border-color: var(--accent);
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.15) 0%, rgba(88, 166, 255, 0.08) 100%);
+                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+            }}
+
+            .search-icon {{
+                position: absolute;
+                left: 16px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--accent);
+                opacity: 0.7;
+                pointer-events: none;
+                transition: opacity 0.3s ease;
+            }}
+
+            .search-box:focus-within .search-icon {{
+                opacity: 1;
+            }}
+
+            #searchInput {{
+                width: 100%;
+                padding: 12px 45px 12px 45px;
+                background: transparent;
+                border: none;
+                color: var(--text-primary);
+                font-size: 14px;
+                font-weight: 500;
+                letter-spacing: 0.2px;
+            }}
+
+            #searchInput:focus {{
+                outline: none;
+            }}
+
+            #searchInput::placeholder {{
+                color: var(--text-muted);
+                opacity: 0.8;
+            }}
+
+            .clear-search {{
+                position: absolute;
+                right: 8px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(88, 166, 255, 0.1);
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                color: var(--accent);
+                cursor: pointer;
+                padding: 6px;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+
+            .clear-search:hover {{
+                background: rgba(88, 166, 255, 0.2);
+                border-color: var(--accent);
+                transform: translateY(-50%) scale(1.1);
+            }}
+
+            /* Light theme 搜尋框調整 */
+            .light-theme .search-box {{
+                background: linear-gradient(135deg, rgba(9, 105, 218, 0.08) 0%, rgba(9, 105, 218, 0.04) 100%);
+                border-color: rgba(9, 105, 218, 0.3);
+            }}
+
+            .light-theme .search-box:focus-within {{
+                background: linear-gradient(135deg, rgba(9, 105, 218, 0.12) 0%, rgba(9, 105, 218, 0.06) 100%);
+            }}
+
+            /* 搜尋高亮 */
+            .search-highlight {{
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.2) 0%, rgba(88, 166, 255, 0.1) 100%);
+                border: 1px solid rgba(88, 166, 255, 0.4);
+                border-radius: 8px;
+                animation: highlight-pulse 1s ease-in-out;
+            }}
+
+            @keyframes highlight-pulse {{
+                0% {{
+                    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4);
+                }}
+                70% {{
+                    box-shadow: 0 0 0 10px rgba(88, 166, 255, 0);
+                }}
+                100% {{
+                    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0);
+                }}
+            }}
         </style>
     </head>
     <body>
@@ -7015,6 +7213,21 @@ class LogAnalyzerSystem:
                         </svg>
                         相似問題
                     </button>
+                    
+                    <!-- 快速搜尋 -->
+                    <div class="search-container">
+                        <div class="search-box">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="search-icon">
+                                <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 001.415-1.414l-3.85-3.85a1.007 1.007 0 00-.115-.1zM12 6.5a5.5 5.5 0 11-11 0 5.5 5.5 0 0111 0z" fill="currentColor"/>
+                            </svg>
+                            <input type="text" id="searchInput" placeholder="快速搜尋檔案..." onkeyup="searchFiles(this.value)">
+                            <button class="clear-search" onclick="clearSearch()" style="display: none;">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                                    <path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708L8 8.707z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- 檔案瀏覽視圖 -->
@@ -7286,6 +7499,141 @@ class LogAnalyzerSystem:
                     }}
                 }});
             }});
+        </script>
+        <script>
+            // 搜尋功能
+            function searchFiles(query) {{
+                const clearBtn = document.querySelector('.clear-search');
+                if (query) {{
+                    clearBtn.style.display = 'block';
+                }} else {{
+                    clearBtn.style.display = 'none';
+                }}
+                
+                if (currentView === 'file') {{
+                    // 檔案視圖搜尋
+                    searchInFileView(query);
+                }} else {{
+                    // 相似問題視圖搜尋
+                    searchInSimilarityView(query);
+                }}
+            }}
+
+            function searchInFileView(query) {{
+                const fileItems = document.querySelectorAll('.file-item');
+                const folders = document.querySelectorAll('.folder-item');
+                
+                if (!query) {{
+                    // 清空搜尋，顯示所有項目
+                    fileItems.forEach(item => {{
+                        item.classList.remove('search-highlight');
+                        item.style.display = '';
+                    }});
+                    folders.forEach(folder => {{
+                        folder.style.display = '';
+                    }});
+                    return;
+                }}
+                
+                query = query.toLowerCase();
+                
+                // 搜尋並高亮匹配的檔案
+                folders.forEach(folder => {{
+                    const folderContent = folder.querySelector('.folder-content');
+                    const folderName = folder.querySelector('.folder-name').textContent.toLowerCase();
+                    let hasMatch = false;
+                    
+                    // 檢查資料夾內的檔案
+                    const innerItems = folderContent.querySelectorAll('.file-item');
+                    innerItems.forEach(item => {{
+                        const fileName = item.querySelector('.file-name').textContent.toLowerCase();
+                        if (fileName.includes(query)) {{
+                            item.classList.add('search-highlight');
+                            item.style.display = '';
+                            hasMatch = true;
+                        }} else {{
+                            item.classList.remove('search-highlight');
+                            item.style.display = 'none';
+                        }}
+                    }});
+                    
+                    // 如果資料夾名稱匹配或內部有匹配，顯示資料夾
+                    if (folderName.includes(query) || hasMatch) {{
+                        folder.style.display = '';
+                        if (hasMatch) {{
+                            // 展開包含匹配項的資料夾
+                            folderContent.style.display = 'block';
+                            const arrow = folder.querySelector('.folder-arrow');
+                            arrow.classList.add('open');
+                        }}
+                    }} else {{
+                        folder.style.display = 'none';
+                    }}
+                }});
+            }}
+
+            function searchInSimilarityView(query) {{
+                const groups = document.querySelectorAll('.similarity-group');
+                
+                if (!query) {{
+                    groups.forEach(group => {{
+                        group.style.display = '';
+                        const items = group.querySelectorAll('.similarity-item');
+                        items.forEach(item => {{
+                            item.classList.remove('search-highlight');
+                            item.style.display = '';
+                        }});
+                    }});
+                    return;
+                }}
+                
+                query = query.toLowerCase();
+                
+                groups.forEach(group => {{
+                    const groupContent = group.querySelector('.group-content');
+                    const items = group.querySelectorAll('.similarity-item');
+                    let hasMatch = false;
+                    
+                    items.forEach(item => {{
+                        const reportName = item.querySelector('.report-name').textContent.toLowerCase();
+                        if (reportName.includes(query)) {{
+                            item.classList.add('search-highlight');
+                            item.style.display = '';
+                            hasMatch = true;
+                        }} else {{
+                            item.classList.remove('search-highlight');
+                            item.style.display = 'none';
+                        }}
+                    }});
+                    
+                    if (hasMatch) {{
+                        group.style.display = '';
+                        groupContent.style.display = 'block';
+                        const arrow = group.querySelector('.group-arrow');
+                        arrow.classList.add('open');
+                    }} else {{
+                        group.style.display = 'none';
+                    }}
+                }});
+            }}
+
+            function clearSearch() {{
+                document.getElementById('searchInput').value = '';
+                searchFiles('');
+            }}
+
+            // 支援 Enter 鍵搜尋
+            document.addEventListener('DOMContentLoaded', function() {{
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) {{
+                    searchInput.addEventListener('keypress', function(e) {{
+                        if (e.key === 'Enter') {{
+                            e.preventDefault();
+                            searchFiles(this.value);
+                        }}
+                    }});
+                }}
+            }});        
         </script>
     </body>
     </html>"""    
