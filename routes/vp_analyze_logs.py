@@ -5978,11 +5978,19 @@ class LogAnalyzerSystem:
                     </div>
                     '''
                 elif isinstance(value, dict):
-                    # 目錄項目
+                    # 目錄項目 - 添加類型標識
                     folder_id = f"folder-{prefix}-{name}".replace('/', '-').replace(' ', '-')
                     file_count = _count_files(value)
+                    
+                    # 判斷文件夾類型
+                    folder_class = "folder-item"
+                    if name.lower() == "anr":
+                        folder_class += " anr-folder"
+                    elif name.lower() in ["tombstone", "tombstones"]:
+                        folder_class += " tombstone-folder"
+                    
                     html_str += f'''
-                    <div class="folder-item">
+                    <div class="{folder_class}">
                         <div class="folder-header" onclick="toggleFolder('{folder_id}')">
                             <svg class="folder-arrow" id="arrow-{folder_id}" width="16" height="16" viewBox="0 0 16 16">
                                 <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -7142,6 +7150,190 @@ class LogAnalyzerSystem:
                     box-shadow: 0 0 0 0 rgba(88, 166, 255, 0);
                 }}
             }}
+        </style>
+        <style>
+            /* 左側面板的 scrollbar 樣式 */
+            .left-panel::-webkit-scrollbar {{
+                width: 10px;
+                height: 10px;
+            }}
+
+            .left-panel::-webkit-scrollbar-track {{
+                background: rgba(88, 166, 255, 0.08);
+                border-radius: 10px;
+            }}
+
+            .left-panel::-webkit-scrollbar-thumb {{
+                background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
+                border-radius: 10px;
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                box-shadow: inset 0 0 3px rgba(88, 166, 255, 0.1);
+            }}
+
+            .left-panel::-webkit-scrollbar-thumb:hover {{
+                background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
+                border-color: rgba(88, 166, 255, 0.4);
+                box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
+            }}
+
+            /* 右側面板的 scrollbar 也統一 */
+            .right-panel::-webkit-scrollbar {{
+                width: 10px;
+                height: 10px;
+            }}
+
+            .right-panel::-webkit-scrollbar-track {{
+                background: rgba(88, 166, 255, 0.08);
+                border-radius: 10px;
+            }}
+
+            .right-panel::-webkit-scrollbar-thumb {{
+                background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
+                border-radius: 10px;
+                border: 1px solid rgba(88, 166, 255, 0.2);
+            }}
+
+            .right-panel::-webkit-scrollbar-thumb:hover {{
+                background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
+                border-color: rgba(88, 166, 255, 0.4);
+            }}
+
+            .problem-set {{
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 600;
+                margin-left: 12px;
+                padding: 3px 12px;
+                background: linear-gradient(135deg, #58a6ff 0%, #4a96ef 100%);
+                border: 1px solid #58a6ff;
+                border-radius: 14px;
+                display: inline-block;
+                vertical-align: middle;
+                box-shadow: 0 2px 4px rgba(88, 166, 255, 0.3);
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            }}
+
+            /* Light theme 調整 */
+            .light-theme .problem-set {{
+                background: linear-gradient(135deg, #0969da 0%, #0860ca 100%);
+                border-color: #0969da;
+                box-shadow: 0 2px 4px rgba(9, 105, 218, 0.3);
+            }}
+
+            .folder-item.anr-folder .folder-header {{
+                background: linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(249, 115, 22, 0.03) 100%);
+                border-left: 3px solid var(--anr-color);
+            }}
+
+            .folder-item.anr-folder:hover .folder-header {{
+                background: linear-gradient(135deg, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.05) 100%);
+            }}
+
+            .folder-item.anr-folder .folder-icon {{
+                color: var(--anr-color);
+            }}
+
+            .folder-item.anr-folder .folder-count {{
+                background: rgba(249, 115, 22, 0.15);
+                color: var(--anr-color);
+                border: 1px solid rgba(249, 115, 22, 0.3);
+            }}
+
+            /* 文件夾表頭區分 - Tombstone 文件夾 */
+            .folder-item.tombstone-folder .folder-header {{
+                background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.03) 100%);
+                border-left: 3px solid var(--tombstone-color);
+            }}
+
+            .folder-item.tombstone-folder:hover .folder-header {{
+                background: linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(168, 85, 247, 0.05) 100%);
+            }}
+
+            .folder-item.tombstone-folder .folder-icon {{
+                color: var(--tombstone-color);
+            }}
+
+            .folder-item.tombstone-folder .folder-count {{
+                background: rgba(168, 85, 247, 0.15);
+                color: var(--tombstone-color);
+                border: 1px solid rgba(168, 85, 247, 0.3);
+            }}
+
+            /* 通用文件夾樣式調整 */
+            .folder-header {{
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                cursor: pointer;
+                user-select: none;
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }}
+
+            .folder-header::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: 3px;
+                background: transparent;
+                transition: width 0.2s ease;
+            }}
+
+            .folder-header:hover::before {{
+                width: 5px;
+            }}
+
+            /* 統一所有區域的 scrollbar 樣式 */
+            .panel-content::-webkit-scrollbar,
+            .file-browser::-webkit-scrollbar,
+            .similarity-view::-webkit-scrollbar,
+            .report-content::-webkit-scrollbar,
+            .report-iframe::-webkit-scrollbar,
+            textarea::-webkit-scrollbar,
+            pre::-webkit-scrollbar {{
+                width: 10px;
+                height: 10px;
+            }}
+
+            .panel-content::-webkit-scrollbar-track,
+            .file-browser::-webkit-scrollbar-track,
+            .similarity-view::-webkit-scrollbar-track,
+            .report-content::-webkit-scrollbar-track,
+            .report-iframe::-webkit-scrollbar-track,
+            textarea::-webkit-scrollbar-track,
+            pre::-webkit-scrollbar-track {{
+                background: rgba(88, 166, 255, 0.08);
+                border-radius: 10px;
+            }}
+
+            .panel-content::-webkit-scrollbar-thumb,
+            .file-browser::-webkit-scrollbar-thumb,
+            .similarity-view::-webkit-scrollbar-thumb,
+            .report-content::-webkit-scrollbar-thumb,
+            .report-iframe::-webkit-scrollbar-thumb,
+            textarea::-webkit-scrollbar-thumb,
+            pre::-webkit-scrollbar-thumb {{
+                background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
+                border-radius: 10px;
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                box-shadow: inset 0 0 3px rgba(88, 166, 255, 0.1);
+            }}
+
+            .panel-content::-webkit-scrollbar-thumb:hover,
+            .file-browser::-webkit-scrollbar-thumb:hover,
+            .similarity-view::-webkit-scrollbar-thumb:hover,
+            .report-content::-webkit-scrollbar-thumb:hover,
+            .report-iframe::-webkit-scrollbar-thumb:hover,
+            textarea::-webkit-scrollbar-thumb:hover,
+            pre::-webkit-scrollbar-thumb:hover {{
+                background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
+                border-color: rgba(88, 166, 255, 0.4);
+                box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
+            }}                  
         </style>
     </head>
     <body>
