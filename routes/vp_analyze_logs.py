@@ -4221,9 +4221,9 @@ class TombstoneReportGenerator:
         try:
             addr_int = int(addr, 16)
             if addr_int < 0x1000:
-            return "低地址 - 可能是空指針加偏移"
+                return "低地址 - 可能是空指針加偏移"
             elif addr_int > 0x7fffffffffff:
-            return "內核地址空間 - 可能是內核錯誤"
+                return "內核地址空間 - 可能是內核錯誤"
         except ValueError:
             # 如果無法解析為十六進制，返回 None
             return None
