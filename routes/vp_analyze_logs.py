@@ -6010,10 +6010,40 @@ class LogAnalyzerSystem:
             if not groups:
                 return '<p>沒有發現相似問題</p>'
             
+            def get_confidence_class(confidence):
+                """根據信心度返回對應的 CSS 類別"""
+                if confidence >= 90:
+                    return 'confidence-high'
+                elif confidence >= 70:
+                    return 'confidence-medium-high'
+                elif confidence >= 50:
+                    return 'confidence-medium'
+                elif confidence >= 30:
+                    return 'confidence-low'
+                else:
+                    return 'confidence-very-low'
+            
+            def get_confidence_icon(confidence):
+                """根據信心度返回對應的圖標"""
+                if confidence >= 90:
+                    return '✨'
+                elif confidence >= 70:
+                    return '⭐'
+                elif confidence >= 50:
+                    return '💫'
+                elif confidence >= 30:
+                    return '⚡'
+                else:
+                    return '❓'
+            
             html_str = ''
             report_counter = 0
             
             for group_idx, group in enumerate(groups):
+                # 獲取信心度樣式
+                confidence_class = get_confidence_class(group['similarity'])
+                confidence_icon = get_confidence_icon(group['similarity'])
+                
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
                     <div class="group-header" onclick="toggleGroup('{group['group_id']}')">
@@ -6023,8 +6053,11 @@ class LogAnalyzerSystem:
                         <span class="group-icon">📋</span>
                         <span class="group-title">{html.escape(group['title'])}</span>
                         <span class="group-info">
-                            <span>{group['count']} 個相似檔案</span>
-                            <span>信心度: {group['similarity']:.0f}%</span>
+                            <span class="file-count-badge">{group['count']} 個相似檔案</span>
+                            <span class="confidence-badge {confidence_class}">
+                                <span class="confidence-icon">{confidence_icon}</span>
+                                信心度: {group['similarity']:.0f}%
+                            </span>
                         </span>
                     </div>
                     <div class="group-content" id="content-{group['group_id']}" style="display: block;">
@@ -6037,10 +6070,10 @@ class LogAnalyzerSystem:
                     escaped_filename = html.escape(report['filename'])
                     
                     # 提取第二層目錄名稱
+                    second_dir = None
                     if 'path' in report:
                         path_parts = report['path'].split(os.sep)
                         # 找出輸入目錄後的第二層目錄
-                        second_dir = None
                         if self.input_folder:
                             input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
                             # 確保有足夠的層級
@@ -6051,6 +6084,11 @@ class LogAnalyzerSystem:
                                 # 如果只有一層，就用第一層
                                 second_dir = path_parts[len(input_parts)]
                     
+                    # 顯示檔案名稱和問題集
+                    display_name = escaped_filename
+                    if second_dir and second_dir not in ['.', '..', '']:
+                        display_name = f'{escaped_filename} <span class="problem-set">(問題 set: {second_dir})</span>'
+                    
                     # 讀取檔案內容並轉換為 data URL
                     try:
                         if 'content' in report and report['content']:
@@ -6059,11 +6097,59 @@ class LogAnalyzerSystem:
                             with open(report['path'], 'r', encoding='utf-8') as f:
                                 report_content = f.read()
                         
+                        # 注入統一的 scrollbar 樣式
+                        scrollbar_style = '''
+                        <style>
+                        /* 統一 iframe 內部的 scrollbar 樣式 */
+                        ::-webkit-scrollbar {
+                            width: 10px;
+                            height: 10px;
+                        }
+                        
+                        ::-webkit-scrollbar-track {
+                            background: rgba(88, 166, 255, 0.08);
+                            border-radius: 10px;
+                        }
+                        
+                        ::-webkit-scrollbar-thumb {
+                            background: linear-gradient(180deg, #58a6ff 0%, #4a96ef 100%);
+                            border-radius: 10px;
+                            border: 1px solid rgba(88, 166, 255, 0.2);
+                            box-shadow: inset 0 0 3px rgba(88, 166, 255, 0.1);
+                        }
+                        
+                        ::-webkit-scrollbar-thumb:hover {
+                            background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
+                            border-color: rgba(88, 166, 255, 0.4);
+                            box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
+                        }
+                        
+                        ::-webkit-scrollbar-corner {
+                            background: transparent;
+                        }
+                        
+                        /* Firefox Scrollbar */
+                        * {
+                            scrollbar-width: thin;
+                            scrollbar-color: #58a6ff rgba(88, 166, 255, 0.08);
+                        }
+                        </style>
+                        '''
+                        
+                        # 在 </head> 標籤前插入樣式
+                        if '</head>' in report_content:
+                            report_content = report_content.replace('</head>', scrollbar_style + '</head>')
+                        else:
+                            # 如果沒有 head 標籤，在開頭插入
+                            report_content = scrollbar_style + report_content
+                        
+                        # Base64 編碼
                         import base64
                         encoded_content = base64.b64encode(report_content.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_content}"
                     except Exception as e:
                         print(f"無法讀取檔案 {report['path']}: {e}")
+                        # 顯示錯誤訊息
                         error_html = f'''
                         <html>
                         <head>
@@ -6074,6 +6160,7 @@ class LogAnalyzerSystem:
                                     padding: 20px;
                                     color: #d32f2f;
                                 }}
+                                {scrollbar_style}
                             </style>
                         </head>
                         <body>
@@ -6086,11 +6173,6 @@ class LogAnalyzerSystem:
                         '''
                         encoded_error = base64.b64encode(error_html.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_error}"
-                    
-                    # 顯示檔案名稱和問題集
-                    display_name = escaped_filename
-                    if second_dir and second_dir not in ['.', '..', '']:
-                        display_name = f'{escaped_filename} <span class="problem-set">(問題 set: {second_dir})</span>'
                     
                     html_str += f'''
                     <div class="similarity-item">
@@ -7333,7 +7415,128 @@ class LogAnalyzerSystem:
                 background: linear-gradient(180deg, #79c0ff 0%, #58a6ff 100%);
                 border-color: rgba(88, 166, 255, 0.4);
                 box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
-            }}                  
+            }}
+
+            /* 信心度標籤 - 根據不同級別顯示不同顏色 */
+            .confidence-badge {{
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                border: 1px solid;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                transition: all 0.2s ease;
+            }}
+
+            /* 90-100% 信心度 - 綠色系 */
+            .confidence-high {{
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.08) 100%);
+                color: #10b981;
+                border-color: rgba(16, 185, 129, 0.3);
+            }}
+
+            .confidence-high:hover {{
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.15) 100%);
+                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+            }}
+
+            /* 70-89% 信心度 - 藍色系 */
+            .confidence-medium-high {{
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.15) 0%, rgba(88, 166, 255, 0.08) 100%);
+                color: #58a6ff;
+                border-color: rgba(88, 166, 255, 0.3);
+            }}
+
+            .confidence-medium-high:hover {{
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.25) 0%, rgba(88, 166, 255, 0.15) 100%);
+                box-shadow: 0 2px 8px rgba(88, 166, 255, 0.3);
+            }}
+
+            /* 50-69% 信心度 - 黃色系 */
+            .confidence-medium {{
+                background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
+                color: #f59e0b;
+                border-color: rgba(245, 158, 11, 0.3);
+            }}
+
+            .confidence-medium:hover {{
+                background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
+                box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+            }}
+
+            /* 30-49% 信心度 - 橙色系 */
+            .confidence-low {{
+                background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.08) 100%);
+                color: #f97316;
+                border-color: rgba(249, 115, 22, 0.3);
+            }}
+
+            .confidence-low:hover {{
+                background: linear-gradient(135deg, rgba(249, 115, 22, 0.25) 0%, rgba(249, 115, 22, 0.15) 100%);
+                box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+            }}
+
+            /* 0-29% 信心度 - 紅色系 */
+            .confidence-very-low {{
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%);
+                color: #ef4444;
+                border-color: rgba(239, 68, 68, 0.3);
+            }}
+
+            .confidence-very-low:hover {{
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.15) 100%);
+                box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+            }}
+
+            /* 信心度圖標 */
+            .confidence-icon {{
+                font-size: 14px;
+            }}
+
+            /* Light theme 調整 */
+            .light-theme .confidence-high {{
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.06) 100%);
+            }}
+
+            .light-theme .confidence-medium-high {{
+                background: linear-gradient(135deg, rgba(9, 105, 218, 0.12) 0%, rgba(9, 105, 218, 0.06) 100%);
+                color: #0969da;
+            }}
+
+            .light-theme .confidence-medium {{
+                background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, rgba(217, 119, 6, 0.06) 100%);
+                color: #d97706;
+            }}
+
+            .light-theme .confidence-low {{
+                background: linear-gradient(135deg, rgba(234, 88, 12, 0.12) 0%, rgba(234, 88, 12, 0.06) 100%);
+                color: #ea580c;
+            }}
+
+            .light-theme .confidence-very-low {{
+                background: linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(220, 38, 38, 0.06) 100%);
+                color: #dc2626;
+            }}
+
+            /* 更新 group-info 樣式 */
+            .group-info {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 13px;
+            }}
+
+            .file-count-badge {{
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 600;
+                border: 1px solid var(--border);
+            }}
+
         </style>
     </head>
     <body>
