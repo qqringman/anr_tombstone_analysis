@@ -4852,7 +4852,201 @@ class LogAnalyzerSystem:
             'error_count': 0,
             'total_time': 0,
         }
-    
+
+    def _extract_report_info(self, html_content: str, file_path: str) -> Optional[Dict]:
+        """從 HTML 報告中提取關鍵信息"""
+
+        info = {
+            'path': file_path,  # 保留絕對路徑供後續讀取
+            'filename': os.path.basename(file_path),
+            'type': 'anr' if 'anr' in file_path.lower() else 'tombstone',
+            'root_cause': '',
+            'severity': '',
+            'process_name': '',
+            'features': [],
+            'content': html_content  # 直接保存內容
+        }
+        
+        # 使用正則表達式提取關鍵信息
+        # 提取可能原因
+        cause_match = re.search(r'可能原因[：:]\s*([^<\n]+)', html_content)
+        if cause_match:
+            info['root_cause'] = cause_match.group(1).strip()
+        
+        # 提取嚴重程度
+        severity_match = re.search(r'嚴重程度[：:]\s*([^<\n]+)', html_content)
+        if severity_match:
+            info['severity'] = severity_match.group(1).strip()
+        
+        # 提取進程名稱
+        process_match = re.search(r'進程名稱[：:]\s*([^<\n]+)', html_content)
+        if process_match:
+            info['process_name'] = process_match.group(1).strip()
+        
+        # 提取特徵（用於相似度計算）
+        if 'Binder IPC' in html_content:
+            info['features'].append('binder_ipc')
+        if 'WindowManager' in html_content:
+            info['features'].append('window_manager')
+        if '線程數過多' in html_content or '線程數量過多' in html_content:
+            info['features'].append('too_many_threads')
+        if '死鎖' in html_content:
+            info['features'].append('deadlock')
+        if '記憶體不足' in html_content:
+            info['features'].append('memory_low')
+        if 'WebView' in html_content:
+            info['features'].append('webview')
+        if '空指針' in html_content or 'null pointer' in html_content.lower():
+            info['features'].append('null_pointer')
+        if 'SIGSEGV' in html_content:
+            info['features'].append('sigsegv')
+        if 'SIGABRT' in html_content:
+            info['features'].append('sigabrt')
+        
+        return info if info['root_cause'] else None
+
+    def _analyze_similarity(self, reports: List[Dict]) -> List[Dict]:
+        """分析報告的相似度並分組"""
+        if not reports:
+            return []
+        
+        # 按 root_cause 初步分組
+        groups = {}
+        for report in reports:
+            root_cause = report['root_cause']
+            if root_cause not in groups:
+                groups[root_cause] = []
+            groups[root_cause].append(report)
+        
+        # 計算每組的相似度並簡化標題
+        similarity_groups = []
+        for root_cause, group_reports in groups.items():
+            if len(group_reports) > 1:
+                # 計算組內相似度
+                avg_similarity = self._calculate_group_similarity(group_reports)
+                
+                # 提取最關鍵的共同特徵作為標題
+                key_feature = self._extract_key_feature(group_reports)
+                
+                similarity_groups.append({
+                    'title': key_feature,  # 使用簡化的標題
+                    'full_title': root_cause,  # 保留完整標題以備用
+                    'reports': group_reports,
+                    'count': len(group_reports),
+                    'similarity': avg_similarity,
+                    'group_id': f"group_{len(similarity_groups)}"
+                })
+        
+        # 按相似度排序
+        similarity_groups.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        return similarity_groups
+
+    def _extract_key_feature(self, reports: List[Dict]) -> str:
+        """提取最關鍵的共同特徵作為簡化標題"""
+        # 統計所有報告中的關鍵詞頻率
+        keyword_count = {}
+        
+        # 定義關鍵詞優先級
+        priority_keywords = {
+            'Binder IPC 阻塞': ['Binder IPC', 'BinderProxy', 'transact'],
+            '線程數過多': ['線程數過多', '線程數量過多', 'too many threads'],
+            '死鎖': ['死鎖', 'deadlock', '循環等待'],
+            '記憶體不足': ['記憶體不足', '記憶體嚴重不足', 'OutOfMemoryError'],
+            '主線程阻塞': ['主線程', 'main thread', 'UI thread'],
+            'WindowManager 服務阻塞': ['WindowManager', 'window service'],
+            'WebView 問題': ['WebView', 'chromium'],
+            '空指針': ['空指針', 'null pointer', 'NullPointerException'],
+            'I/O 操作阻塞': ['I/O', 'File', 'SQLite', 'SharedPreferences'],
+            '網路請求阻塞': ['Http', 'Socket', 'Network'],
+        }
+        
+        # 檢查每個優先關鍵詞在所有報告中的出現情況
+        for key_feature, keywords in priority_keywords.items():
+            found_in_all = True
+            for report in reports:
+                found = False
+                # 檢查這個特徵的任何關鍵詞是否在報告中
+                for keyword in keywords:
+                    if (keyword in report['root_cause'] or 
+                        keyword in ' '.join(report['features'])):
+                        found = True
+                        break
+                if not found:
+                    found_in_all = False
+                    break
+            
+            if found_in_all:
+                return key_feature
+        
+        # 如果沒有找到共同的優先關鍵詞，使用最常見的特徵
+        all_features = []
+        for report in reports:
+            all_features.extend(report['features'])
+        
+        if all_features:
+            from collections import Counter
+            feature_counter = Counter(all_features)
+            most_common = feature_counter.most_common(1)[0][0]
+            
+            # 轉換特徵名稱為更友好的顯示
+            feature_map = {
+                'binder_ipc': 'Binder IPC 問題',
+                'window_manager': 'WindowManager 問題',
+                'too_many_threads': '線程數過多',
+                'deadlock': '死鎖問題',
+                'memory_low': '記憶體不足',
+                'webview': 'WebView 問題',
+                'null_pointer': '空指針錯誤',
+                'sigsegv': '記憶體訪問違規',
+                'sigabrt': '程序異常終止'
+            }
+            
+            return feature_map.get(most_common, '相似問題')
+        
+        # 最後的fallback
+        return '相似問題'
+
+    def _calculate_group_similarity(self, reports: List[Dict]) -> float:
+        """計算組內平均相似度"""
+        if len(reports) < 2:
+            return 100.0
+        
+        similarities = []
+        for i in range(len(reports)):
+            for j in range(i + 1, len(reports)):
+                sim = self._calculate_report_similarity(reports[i], reports[j])
+                similarities.append(sim)
+        
+        return sum(similarities) / len(similarities) if similarities else 0
+
+    def _calculate_report_similarity(self, report1: Dict, report2: Dict) -> float:
+        """計算兩個報告的相似度"""
+        score = 0.0
+        
+        # 相同的 root_cause
+        if report1['root_cause'] == report2['root_cause']:
+            score += 40
+        
+        # 相同的嚴重程度
+        if report1['severity'] == report2['severity']:
+            score += 10
+        
+        # 相同的類型
+        if report1['type'] == report2['type']:
+            score += 10
+        
+        # 特徵相似度
+        features1 = set(report1['features'])
+        features2 = set(report2['features'])
+        if features1 and features2:
+            intersection = features1.intersection(features2)
+            union = features1.union(features2)
+            jaccard = len(intersection) / len(union)
+            score += jaccard * 40
+        
+        return min(score, 100)
+                    
     def analyze(self):
         """執行分析"""
         start_time = time.time()
@@ -5365,10 +5559,26 @@ class LogAnalyzerSystem:
         anr_html_count = 0
         tombstone_html_count = 0
         
+        # 收集所有分析報告用於相似度分析
+        analyzed_reports = []
+        
         for root, dirs, files in os.walk(self.output_folder):
             for file in files:
                 if file.endswith('.analyzed.html'):
+                    full_path = os.path.join(root, file)
                     rel_path = os.path.relpath(root, self.output_folder).lower()
+                    
+                    # 讀取分析報告內容
+                    try:
+                        with open(full_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            # 提取分析報告的關鍵信息
+                            report_info = self._extract_report_info(content, full_path)
+                            if report_info:
+                                analyzed_reports.append(report_info)
+                    except Exception as e:
+                        print(f"讀取報告失敗: {full_path} - {e}")
+                    
                     if 'anr' in rel_path:
                         anr_html_count += 1
                     elif 'tombstone' in rel_path:
@@ -5378,7 +5588,10 @@ class LogAnalyzerSystem:
         self.stats['anr_count'] = anr_html_count
         self.stats['tombstone_count'] = tombstone_html_count
         
-        html_content = self._generate_html_index(index_data)
+        # 進行相似度分析
+        similarity_groups = self._analyze_similarity(analyzed_reports)
+        
+        html_content = self._generate_html_index(index_data, similarity_groups)
         
         index_file = os.path.join(self.output_folder, 'index.html')
         with open(index_file, 'w', encoding='utf-8') as f:
@@ -5386,7 +5599,345 @@ class LogAnalyzerSystem:
         
         print(f"\n📝 已生成索引檔案: {index_file}")
     
-    def _generate_html_index(self, index_data: Dict) -> str:
+    def _get_original_styles(self) -> str:
+        """獲取原始樣式（保持不變）"""
+        return """
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            :root {
+                --bg-primary: #212121;
+                --bg-secondary: #2a2a2a;
+                --bg-hover: #343434;
+                --text-primary: #ececec;
+                --text-secondary: #a0a0a0;
+                --text-muted: #6e6e6e;
+                --border: #424242;
+                --accent: #10a37f;
+                --accent-hover: #0e8e6f;
+                --anr-color: #ff9800;
+                --tombstone-color: #ab47bc;
+                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                --radius: 8px;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                line-height: 1.6;
+                min-height: 100vh;
+            }
+            
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            
+            /* Header */
+            .header {
+                text-align: center;
+                padding: 60px 0 40px;
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 40px;
+            }
+            
+            .header h1 {
+                font-size: 32px;
+                font-weight: 600;
+                margin-bottom: 12px;
+                color: var(--text-primary);
+            }
+            
+            .header .subtitle {
+                font-size: 16px;
+                color: var(--text-secondary);
+            }
+            
+            /* Stats */
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+                margin: 40px 0;
+            }
+            
+            .stat-card {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 20px;
+                text-align: center;
+                transition: all 0.2s ease;
+            }
+            
+            .stat-card:hover {
+                border-color: var(--accent);
+                transform: translateY(-2px);
+            }
+            
+            .stat-value {
+                font-size: 28px;
+                font-weight: 600;
+                color: var(--accent);
+            }
+            
+            .stat-label {
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-top: 4px;
+            }
+            
+            /* File Browser */
+            .file-browser {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                overflow: hidden;
+            }
+            
+            /* File Item */
+            .file-item {
+                border-bottom: 1px solid var(--border);
+                position: relative;
+                transition: background 0.2s ease;
+            }
+            
+            .file-item:last-child {
+                border-bottom: none;
+            }
+            
+            .file-item:hover {
+                background: var(--bg-hover);
+            }
+            
+            .file-link {
+                display: block;
+                text-decoration: none;
+                color: inherit;
+            }
+            
+            .file-content {
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .file-icon {
+                font-size: 24px;
+                flex-shrink: 0;
+            }
+            
+            .file-info {
+                flex: 1;
+                min-width: 0;
+            }
+            
+            .file-name {
+                font-size: 14px;
+                color: var(--text-primary);
+                margin-bottom: 4px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            
+            .file-meta {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 12px;
+                color: var(--text-secondary);
+            }
+            
+            .file-type {
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-weight: 500;
+                text-transform: uppercase;
+                font-size: 11px;
+            }
+            
+            .file-type-anr {
+                background: rgba(255, 152, 0, 0.15);
+                color: var(--anr-color);
+            }
+            
+            .file-type-tombstone {
+                background: rgba(171, 71, 188, 0.2);
+                color: var(--tombstone-color);
+            }
+            
+            .source-link {
+                position: absolute;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--text-secondary);
+                padding: 8px;
+                border-radius: 4px;
+                transition: all 0.2s ease;
+                opacity: 0;
+            }
+            
+            .file-item:hover .source-link {
+                opacity: 1;
+            }
+            
+            .source-link:hover {
+                color: var(--text-primary);
+                background: var(--bg-hover);
+            }
+            
+            /* Folder */
+            .folder-item {
+                border-bottom: 1px solid var(--border);
+            }
+            
+            .folder-header {
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                user-select: none;
+                transition: background 0.2s ease;
+            }
+            
+            .folder-header:hover {
+                background: var(--bg-hover);
+            }
+            
+            .folder-arrow {
+                color: var(--text-secondary);
+                transition: transform 0.2s ease;
+                flex-shrink: 0;
+            }
+            
+            .folder-arrow.open {
+                transform: rotate(90deg);
+            }
+            
+            .folder-icon {
+                font-size: 20px;
+                flex-shrink: 0;
+            }
+            
+            .folder-name {
+                font-size: 14px;
+                color: var(--text-primary);
+                flex: 1;
+            }
+            
+            .folder-count {
+                font-size: 12px;
+                color: var(--text-muted);
+                background: var(--bg-primary);
+                padding: 2px 8px;
+                border-radius: 12px;
+            }
+            
+            .folder-content {
+                background: rgba(0, 0, 0, 0.2);
+            }
+            
+            .folder-content .file-item {
+                margin-left: 32px;
+            }
+            
+            /* Footer */
+            .footer {
+                text-align: center;
+                padding: 40px 0;
+                color: var(--text-secondary);
+                font-size: 14px;
+            }
+            
+            /* Responsive */
+            @media (max-width: 768px) {
+                .container {
+                    padding: 16px;
+                }
+                
+                .header {
+                    padding: 40px 0 30px;
+                }
+                
+                .header h1 {
+                    font-size: 24px;
+                }
+                
+                .stats {
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                }
+                
+                .file-content {
+                    padding: 14px 16px;
+                }
+                
+                .source-link {
+                    opacity: 1;
+                    right: 16px;
+                }
+            }
+
+            /* Controls */
+            .controls {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 20px;
+            }
+
+            .control-btn {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 16px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                color: var(--text-primary);
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            .control-btn:hover {
+                background: var(--bg-hover);
+                border-color: var(--accent);
+            }
+
+            .control-btn:active {
+                transform: scale(0.98);
+            }
+
+            .control-btn svg {
+                flex-shrink: 0;
+            }
+
+            .file-formats {
+                display: inline-flex;
+                gap: 8px;
+            }
+
+            .file-formats a {
+                text-decoration: none;
+                opacity: 0.7;
+                transition: opacity 0.2s;
+            }
+
+            .file-formats a:hover {
+                opacity: 1;
+            }
+        """
+            
+    def _generate_html_index(self, index_data: Dict, similarity_groups: List[Dict] = None) -> str:
         """生成 HTML 索引內容 - Dark ChatGPT 風格"""
         def render_tree(data, prefix=""):
             html_str = ""
@@ -5447,7 +5998,80 @@ class LogAnalyzerSystem:
                     </div>
                     '''
             return html_str
-        
+
+        def render_similarity_groups(groups):
+            if not groups:
+                return '<p>沒有發現相似問題</p>'
+            
+            html_str = ''
+            for group in groups:
+                html_str += f'''
+                <div class="similarity-group" id="{group['group_id']}">
+                    <div class="group-header" onclick="toggleGroup('{group['group_id']}')">
+                        <svg class="group-arrow open" id="arrow-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
+                            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                        </svg>
+                        <span class="group-icon">📋</span>
+                        <span class="group-title">{html.escape(group['title'])}</span>
+                        <span class="group-info">
+                            {group['count']} 個相似檔案 (信心度: {group['similarity']:.0f}%)
+                        </span>
+                    </div>
+                    <div class="group-content" id="content-{group['group_id']}" style="display: block;">
+                '''
+                
+                # 渲染組內的報告
+                for report in group['reports']:
+                    report_id = f"report_{group['group_id']}_{report['filename'].replace('.', '_')}"
+                    escaped_filename = html.escape(report['filename'])
+                    
+                    # 讀取檔案內容並轉換為 data URL
+                    try:
+                        # 如果已經有內容，直接使用
+                        if 'content' in report and report['content']:
+                            report_content = report['content']
+                        else:
+                            # 否則從檔案讀取
+                            with open(report['path'], 'r', encoding='utf-8') as f:
+                                report_content = f.read()
+                        
+                        # Base64 編碼
+                        import base64
+                        encoded_content = base64.b64encode(report_content.encode('utf-8')).decode('utf-8')
+                        iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_content}"
+                    except Exception as e:
+                        print(f"無法讀取檔案 {report['path']}: {e}")
+                        # 顯示錯誤訊息
+                        error_html = f'<html><body><p style="color: red;">無法載入檔案: {escaped_filename}</p></body></html>'
+                        encoded_error = base64.b64encode(error_html.encode('utf-8')).decode('utf-8')
+                        iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_error}"
+                    
+                    html_str += f'''
+                    <div class="similarity-item">
+                        <div class="report-header" onclick="toggleReport('{report_id}')">
+                            <svg class="report-arrow open" id="arrow-{report_id}" width="16" height="16" viewBox="0 0 16 16">
+                                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            </svg>
+                            <span class="report-icon">📄</span>
+                            <span class="report-name">{escaped_filename}</span>
+                        </div>
+                        <div class="report-content" id="content-{report_id}" style="display: block;">
+                            <iframe src="{iframe_src}" 
+                                    class="report-iframe"
+                                    style="width: 100%; min-height: 600px; border: 1px solid #ddd; background: white;"
+                                    onload="adjustIframeHeight(this)">
+                            </iframe>
+                        </div>
+                    </div>
+                    '''
+                
+                html_str += '''
+                    </div>
+                </div>
+                '''
+            
+            return html_str
+                        
         # 計算統計數據
         def _count_files(data):
             count = 0
@@ -5459,6 +6083,7 @@ class LogAnalyzerSystem:
                         count += _count_files(value)
             return count
         
+        # 主 HTML 模板
         return f"""<!DOCTYPE html>
     <html lang="zh-TW">
     <head>
@@ -5466,204 +6091,27 @@ class LogAnalyzerSystem:
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Android Log 分析報告</title>
         <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
+            /* 保留原有的樣式 */
+            {self._get_original_styles()}
+            
+            /* 新增相似問題視圖的樣式 */
+            .view-mode {{
+                display: none;
             }}
             
-            :root {{
-                --bg-primary: #212121;
-                --bg-secondary: #2a2a2a;
-                --bg-hover: #343434;
-                --text-primary: #ececec;
-                --text-secondary: #a0a0a0;
-                --text-muted: #6e6e6e;
-                --border: #424242;
-                --accent: #10a37f;
-                --accent-hover: #0e8e6f;
-                --anr-color: #ff9800;        /* 改為橘色，更柔和 */
-                --tombstone-color: #ab47bc;
-                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-                --radius: 8px;
-            }}
-            
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-                background: var(--bg-primary);
-                color: var(--text-primary);
-                line-height: 1.6;
-                min-height: 100vh;
-            }}
-            
-            .container {{
-                max-width: 1000px;
-                margin: 0 auto;
-                padding: 20px;
-            }}
-            
-            /* Header */
-            .header {{
-                text-align: center;
-                padding: 60px 0 40px;
-                border-bottom: 1px solid var(--border);
-                margin-bottom: 40px;
-            }}
-            
-            .header h1 {{
-                font-size: 32px;
-                font-weight: 600;
-                margin-bottom: 12px;
-                color: var(--text-primary);
-            }}
-            
-            .header .subtitle {{
-                font-size: 16px;
-                color: var(--text-secondary);
-            }}
-            
-            /* Stats */
-            .stats {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 16px;
-                margin: 40px 0;
-            }}
-            
-            .stat-card {{
-                background: var(--bg-secondary);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                padding: 20px;
-                text-align: center;
-                transition: all 0.2s ease;
-            }}
-            
-            .stat-card:hover {{
-                border-color: var(--accent);
-                transform: translateY(-2px);
-            }}
-            
-            .stat-value {{
-                font-size: 28px;
-                font-weight: 600;
-                color: var(--accent);
-            }}
-            
-            .stat-label {{
-                font-size: 14px;
-                color: var(--text-secondary);
-                margin-top: 4px;
-            }}
-            
-            /* File Browser */
-            .file-browser {{
-                background: var(--bg-secondary);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                overflow: hidden;
-            }}
-            
-            /* File Item */
-            .file-item {{
-                border-bottom: 1px solid var(--border);
-                position: relative;
-                transition: background 0.2s ease;
-            }}
-            
-            .file-item:last-child {{
-                border-bottom: none;
-            }}
-            
-            .file-item:hover {{
-                background: var(--bg-hover);
-            }}
-            
-            .file-link {{
+            .view-mode.active {{
                 display: block;
-                text-decoration: none;
-                color: inherit;
             }}
             
-            .file-content {{
-                padding: 16px 20px;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }}
-            
-            .file-icon {{
-                font-size: 24px;
-                flex-shrink: 0;
-            }}
-            
-            .file-info {{
-                flex: 1;
-                min-width: 0;
-            }}
-            
-            .file-name {{
-                font-size: 14px;
-                color: var(--text-primary);
-                margin-bottom: 4px;
+            .similarity-group {{
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                margin-bottom: 16px;
                 overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
             }}
             
-            .file-meta {{
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                font-size: 12px;
-                color: var(--text-secondary);
-            }}
-            
-            .file-type {{
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-weight: 500;
-                text-transform: uppercase;
-                font-size: 11px;
-            }}
-            
-            .file-type-anr {{
-                background: rgba(255, 152, 0, 0.15);  /* 橘色背景，透明度更低 */
-                color: var(--anr-color);
-            }}
-            
-            .file-type-tombstone {{
-                background: rgba(171, 71, 188, 0.2);
-                color: var(--tombstone-color);
-            }}
-            
-            .source-link {{
-                position: absolute;
-                right: 20px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: var(--text-secondary);
-                padding: 8px;
-                border-radius: 4px;
-                transition: all 0.2s ease;
-                opacity: 0;
-            }}
-            
-            .file-item:hover .source-link {{
-                opacity: 1;
-            }}
-            
-            .source-link:hover {{
-                color: var(--text-primary);
-                background: var(--bg-hover);
-            }}
-            
-            /* Folder */
-            .folder-item {{
-                border-bottom: 1px solid var(--border);
-            }}
-            
-            .folder-header {{
+            .group-header {{
                 padding: 16px 20px;
                 display: flex;
                 align-items: center;
@@ -5671,97 +6119,103 @@ class LogAnalyzerSystem:
                 cursor: pointer;
                 user-select: none;
                 transition: background 0.2s ease;
+                background: rgba(255, 152, 0, 0.1);
             }}
             
-            .folder-header:hover {{
-                background: var(--bg-hover);
+            .group-header:hover {{
+                background: rgba(255, 152, 0, 0.2);
             }}
             
-            .folder-arrow {{
+            .group-arrow {{
                 color: var(--text-secondary);
                 transition: transform 0.2s ease;
                 flex-shrink: 0;
             }}
             
-            .folder-arrow.open {{
+            .group-arrow.open {{
                 transform: rotate(90deg);
             }}
             
-            .folder-icon {{
+            .group-icon {{
                 font-size: 20px;
                 flex-shrink: 0;
             }}
             
-            .folder-name {{
-                font-size: 14px;
+            .group-title {{
+                font-size: 16px;
+                font-weight: 600;
                 color: var(--text-primary);
                 flex: 1;
             }}
             
-            .folder-count {{
-                font-size: 12px;
-                color: var(--text-muted);
+            .group-info {{
+                font-size: 13px;
+                color: var(--text-secondary);
                 background: var(--bg-primary);
-                padding: 2px 8px;
-                border-radius: 12px;
+                padding: 4px 12px;
+                border-radius: 16px;
             }}
             
-            .folder-content {{
+            .group-content {{
                 background: rgba(0, 0, 0, 0.2);
             }}
             
-            .folder-content .file-item {{
-                margin-left: 32px;
+            .similarity-item {{
+                border-bottom: 1px solid var(--border);
             }}
             
-            /* Footer */
-            .footer {{
-                text-align: center;
-                padding: 40px 0;
-                color: var(--text-secondary);
-                font-size: 14px;
+            .similarity-item:last-child {{
+                border-bottom: none;
             }}
             
-            /* Responsive */
-            @media (max-width: 768px) {{
-                .container {{
-                    padding: 16px;
-                }}
-                
-                .header {{
-                    padding: 40px 0 30px;
-                }}
-                
-                .header h1 {{
-                    font-size: 24px;
-                }}
-                
-                .stats {{
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 12px;
-                }}
-                
-                .file-content {{
-                    padding: 14px 16px;
-                }}
-                
-                .source-link {{
-                    opacity: 1;
-                    right: 16px;
-                }}
-            }}
-
-            /* Controls */
-            .controls {{
-                display: flex;
-                gap: 12px;
-                margin-bottom: 20px;
-            }}
-
-            .control-btn {{
+            .report-header {{
+                padding: 12px 20px 12px 40px;
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 8px;
+                cursor: pointer;
+                transition: background 0.2s ease;
+            }}
+            
+            .report-header:hover {{
+                background: var(--bg-hover);
+            }}
+            
+            .report-arrow {{
+                color: var(--text-secondary);
+                transition: transform 0.2s ease;
+                flex-shrink: 0;
+            }}
+            
+            .report-arrow.open {{
+                transform: rotate(90deg);
+            }}
+            
+            .report-icon {{
+                font-size: 16px;
+            }}
+            
+            .report-name {{
+                font-size: 14px;
+                color: var(--text-primary);
+            }}
+            
+            .report-content {{
+                padding: 0;
+                background: var(--bg-primary);
+            }}
+            
+            .report-iframe {{
+                width: 100%;
+                height: 600px;
+                border: none;
+                display: block;
+            }}
+            
+            .view-toggle {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
                 padding: 8px 16px;
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
@@ -5771,33 +6225,38 @@ class LogAnalyzerSystem:
                 cursor: pointer;
                 transition: all 0.2s ease;
             }}
-
-            .control-btn:hover {{
+            
+            .view-toggle:hover {{
                 background: var(--bg-hover);
                 border-color: var(--accent);
             }}
-
-            .control-btn:active {{
-                transform: scale(0.98);
+            
+            .view-toggle.active {{
+                background: var(--accent);
+                color: white;
+                border-color: var(--accent);
             }}
 
-            .control-btn svg {{
-                flex-shrink: 0;
+            .iframe-error {{
+                padding: 40px;
+                text-align: center;
+                color: var(--text-secondary);
+                background: rgba(255, 0, 0, 0.1);
+                border-radius: var(--radius);
+                margin: 20px;
             }}
 
-            .file-formats {{
-                display: inline-flex;
-                gap: 8px;
+            .iframe-error p {{
+                margin: 10px 0;
             }}
 
-            .file-formats a {{
-                text-decoration: none;
-                opacity: 0.7;
-                transition: opacity 0.2s;
-            }}
-
-            .file-formats a:hover {{
-                opacity: 1;
+            .report-iframe {{
+                width: 100%;
+                min-height: 600px;
+                max-height: 1000px;
+                border: none;
+                display: block;
+                background: var(--bg-primary);
             }}
 
         </style>
@@ -5827,6 +6286,7 @@ class LogAnalyzerSystem:
                     <div class="stat-label">分析時間</div>
                 </div>
             </div>
+            
             <div class="controls">
                 <button onclick="expandAll()" class="control-btn">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -5840,9 +6300,22 @@ class LogAnalyzerSystem:
                     </svg>
                     全部收合
                 </button>
-            </div>            
-            <main class="file-browser">
+                <button onclick="toggleView('similarity')" class="view-toggle" id="similarityBtn">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2v6m0 0l3-3m-3 3L5 5m7 6v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    相似問題
+                </button>
+            </div>
+            
+            <!-- 檔案瀏覽視圖 -->
+            <main class="file-browser view-mode active" id="fileView">
                 {render_tree(index_data)}
+            </main>
+            
+            <!-- 相似問題視圖 -->
+            <main class="similarity-view view-mode" id="similarityView">
+                {render_similarity_groups(similarity_groups)}
             </main>
             
             <footer class="footer">
@@ -5851,6 +6324,30 @@ class LogAnalyzerSystem:
         </div>
         
         <script>
+            let currentView = 'file';
+            
+            function toggleView(view) {{
+                const fileView = document.getElementById('fileView');
+                const similarityView = document.getElementById('similarityView');
+                const similarityBtn = document.getElementById('similarityBtn');
+                
+                if (view === 'similarity') {{
+                    if (currentView === 'similarity') {{
+                        // 切換回檔案視圖
+                        fileView.classList.add('active');
+                        similarityView.classList.remove('active');
+                        similarityBtn.classList.remove('active');
+                        currentView = 'file';
+                    }} else {{
+                        // 切換到相似問題視圖
+                        fileView.classList.remove('active');
+                        similarityView.classList.add('active');
+                        similarityBtn.classList.add('active');
+                        currentView = 'similarity';
+                    }}
+                }}
+            }}
+            
             function toggleFolder(folderId) {{
                 const folder = document.getElementById(folderId);
                 const arrow = document.getElementById('arrow-' + folderId);
@@ -5864,33 +6361,166 @@ class LogAnalyzerSystem:
                 }}
             }}
             
-            function expandAll() {{
-                const folders = document.querySelectorAll('.folder-content');
-                const arrows = document.querySelectorAll('.folder-arrow');
+            function toggleGroup(groupId) {{
+                const content = document.getElementById('content-' + groupId);
+                const arrow = document.getElementById('arrow-' + groupId);
                 
-                folders.forEach(folder => {{
-                    folder.style.display = 'block';
-                }});
-                
-                arrows.forEach(arrow => {{
+                if (content.style.display === 'none') {{
+                    content.style.display = 'block';
                     arrow.classList.add('open');
-                }});
+                }} else {{
+                    content.style.display = 'none';
+                    arrow.classList.remove('open');
+                }}
+            }}
+            
+            function toggleReport(reportId) {{
+                const content = document.getElementById('content-' + reportId);
+                const arrow = document.getElementById('arrow-' + reportId);
+                
+                if (content.style.display === 'none') {{
+                    content.style.display = 'block';
+                    arrow.classList.add('open');
+                }} else {{
+                    content.style.display = 'none';
+                    arrow.classList.remove('open');
+                }}
+            }}
+            
+            function expandAll() {{
+                if (currentView === 'file') {{
+                    // 檔案視圖的展開
+                    const folders = document.querySelectorAll('.folder-content');
+                    const arrows = document.querySelectorAll('.folder-arrow');
+                    
+                    folders.forEach(folder => {{
+                        folder.style.display = 'block';
+                    }});
+                    
+                    arrows.forEach(arrow => {{
+                        arrow.classList.add('open');
+                    }});
+                }} else {{
+                    // 相似問題視圖的展開
+                    const groupContents = document.querySelectorAll('.group-content');
+                    const groupArrows = document.querySelectorAll('.group-arrow');
+                    const reportContents = document.querySelectorAll('.report-content');
+                    const reportArrows = document.querySelectorAll('.report-arrow');
+                    
+                    groupContents.forEach(content => {{
+                        content.style.display = 'block';
+                    }});
+                    
+                    groupArrows.forEach(arrow => {{
+                        arrow.classList.add('open');
+                    }});
+                    
+                    reportContents.forEach(content => {{
+                        content.style.display = 'block';
+                    }});
+                    
+                    reportArrows.forEach(arrow => {{
+                        arrow.classList.add('open');
+                    }});
+                }}
             }}
             
             function collapseAll() {{
-                const folders = document.querySelectorAll('.folder-content');
-                const arrows = document.querySelectorAll('.folder-arrow');
-                
-                folders.forEach(folder => {{
-                    folder.style.display = 'none';
-                }});
-                
-                arrows.forEach(arrow => {{
-                    arrow.classList.remove('open');
-                }});
+                if (currentView === 'file') {{
+                    // 檔案視圖的收合
+                    const folders = document.querySelectorAll('.folder-content');
+                    const arrows = document.querySelectorAll('.folder-arrow');
+                    
+                    folders.forEach(folder => {{
+                        folder.style.display = 'none';
+                    }});
+                    
+                    arrows.forEach(arrow => {{
+                        arrow.classList.remove('open');
+                    }});
+                }} else {{
+                    // 相似問題視圖的收合
+                    const groupContents = document.querySelectorAll('.group-content');
+                    const groupArrows = document.querySelectorAll('.group-arrow');
+                    const reportContents = document.querySelectorAll('.report-content');
+                    const reportArrows = document.querySelectorAll('.report-arrow');
+                    
+                    groupContents.forEach(content => {{
+                        content.style.display = 'none';
+                    }});
+                    
+                    groupArrows.forEach(arrow => {{
+                        arrow.classList.remove('open');
+                    }});
+                    
+                    reportContents.forEach(content => {{
+                        content.style.display = 'none';
+                    }});
+                    
+                    reportArrows.forEach(arrow => {{
+                        arrow.classList.remove('open');
+                    }});
+                }}
             }}
             
-            // 預設全部展開
+            function adjustIframeHeight(iframe) {{
+                try {{
+                    // 嘗試自動調整 iframe 高度
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const height = Math.max(
+                        iframeDoc.body.scrollHeight,
+                        iframeDoc.documentElement.scrollHeight
+                    );
+                    iframe.style.height = Math.min(height + 20, 800) + 'px';
+                }} catch (e) {{
+                    // 跨域限制，使用固定高度
+                    iframe.style.height = '600px';
+                }}
+            }}
+
+            function handleIframeError(iframe, filename, path) {{
+                console.error('Failed to load iframe:', filename, 'Path:', path);
+                iframe.style.display = 'none';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'iframe-error';
+                errorDiv.innerHTML = '<p>無法載入分析報告: ' + filename + '</p>' +
+                                    '<p>嘗試路徑: ' + path + '</p>' +
+                                    '<p>請確認檔案是否存在</p>';
+                errorDiv.style.padding = '20px';
+                errorDiv.style.textAlign = 'center';
+                errorDiv.style.color = '#999';
+                errorDiv.style.backgroundColor = 'rgba(255,0,0,0.1)';
+                errorDiv.style.borderRadius = '8px';
+                errorDiv.style.margin = '20px';
+                iframe.parentNode.appendChild(errorDiv);
+            }}
+
+            function adjustIframeHeight(iframe) {{
+                try {{
+                    // 重置高度以獲得正確的內容高度
+                    iframe.style.height = '100px';
+                    
+                    // 等待內容載入
+                    setTimeout(() => {{
+                        try {{
+                            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                            const height = Math.max(
+                                iframeDoc.body.scrollHeight,
+                                iframeDoc.documentElement.scrollHeight,
+                                600 // 最小高度
+                            );
+                            iframe.style.height = Math.min(height + 50, 1000) + 'px';
+                        }} catch (e) {{
+                            // 跨域或其他錯誤，使用預設高度
+                            iframe.style.height = '700px';
+                        }}
+                    }}, 100);
+                }} catch (e) {{
+                    iframe.style.height = '700px';
+                }}
+            }}
+
+            // 預設展開檔案視圖
             document.addEventListener('DOMContentLoaded', function() {{
                 expandAll();
             }});
