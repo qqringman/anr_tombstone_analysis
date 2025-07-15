@@ -5419,7 +5419,7 @@ class LogAnalyzerSystem:
                                 </div>
                             </div>
                         </a>
-                        <a href="/view-analysis?path={html.escape(original_path)}&original=true" target="_blank" class="source-link" title="查看原始檔案">
+                        <a href="/view-analysis?path={html.escape(original_path)}.analyzed.html" target="_blank" class="source-link" title="查看原始檔案">
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                                 <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
                                 <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
