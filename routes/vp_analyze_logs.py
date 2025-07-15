@@ -1032,9 +1032,8 @@ class ANRReportGenerator:
         
         /* ANR 和 Tombstone 檔案的不同顏色 - 增強版 */
         .anr-item {
-            background-color: var(--anr-bg);
-            border-left: 4px solid var(--anr-color);
-            position: relative;
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.05) 0%, rgba(249, 115, 22, 0.02) 100%);
+            border-left: 3px solid var(--anr-color);
         }
         
         .anr-item::before {
@@ -1061,9 +1060,8 @@ class ANRReportGenerator:
         }
         
         .tombstone-item {
-            background-color: var(--tombstone-bg);
-            border-left: 4px solid var(--tombstone-color);
-            position: relative;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.05) 0%, rgba(168, 85, 247, 0.02) 100%);
+            border-left: 3px solid var(--tombstone-color);
         }
         
         .tombstone-item::before {
@@ -6125,6 +6123,7 @@ class LogAnalyzerSystem:
                 --bg-secondary: #161b22;
                 --bg-hover: #1f2937;
                 --bg-header: #010409;
+                --bg-item: #1c2128;
                 --text-primary: #f0f6fc;
                 --text-secondary: #8b949e;
                 --text-muted: #6e7681;
@@ -6147,6 +6146,7 @@ class LogAnalyzerSystem:
                 --bg-secondary: #f6f8fa;
                 --bg-hover: #f3f4f6;
                 --bg-header: #ffffff;
+                --bg-item: #fafbfc;
                 --text-primary: #24292f;
                 --text-secondary: #57606a;
                 --text-muted: #8c959f;
@@ -6173,29 +6173,33 @@ class LogAnalyzerSystem:
             
             /* Scrollbar Styling */
             ::-webkit-scrollbar {{
-                width: 12px;
-                height: 12px;
+                width: 10px;
+                height: 10px;
             }}
             
             ::-webkit-scrollbar-track {{
                 background: var(--bg-secondary);
-                border-radius: 6px;
+                border-radius: 10px;
+                margin: 5px;
             }}
             
             ::-webkit-scrollbar-thumb {{
-                background: var(--border);
-                border-radius: 6px;
+                background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+                border-radius: 10px;
                 border: 2px solid var(--bg-secondary);
+                transition: all 0.3s ease;
             }}
             
             ::-webkit-scrollbar-thumb:hover {{
-                background: var(--text-muted);
+                background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+                border-color: var(--accent);
+                box-shadow: 0 0 5px rgba(88, 166, 255, 0.5);
             }}
             
             /* Firefox Scrollbar */
             * {{
                 scrollbar-width: thin;
-                scrollbar-color: var(--border) var(--bg-secondary);
+                scrollbar-color: var(--accent) var(--bg-secondary);
             }}
             
             .main-wrapper {{
@@ -6209,15 +6213,15 @@ class LogAnalyzerSystem:
                 position: sticky;
                 top: 0;
                 z-index: 1000;
-                background: var(--bg-header);
+                background: linear-gradient(180deg, var(--bg-header) 0%, rgba(1, 4, 9, 0.95) 100%);
                 border-bottom: 1px solid var(--border);
                 height: var(--header-height);
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                padding: 0 24px;
-                backdrop-filter: blur(10px);
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                padding: 0 32px;
+                backdrop-filter: blur(20px);
+                box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
             }}
             
             .top-bar-left {{
@@ -6447,9 +6451,9 @@ class LogAnalyzerSystem:
             .file-browser {{
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
-                border-radius: var(--radius);
+                border-radius: 16px;
                 overflow: hidden;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             }}
             
             /* Table Header */
@@ -6469,9 +6473,12 @@ class LogAnalyzerSystem:
             
             /* File Item */
             .file-item {{
+                background: var(--bg-item);
                 border-bottom: 1px solid var(--border-light);
                 position: relative;
-                transition: all 0.2s ease;
+                transition: all 0.3s ease;
+                margin: 4px;
+                border-radius: 8px;
             }}
             
             .file-item:last-child {{
@@ -6480,7 +6487,8 @@ class LogAnalyzerSystem:
             
             .file-item:hover {{
                 background: var(--bg-hover);
-                box-shadow: inset 0 0 0 1px var(--accent);
+                box-shadow: 0 2px 8px rgba(88, 166, 255, 0.1);
+                transform: translateX(4px);
             }}
             
             .file-link {{
@@ -6627,6 +6635,10 @@ class LogAnalyzerSystem:
                 background: rgba(0, 0, 0, 0.02);
             }}
             
+            .light-theme .top-bar {{
+                background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+            }}
+
             .folder-content .file-item {{
                 margin-left: 36px;
             }}
@@ -6675,27 +6687,28 @@ class LogAnalyzerSystem:
             .similarity-group {{
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
-                border-radius: 12px;
-                margin-bottom: 20px;
+                border-radius: 16px;
+                margin-bottom: 24px;
                 overflow: hidden;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
                 transition: all 0.3s ease;
             }}
             
             .similarity-group:hover {{
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 8px 30px rgba(88, 166, 255, 0.15);
+                transform: translateY(-2px);
             }}
             
             .similarity-group .group-header {{
-                padding: 20px 24px;
+                padding: 24px;
                 display: flex;
                 align-items: center;
                 gap: 16px;
                 cursor: pointer;
                 user-select: none;
-                background: linear-gradient(135deg, rgba(88, 166, 255, 0.05) 0%, rgba(88, 166, 255, 0.02) 100%);
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
                 border-bottom: 1px solid var(--border);
-                transition: all 0.2s ease;
+                transition: all 0.3s ease;
             }}
             
             .similarity-group .group-header:hover {{
@@ -6762,9 +6775,11 @@ class LogAnalyzerSystem:
             }}
             
             .similarity-item {{
-                background: var(--bg-primary);
-                border-bottom: 1px solid var(--border);
-                transition: all 0.2s ease;
+                background: var(--bg-item);
+                border-bottom: 1px solid var(--border-light);
+                transition: all 0.3s ease;
+                margin: 4px;
+                border-radius: 8px;
             }}
             
             .similarity-item:last-child {{
@@ -6772,7 +6787,8 @@ class LogAnalyzerSystem:
             }}
             
             .similarity-item:hover {{
-                background: rgba(88, 166, 255, 0.02);
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.05) 0%, rgba(88, 166, 255, 0.02) 100%);
+                transform: translateX(4px);
             }}
             
             .report-header {{
@@ -7068,7 +7084,18 @@ class LogAnalyzerSystem:
             
             // Export HTML
             const exportHTML = () => {{
+                // 先隱藏匯出按鈕
+                const exportBtn = document.querySelector('.export-btn');
+                const originalDisplay = exportBtn.style.display;
+                exportBtn.style.display = 'none';
+                
+                // 獲取 HTML 內容
                 const htmlContent = document.documentElement.outerHTML;
+                
+                // 恢復按鈕顯示
+                exportBtn.style.display = originalDisplay;
+                
+                // 創建並下載文件
                 const blob = new Blob([htmlContent], {{ type: 'text/html;charset=utf-8' }});
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
