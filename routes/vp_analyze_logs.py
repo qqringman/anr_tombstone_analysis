@@ -8978,6 +8978,11 @@ class LogAnalyzerSystem:
 
             // 複製相似問題群組資訊
             function copyGroupInfo(groupId) {{
+                // 阻止事件冒泡，避免觸發開合事件
+                if (event) {{
+                    event.stopPropagation();
+                    event.preventDefault();
+                }}      
                 const group = document.getElementById(groupId);
                 if (!group) return;
                 
