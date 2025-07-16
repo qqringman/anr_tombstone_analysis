@@ -6211,42 +6211,51 @@ class LogAnalyzerSystem:
 
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
-                    <div class="group-header" onclick="toggleGroup('{group['group_id']}')">
-                        <svg class="group-arrow open" id="arrow-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
-                            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                        </svg>
-                        <span class="group-icon">📋</span>
-                        <div class="group-info-wrapper">                            
-                            <div class="group-description">
-                            <div class="group-title-line">
-                                {severity_html} - {html.escape(group['title'])}                 
-                            </div>                            
-                                <div class="problem-metrics">
-                                    <div class="metric-item">
-                                        <span class="metric-label">描述: </span>
-                                        <span class="metric-value">{html.escape(details.get('description', ''))}</span>
-                                    </div>
-                                    <div class="metric-item">
-                                        <span class="metric-label">影響範圍:</span>
-                                        <span class="metric-value">{html.escape(details.get('impact', ''))}</span>
-                                    </div>
-                                    <div class="metric-item">
-                                        <span class="metric-label">優先級:</span>
-                                        <span class="metric-value priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</span>
-                                    </div>
-                                    <div class="metric-item">
-                                        <span class="metric-label">{problem_sets_html}</span>
+                    <div class="group-header">
+                        <div onclick="toggleGroup('{group['group_id']}')" style="display: flex; align-items: center; gap: 16px; flex: 1; cursor: pointer;">
+                            <svg class="group-arrow open" id="arrow-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
+                                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            </svg>
+                            <span class="group-icon">📋</span>
+                            <div class="group-info-wrapper">                            
+                                <div class="group-description">
+                                <div class="group-title-line">
+                                    {severity_html} - <span class="group-title">{html.escape(group['title'])}</span>                 
+                                </div>                            
+                                    <div class="problem-metrics">
+                                        <div class="metric-item">
+                                            <span class="metric-label">描述: </span>
+                                            <span class="metric-value">{html.escape(details.get('description', ''))}</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">影響範圍:</span>
+                                            <span class="metric-value">{html.escape(details.get('impact', ''))}</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">優先級:</span>
+                                            <span class="metric-value priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</span>
+                                        </div>
+                                        <div class="metric-item">
+                                            <span class="metric-label">{problem_sets_html}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <span class="group-info">
-                            <span class="file-count-badge">{group['count']} 個相似檔案</span>
-                            <span class="confidence-badge {confidence_class}">
-                                <span class="confidence-icon">{confidence_icon}</span>
-                                信心度: {group['similarity']:.0f}%
+                            <span class="group-info">
+                                <span class="file-count-badge">{group['count']} 個相似檔案</span>
+                                <span class="confidence-badge {confidence_class}">
+                                    <span class="confidence-icon">{confidence_icon}</span>
+                                    信心度: {group['similarity']:.0f}%
+                                </span>
                             </span>
-                        </span>
+                        </div>
+                        <button class="copy-btn" onclick="event.stopPropagation(); copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
+                                <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
+                            </svg>
+                            複製
+                        </button>
                     </div>
                     <div class="group-content" id="content-{group['group_id']}" style="display: block;">
                 '''
@@ -6335,6 +6344,10 @@ class LogAnalyzerSystem:
                         import base64
                         encoded_content = base64.b64encode(report_content.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_content}"
+                        
+                        # 使用實際檔案路徑作為新視窗連結（像檔案列表一樣）
+                        view_link = f"/view-analysis?path={html.escape(report['path'])}"
+                        
                     except Exception as e:
                         print(f"無法讀取檔案 {report['path']}: {e}")
                         # 顯示錯誤訊息
@@ -6361,6 +6374,7 @@ class LogAnalyzerSystem:
                         '''
                         encoded_error = base64.b64encode(error_html.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_error}"
+                        view_link = "#"  # 錯誤時不提供連結
                     
                     html_str += f'''
                     <div class="similarity-item">
@@ -6370,7 +6384,7 @@ class LogAnalyzerSystem:
                             </svg>
                             <span class="report-icon">📄</span>
                             <span class="report-name">{display_name}</span>
-                            <a href="{iframe_src}" target="_blank" class="source-link" title="在新視窗開啟" onclick="event.stopPropagation();">
+                            <a href="{view_link}" target="_blank" class="source-link" title="在新視窗開啟" onclick="event.stopPropagation();">
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                                     <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
                                     <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
@@ -7019,12 +7033,12 @@ class LogAnalyzerSystem:
                 padding: 24px;
                 display: flex;
                 align-items: center;
-                gap: 16px;
-                cursor: pointer;
+                justify-content: space-between;
                 user-select: none;
                 background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
                 border-bottom: 1px solid var(--border);
                 transition: all 0.3s ease;
+                position: relative;
             }}
             
             .similarity-group .group-header:hover {{
@@ -7261,6 +7275,14 @@ class LogAnalyzerSystem:
                 }}
             }}
 
+            .group-header-content {{
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex: 1;
+                cursor: pointer;
+            }}
+
             /* 問題集標籤 */
             .problem-set {{
                 color: var(--accent);
@@ -7277,7 +7299,7 @@ class LogAnalyzerSystem:
 
             /* 調整報告項目樣式以適應新視窗連結 */
             .similarity-item .report-header {{
-                padding: 16px 60px 16px 48px; /* 右側留更多空間給連結 */
+                padding: 16px 60px 16px 48px;
                 display: flex;
                 align-items: center;
                 gap: 12px;
@@ -7296,6 +7318,10 @@ class LogAnalyzerSystem:
                 border-radius: 6px;
                 transition: all 0.2s ease;
                 z-index: 10;
+            }}
+
+            .similarity-item:hover .source-link {{
+                opacity: 1;
             }}
 
             .similarity-item .source-link:hover {{
@@ -7845,6 +7871,110 @@ class LogAnalyzerSystem:
                 margin-left: auto;
                 flex-shrink: 0;
             }}
+
+            /* 浮動按鈕容器 */
+            .floating-buttons {{
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                z-index: 1000;
+            }}
+
+            .floating-btn {{
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                background: var(--accent);
+                border: none;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                transition: all 0.3s ease;
+                font-size: 20px;
+            }}
+
+            .floating-btn:hover {{
+                background: var(--accent-hover);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            }}
+
+            .floating-btn:active {{
+                transform: translateY(0);
+            }}
+
+            /* 回到頂部按鈕 */
+            .back-to-top {{
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.3s ease;
+            }}
+
+            .back-to-top.visible {{
+                opacity: 1;
+                pointer-events: all;
+            }}
+
+            /* 視圖切換按鈕 */
+            .view-switcher {{
+                background: var(--bg-secondary);
+                border: 2px solid var(--accent);
+                color: var(--accent);
+            }}
+
+            .view-switcher:hover {{
+                background: var(--accent);
+                color: white;
+            }}
+
+            /* 複製按鈕 */
+            .copy-btn {{
+                position: relative;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: 12px;
+                flex-shrink: 0;
+            }}
+
+            .copy-btn:hover {{
+                background: var(--bg-hover);
+                color: var(--accent);
+                border-color: var(--accent);
+            }}
+
+            .copy-btn.copied {{
+                background: var(--accent);
+                color: white;
+                border-color: var(--accent);
+            }}
+
+            /* 新視窗連結調整 */
+            .similarity-item .source-link {{
+                position: absolute;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--text-secondary);
+                padding: 8px;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                z-index: 10;
+            }}            
         </style>
     </head>
     <body>
@@ -7948,7 +8078,19 @@ class LogAnalyzerSystem:
                 </main>
             </div>
         </div>
-        
+        <!-- 浮動按鈕 -->
+        <div class="floating-buttons">
+            <button class="floating-btn view-switcher" onclick="toggleFloatingView()" title="切換視圖">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button class="floating-btn back-to-top" onclick="scrollToTop()" title="回到頂部">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>        
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
@@ -8337,6 +8479,98 @@ class LogAnalyzerSystem:
                     }});
                 }}
             }});        
+        </script>
+        <script>
+            // 浮動視圖切換
+            function toggleFloatingView() {{
+                const fileView = document.getElementById('fileView');
+                const similarityView = document.getElementById('similarityView');
+                const similarityBtn = document.getElementById('similarityBtn');
+                const viewSwitcher = document.querySelector('.view-switcher');
+                
+                if (currentView === 'file') {{
+                    // 切換到相似問題視圖
+                    fileView.classList.remove('active');
+                    similarityView.classList.add('active');
+                    similarityBtn.classList.add('active');
+                    currentView = 'similarity';
+                    
+                    // 更新按鈕圖標
+                    viewSwitcher.innerHTML = `
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3h18v18H3V3zm16 16V5H5v14h14z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    `;
+                }} else {{
+                    // 切換回檔案視圖
+                    fileView.classList.add('active');
+                    similarityView.classList.remove('active');
+                    similarityBtn.classList.remove('active');
+                    currentView = 'file';
+                    
+                    // 更新按鈕圖標
+                    viewSwitcher.innerHTML = `
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    `;
+                }}
+            }}
+
+            // 回到頂部
+            function scrollToTop() {{
+                window.scrollTo({{
+                    top: 0,
+                    behavior: 'smooth'
+                }});
+            }}
+
+            // 監聽滾動事件，顯示/隱藏回到頂部按鈕
+            window.addEventListener('scroll', function() {{
+                const backToTopBtn = document.querySelector('.back-to-top');
+                if (window.pageYOffset > 300) {{
+                    backToTopBtn.classList.add('visible');
+                }} else {{
+                    backToTopBtn.classList.remove('visible');
+                }}
+            }});
+
+            // 複製相似問題群組資訊
+            function copyGroupInfo(groupId) {{
+                const group = document.getElementById(groupId);
+                const title = group.querySelector('.group-title').textContent;
+                const severity = group.querySelector('.severity-badge') ? group.querySelector('.severity-badge').textContent : '';
+                const description = group.querySelector('.metric-value').textContent;
+                const fileCount = group.querySelector('.file-count-badge').textContent;
+                const confidence = group.querySelector('.confidence-badge').textContent;
+                
+                const copyText = `${{severity}} - ${{title}}\n描述: ${{description}}\n${{fileCount}}\n${{confidence}}`;
+                
+                // 複製到剪貼板
+                navigator.clipboard.writeText(copyText).then(function() {{
+                    // 更新按鈕狀態
+                    const copyBtn = group.querySelector('.copy-btn');
+                    copyBtn.classList.add('copied');
+                    copyBtn.innerHTML = `
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                            <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" fill="currentColor"/>
+                        </svg>
+                        已複製
+                    `;
+                    
+                    // 3秒後恢復
+                    setTimeout(function() {{
+                        copyBtn.classList.remove('copied');
+                        copyBtn.innerHTML = `
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
+                                <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
+                            </svg>
+                            複製
+                        `;
+                    }}, 3000);
+                }});
+            }}        
         </script>
     </body>
     </html>"""    
