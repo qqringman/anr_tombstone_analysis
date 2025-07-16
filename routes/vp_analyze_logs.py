@@ -6188,12 +6188,7 @@ class LogAnalyzerSystem:
                 problem_sets_html = ''
                 if group.get('problem_sets'):
                     sets_list = ', '.join(group['problem_sets'])
-                    problem_sets_html = f'''
-                    <div>
-                        <span class="meta-item">問題 set:</span>
-                        <span class="sets-list">{html.escape(sets_list)}</span>
-                    </div>
-                    '''
+                    problem_sets_html = f'<span class="sets-list">{html.escape(sets_list)}</span>'
 
                 # 處理嚴重程度
                 severity_html = ''
@@ -6211,53 +6206,60 @@ class LogAnalyzerSystem:
 
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
-                    <div class="group-header">
-                        <div onclick="toggleGroup('{group['group_id']}')" style="display: flex; align-items: center; gap: 16px; flex: 1; cursor: pointer;">
-                            <svg class="group-arrow open" id="arrow-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
-                                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                            </svg>
-                            <span class="group-icon">📋</span>
-                            <div class="group-info-wrapper">                            
-                                <div class="group-description">
-                                <div class="group-title-line">
-                                    {severity_html} - <span class="group-title">{html.escape(group['title'])}</span>                 
-                                </div>                            
-                                    <div class="problem-metrics">
-                                        <div class="metric-item">
-                                            <span class="metric-label">描述: </span>
-                                            <span class="metric-value">{html.escape(details.get('description', ''))}</span>
-                                        </div>
-                                        <div class="metric-item">
-                                            <span class="metric-label">影響範圍:</span>
-                                            <span class="metric-value">{html.escape(details.get('impact', ''))}</span>
-                                        </div>
-                                        <div class="metric-item">
-                                            <span class="metric-label">優先級:</span>
-                                            <span class="metric-value priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</span>
-                                        </div>
-                                        <div class="metric-item">
-                                            <span class="metric-label">{problem_sets_html}</span>
-                                        </div>
-                                    </div>
+                    <!-- 第一區：標題和功能按鈕 -->
+                    <div class="group-header-section">
+                        <div class="group-header-left">
+                            <div class="group-title-wrapper">
+                                <h3 class="group-title">{severity_html} {html.escape(group['title'])}</h3>
+                                <div class="group-subtitle">
+                                    <span class="file-count-badge">{group['count']} 個相似檔案</span>
+                                    <span class="confidence-badge {confidence_class}">
+                                        <span class="confidence-icon">{confidence_icon}</span>
+                                        信心度: {group['similarity']:.0f}%
+                                    </span>
+                                    {problem_sets_html}
                                 </div>
                             </div>
-                            <span class="group-info">
-                                <span class="file-count-badge">{group['count']} 個相似檔案</span>
-                                <span class="confidence-badge {confidence_class}">
-                                    <span class="confidence-icon">{confidence_icon}</span>
-                                    信心度: {group['similarity']:.0f}%
-                                </span>
-                            </span>
                         </div>
-                        <button class="copy-btn" onclick="event.stopPropagation(); copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
-                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
-                                <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
-                            </svg>
-                            複製
-                        </button>
+                        <div class="group-header-right">
+                            <button class="action-btn collapse-btn" onclick="toggleGroupCollapse('{group['group_id']}')" title="展開/收合">
+                                <svg class="collapse-icon" id="collapse-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
+                                    <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                </svg>
+                            </button>
+                            <button class="action-btn copy-btn" onclick="copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
+                                    <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="group-content" id="content-{group['group_id']}" style="display: block;">
+                    
+                    <!-- 第二區：卡片橫向排列 -->
+                    <div class="group-cards-section" id="cards-{group['group_id']}">
+                        <div class="problem-cards">
+                            <div class="problem-card">
+                                <h4>📋 描述</h4>
+                                <p>{html.escape(details.get('description', ''))}</p>
+                            </div>
+                            <div class="problem-card">
+                                <h4>🎯 影響範圍</h4>
+                                <p>{html.escape(details.get('impact', ''))}</p>
+                            </div>
+                            <div class="problem-card">
+                                <h4>⚡ 優先級</h4>
+                                <p class="priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</p>
+                            </div>
+                            <div class="problem-card">
+                                <h4>💡 建議</h4>
+                                <p>{html.escape(details.get('recommendation', ''))}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 第三區：檔案列表 -->
+                    <div class="group-content" id="content-{group['group_id']}">
                 '''
                 
                 # 渲染組內的報告
@@ -6270,15 +6272,11 @@ class LogAnalyzerSystem:
                     second_dir = None
                     if 'path' in report:
                         path_parts = report['path'].split(os.sep)
-                        # 找出輸入目錄後的第二層目錄
                         if self.input_folder:
                             input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
-                            # 確保有足夠的層級
                             if len(path_parts) > len(input_parts) + 2:
-                                # 取第二層目錄（跳過第一層）
                                 second_dir = path_parts[len(input_parts) + 1]
                             elif len(path_parts) > len(input_parts) + 1:
-                                # 如果只有一層，就用第一層
                                 second_dir = path_parts[len(input_parts)]
                     
                     # 顯示檔案名稱和問題集
@@ -6337,7 +6335,6 @@ class LogAnalyzerSystem:
                         if '</head>' in report_content:
                             report_content = report_content.replace('</head>', scrollbar_style + '</head>')
                         else:
-                            # 如果沒有 head 標籤，在開頭插入
                             report_content = scrollbar_style + report_content
                         
                         # Base64 編碼
@@ -6345,12 +6342,11 @@ class LogAnalyzerSystem:
                         encoded_content = base64.b64encode(report_content.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_content}"
                         
-                        # 使用實際檔案路徑作為新視窗連結（像檔案列表一樣）
+                        # 使用實際檔案路徑作為新視窗連結
                         view_link = f"/view-analysis?path={html.escape(report['path'])}"
                         
                     except Exception as e:
                         print(f"無法讀取檔案 {report['path']}: {e}")
-                        # 顯示錯誤訊息
                         error_html = f'''
                         <html>
                         <head>
@@ -6374,7 +6370,7 @@ class LogAnalyzerSystem:
                         '''
                         encoded_error = base64.b64encode(error_html.encode('utf-8')).decode('utf-8')
                         iframe_src = f"data:text/html;charset=utf-8;base64,{encoded_error}"
-                        view_link = "#"  # 錯誤時不提供連結
+                        view_link = "#"
                     
                     html_str += f'''
                     <div class="similarity-item">
@@ -6407,7 +6403,7 @@ class LogAnalyzerSystem:
                     '''
             
             return html_str
-        
+
         # 計算統計數據
         def _count_files(data):
             count = 0
@@ -7062,11 +7058,13 @@ class LogAnalyzerSystem:
             }}
             
             .group-title {{
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: 600;
                 color: var(--text-primary);
-                flex: 1;
-                letter-spacing: 0.3px;
+                margin: 0;
+                display: flex;
+                align-items: center;
+                gap: 12px;
             }}
             
             .group-info {{
@@ -7980,7 +7978,278 @@ class LogAnalyzerSystem:
                 border-radius: 6px;
                 transition: all 0.2s ease;
                 z-index: 10;
-            }}            
+            }}
+
+            /* 相似問題群組新樣式 */
+            .similarity-group {{
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                margin-bottom: 24px;
+                overflow: hidden;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+                transition: all 0.3s ease;
+            }}
+
+            .similarity-group:hover {{
+                box-shadow: 0 8px 30px rgba(88, 166, 255, 0.15);
+                transform: translateY(-2px);
+            }}
+
+            /* 第一區：標題和功能按鈕 */
+            .group-header-section {{
+                padding: 24px;
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }}
+
+            .group-header-left {{
+                flex: 1;
+            }}
+
+            .group-title-wrapper {{
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }}
+
+            .group-title {{
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--text-primary);
+                margin: 0;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }}
+
+            .group-subtitle {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+            }}
+
+            .group-header-right {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }}
+
+            .action-btn {{
+                background: var(--bg-primary);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 8px;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+            }}
+
+            .action-btn:hover {{
+                background: var(--bg-hover);
+                color: var(--accent);
+                border-color: var(--accent);
+                transform: translateY(-1px);
+            }}
+
+            .collapse-icon {{
+                transition: transform 0.3s ease;
+            }}
+
+            .collapse-icon.collapsed {{
+                transform: rotate(-90deg);
+            }}
+
+            /* 第二區：卡片橫向排列 */
+            .group-cards-section {{
+                padding: 20px 24px;
+                background: rgba(88, 166, 255, 0.02);
+                border-bottom: 1px solid var(--border-light);
+                transition: all 0.3s ease;
+                overflow: hidden;
+            }}
+
+            .group-cards-section.collapsed {{
+                max-height: 0;
+                padding: 0 24px;
+                opacity: 0;
+            }}
+
+            .problem-cards {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 16px;
+            }}
+
+            .problem-card {{
+                background: var(--bg-item);
+                border: 1px solid var(--border-light);
+                border-radius: 12px;
+                padding: 16px;
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }}
+
+            .problem-card::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+                transform: scaleX(0);
+                transition: transform 0.3s ease;
+            }}
+
+            .problem-card:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(88, 166, 255, 0.1);
+            }}
+
+            .problem-card:hover::before {{
+                transform: scaleX(1);
+            }}
+
+            .problem-card h4 {{
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+                margin: 0 0 8px 0;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }}
+
+            .problem-card p {{
+                font-size: 13px;
+                color: var(--text-secondary);
+                line-height: 1.4;
+                margin: 0;
+            }}
+
+            /* 優先級樣式 */
+            .priority-高 {{
+                color: #ef4444;
+                font-weight: 600;
+            }}
+
+            .priority-very-高 {{
+                color: #dc2626;
+                font-weight: 700;
+            }}
+
+            .priority-中 {{
+                color: #f59e0b;
+                font-weight: 600;
+            }}
+
+            .priority-低 {{
+                color: #10b981;
+                font-weight: 500;
+            }}
+
+            /* 第三區：檔案列表 */
+            .group-content {{
+                background: rgba(0, 0, 0, 0.02);
+                transition: all 0.3s ease;
+                overflow: hidden;
+            }}
+
+            .group-content.collapsed {{
+                max-height: 0;
+            }}
+
+            /* 全域展開收合按鈕 */
+            .global-controls {{
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                z-index: 1000;
+            }}
+
+            .global-control-btn {{
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                background: var(--accent);
+                border: none;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                transition: all 0.3s ease;
+                font-size: 18px;
+            }}
+
+            .global-control-btn:hover {{
+                background: var(--accent-hover);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            }}
+
+            .global-control-btn:active {{
+                transform: translateY(0);
+            }}
+
+            .global-control-btn.expand-all {{
+                background: #10b981;
+            }}
+
+            .global-control-btn.expand-all:hover {{
+                background: #059669;
+            }}
+
+            .global-control-btn.collapse-all {{
+                background: #ef4444;
+            }}
+
+            .global-control-btn.collapse-all:hover {{
+                background: #dc2626;
+            }}
+
+            /* 響應式設計 */
+            @media (max-width: 768px) {{
+                .group-header-section {{
+                    flex-direction: column;
+                    gap: 16px;
+                    align-items: flex-start;
+                }}
+                
+                .group-header-right {{
+                    align-self: flex-end;
+                }}
+                
+                .problem-cards {{
+                    grid-template-columns: 1fr;
+                }}
+                
+                .global-controls {{
+                    bottom: 16px;
+                    right: 16px;
+                }}
+                
+                .global-control-btn {{
+                    width: 44px;
+                    height: 44px;
+                    font-size: 16px;
+                }}
+            }}                     
         </style>
     </head>
     <body>
@@ -8086,6 +8355,16 @@ class LogAnalyzerSystem:
         </div>
         <!-- 浮動按鈕 -->
         <div class="floating-buttons">
+            <button class="floating-btn global-control-btn expand-all" onclick="expandAll()" title="全部展開">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 6l9 9 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <button class="floating-btn global-control-btn collapse-all" onclick="collapseAll()" title="全部收合">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 18l9-9 9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <button class="floating-btn view-switcher" onclick="toggleFloatingView()" title="切換視圖">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -8096,7 +8375,7 @@ class LogAnalyzerSystem:
                     <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
-        </div>        
+        </div>      
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
@@ -8257,6 +8536,50 @@ class LogAnalyzerSystem:
                 }}
             }}
             
+            // 群組展開/收合功能
+            function toggleGroupCollapse(groupId) {{
+                const cardsSection = document.getElementById('cards-' + groupId);
+                const content = document.getElementById('content-' + groupId);
+                const icon = document.getElementById('collapse-' + groupId);
+                
+                const isCollapsed = cardsSection.classList.contains('collapsed');
+                
+                if (isCollapsed) {{
+                    // 展開
+                    cardsSection.classList.remove('collapsed');
+                    content.classList.remove('collapsed');
+                    icon.classList.remove('collapsed');
+                }} else {{
+                    // 收合
+                    cardsSection.classList.add('collapsed');
+                    content.classList.add('collapsed');
+                    icon.classList.add('collapsed');
+                }}
+            }}
+
+            // 全域展開所有群組
+            function expandAllGroups() {{
+                const cardsSections = document.querySelectorAll('.group-cards-section');
+                const contents = document.querySelectorAll('.group-content');
+                const icons = document.querySelectorAll('.collapse-icon');
+                
+                cardsSections.forEach(section => section.classList.remove('collapsed'));
+                contents.forEach(content => content.classList.remove('collapsed'));
+                icons.forEach(icon => icon.classList.remove('collapsed'));
+            }}
+
+            // 全域收合所有群組
+            function collapseAllGroups() {{
+                const cardsSections = document.querySelectorAll('.group-cards-section');
+                const contents = document.querySelectorAll('.group-content');
+                const icons = document.querySelectorAll('.collapse-icon');
+                
+                cardsSections.forEach(section => section.classList.add('collapsed'));
+                contents.forEach(content => content.classList.add('collapsed'));
+                icons.forEach(icon => icon.classList.add('collapsed'));
+            }}
+
+            // 修改原有的 expandAll 函數以支援兩種視圖
             function expandAll() {{
                 if (currentView === 'file') {{
                     // 檔案視圖的展開
@@ -8272,18 +8595,11 @@ class LogAnalyzerSystem:
                     }});
                 }} else {{
                     // 相似問題視圖的展開
-                    const groupContents = document.querySelectorAll('.group-content');
-                    const groupArrows = document.querySelectorAll('.group-arrow');
+                    expandAllGroups();
+                    
+                    // 也展開報告內容
                     const reportContents = document.querySelectorAll('.report-content');
                     const reportArrows = document.querySelectorAll('.report-arrow');
-                    
-                    groupContents.forEach(content => {{
-                        content.style.display = 'block';
-                    }});
-                    
-                    groupArrows.forEach(arrow => {{
-                        arrow.classList.add('open');
-                    }});
                     
                     reportContents.forEach(content => {{
                         content.style.display = 'block';
@@ -8294,7 +8610,8 @@ class LogAnalyzerSystem:
                     }});
                 }}
             }}
-            
+
+            // 修改原有的 collapseAll 函數以支援兩種視圖
             function collapseAll() {{
                 if (currentView === 'file') {{
                     // 檔案視圖的收合
@@ -8310,18 +8627,11 @@ class LogAnalyzerSystem:
                     }});
                 }} else {{
                     // 相似問題視圖的收合
-                    const groupContents = document.querySelectorAll('.group-content');
-                    const groupArrows = document.querySelectorAll('.group-arrow');
+                    collapseAllGroups();
+                    
+                    // 也收合報告內容
                     const reportContents = document.querySelectorAll('.report-content');
                     const reportArrows = document.querySelectorAll('.report-arrow');
-                    
-                    groupContents.forEach(content => {{
-                        content.style.display = 'none';
-                    }});
-                    
-                    groupArrows.forEach(arrow => {{
-                        arrow.classList.remove('open');
-                    }});
                     
                     reportContents.forEach(content => {{
                         content.style.display = 'none';
