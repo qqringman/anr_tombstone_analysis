@@ -6207,7 +6207,7 @@ class LogAnalyzerSystem:
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
                     <!-- 第一區：標題和功能按鈕 -->
-                    <div class="group-header-section">
+                    <div class="group-header-section" onclick="toggleSimilarityGroup('{group['group_id']}')">
                         <div class="group-header-left">
                             <div class="group-title-wrapper">
                                 <h3 class="group-title">{severity_html} {html.escape(group['title'])}</h3>
@@ -8033,14 +8033,14 @@ class LogAnalyzerSystem:
                 background: var(--bg-primary);
                 border: 1px solid var(--border);
                 color: var(--text-secondary);
-                padding: 8px 12px;  /* 調整內邊距 */
+                padding: 8px 12px;
                 border-radius: 6px;
                 cursor: pointer;
                 transition: all 0.2s ease;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 4px;  /* 新增：圖標和文字間距 */
+                gap: 4px;
                 font-size: 12px;
                 white-space: nowrap;
                 min-width: 36px;
@@ -8061,7 +8061,7 @@ class LogAnalyzerSystem:
             }}
 
             .collapse-icon {{
-                transition: transform 0.3s ease;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }}
 
             .collapse-icon.collapsed {{
@@ -8081,6 +8081,7 @@ class LogAnalyzerSystem:
                 max-height: 0;
                 padding: 0 24px;
                 opacity: 0;
+                overflow: hidden;
             }}
 
             .problem-cards {{
@@ -8179,6 +8180,8 @@ class LogAnalyzerSystem:
 
             .group-content.collapsed {{
                 max-height: 0;
+                opacity: 0;
+                overflow: hidden;
             }}
 
             /* 全域展開收合按鈕 */
@@ -8618,18 +8621,43 @@ class LogAnalyzerSystem:
                 const content = document.getElementById('content-' + groupId);
                 const icon = document.getElementById('collapse-' + groupId);
                 
+                if (!cardsSection || !content || !icon) {{
+                    console.error('找不到元素:', groupId);
+                    return;
+                }}
+                
                 const isCollapsed = cardsSection.classList.contains('collapsed');
                 
                 if (isCollapsed) {{
                     // 展開
                     cardsSection.classList.remove('collapsed');
                     content.classList.remove('collapsed');
-                    icon.classList.remove('collapsed');
+                    icon.style.transform = 'rotate(0deg)';
+                    icon.parentElement.title = '收合';
                 }} else {{
                     // 收合
                     cardsSection.classList.add('collapsed');
                     content.classList.add('collapsed');
-                    icon.classList.add('collapsed');
+                    icon.style.transform = 'rotate(-90deg)';
+                    icon.parentElement.title = '展開';
+                }}
+            }}
+
+            function toggleSimilarityGroup(groupId) {{
+                const cardsSection = document.getElementById('cards-' + groupId);
+                const contentSection = document.getElementById('content-' + groupId);
+                
+                // 檢查當前狀態
+                const isExpanded = !cardsSection.classList.contains('collapsed');
+                
+                if (isExpanded) {{
+                    // 目前是展開的，要收合
+                    cardsSection.classList.add('collapsed');
+                    contentSection.classList.add('collapsed');
+                }} else {{
+                    // 目前是收合的，要展開
+                    cardsSection.classList.remove('collapsed');
+                    contentSection.classList.remove('collapsed');
                 }}
             }}
 
@@ -8746,6 +8774,16 @@ class LogAnalyzerSystem:
                         adjustIframeHeight(iframe);
                     }}
                 }});
+
+                // 為所有收合按鈕綁定事件
+                document.addEventListener('click', function(e) {{
+                    if (e.target.closest('.collapse-btn')) {{
+                        const button = e.target.closest('.collapse-btn');
+                        const groupId = button.getAttribute('onclick').match(/'([^']+)'/)[1];
+                        toggleGroupCollapse(groupId);
+                        e.stopPropagation(); // 防止事件冒泡
+                    }}
+                }});                
             }});
         </script>
         <script>
