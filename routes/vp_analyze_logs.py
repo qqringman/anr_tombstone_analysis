@@ -4929,16 +4929,30 @@ class LogAnalyzerSystem:
                 
                 # 收集所有問題集
                 problem_sets = set()
+                severities = []
+                processes = set()
+                
                 for report in group_reports:
+                    # 收集問題集
                     if 'path' in report:
                         path_parts = report['path'].split(os.sep)
-                        # 找出輸入目錄後的第二層目錄
                         if self.input_folder:
                             input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
                             if len(path_parts) > len(input_parts) + 1:
                                 second_dir = path_parts[len(input_parts) + 1]
                                 if second_dir and second_dir not in ['.', '..', '']:
                                     problem_sets.add(second_dir)
+                    
+                    # 收集嚴重程度
+                    if report.get('severity'):
+                        severities.append(report['severity'])
+                    
+                    # 收集進程名
+                    if report.get('process_name'):
+                        processes.add(report['process_name'])
+                
+                # 分析問題詳情
+                problem_details = self._analyze_problem_details(key_feature, group_reports)
                 
                 similarity_groups.append({
                     'title': key_feature,
@@ -4947,7 +4961,10 @@ class LogAnalyzerSystem:
                     'count': len(group_reports),
                     'similarity': avg_similarity,
                     'group_id': f"group_{len(similarity_groups)}",
-                    'problem_sets': sorted(list(problem_sets))  # 新增：問題集列表
+                    'problem_sets': sorted(list(problem_sets)),
+                    'severity': self._get_highest_severity(severities),
+                    'affected_processes': sorted(list(processes))[:3],  # 最多顯示3個
+                    'problem_details': problem_details  # 新增：問題詳情
                 })
         
         # 按相似度排序
@@ -4955,6 +4972,115 @@ class LogAnalyzerSystem:
         
         return similarity_groups
 
+    def _analyze_problem_details(self, key_feature: str, reports: List[Dict]) -> Dict:
+        """分析問題的詳細資訊"""
+        details = {
+            'description': '',
+            'impact': '',
+            'priority': '',
+            'recommendation': ''
+        }
+        
+        # 根據問題類型提供詳細描述
+        problem_descriptions = {
+            'Binder IPC 阻塞': {
+                'description': '系統服務間的 IPC 通訊發生阻塞，可能導致整個系統反應遲緩',
+                'impact': '影響所有依賴該系統服務的應用程式',
+                'priority': '高',
+                'recommendation': '檢查 system_server 健康狀態，分析是否有服務死鎖'
+            },
+            '線程數過多': {
+                'description': '應用創建了過多的線程，消耗大量系統資源',
+                'impact': '導致記憶體壓力增加，可能觸發頻繁 GC',
+                'priority': '中',
+                'recommendation': '優化線程池使用，避免無限制創建線程'
+            },
+            '死鎖': {
+                'description': '多個線程相互等待對方持有的鎖，形成循環等待',
+                'impact': '相關線程永久阻塞，功能完全失效',
+                'priority': '極高',
+                'recommendation': '重新設計鎖的獲取順序，使用 tryLock 機制'
+            },
+            '記憶體不足': {
+                'description': '系統可用記憶體嚴重不足，影響應用正常運行',
+                'impact': '可能導致應用被系統強制終止',
+                'priority': '高',
+                'recommendation': '優化記憶體使用，實施記憶體快取策略'
+            },
+            '主線程阻塞': {
+                'description': '主線程執行了耗時操作，無法及時響應用戶輸入',
+                'impact': '用戶體驗嚴重下降，可能觸發 ANR',
+                'priority': '極高',
+                'recommendation': '將耗時操作移至背景線程執行'
+            },
+            'WindowManager 服務阻塞': {
+                'description': 'WindowManager 服務響應緩慢，影響窗口管理操作',
+                'impact': '所有涉及窗口操作的應用都會受影響',
+                'priority': '高',
+                'recommendation': '檢查是否有應用頻繁進行窗口操作'
+            },
+            'WebView 問題': {
+                'description': 'WebView 元件在渲染或執行 JavaScript 時發生問題',
+                'impact': '包含 WebView 的頁面無法正常顯示',
+                'priority': '中',
+                'recommendation': '檢查 WebView 版本，優化網頁內容'
+            },
+            '空指針': {
+                'description': '程式嘗試訪問空指針，導致崩潰',
+                'impact': '應用立即崩潰，用戶資料可能丟失',
+                'priority': '極高',
+                'recommendation': '添加空指針檢查，使用 Optional 或 @Nullable 註解'
+            },
+            'I/O 操作阻塞': {
+                'description': '在主線程執行了檔案讀寫或資料庫操作',
+                'impact': '造成 UI 卡頓，影響用戶體驗',
+                'priority': '高',
+                'recommendation': '使用異步 I/O，將操作移至工作線程'
+            },
+            '網路請求阻塞': {
+                'description': '在主線程執行了同步網路請求',
+                'impact': '網路延遲直接影響 UI 響應速度',
+                'priority': '高',
+                'recommendation': '使用 Retrofit、OkHttp 等異步網路庫'
+            }
+        }
+        
+        # 匹配並返回詳細資訊
+        if key_feature in problem_descriptions:
+            return problem_descriptions[key_feature]
+        else:
+            # 預設描述
+            return {
+                'description': f'檢測到 {len(reports)} 個相似的 {key_feature} 問題',
+                'impact': '可能影響應用穩定性和用戶體驗',
+                'priority': '中',
+                'recommendation': '需要進一步分析具體原因'
+            }
+
+    def _get_highest_severity(self, severities: List[str]) -> str:
+        """獲取最高嚴重等級"""
+        if not severities:
+            return '未知'
+        
+        severity_levels = {
+            '🔴 極其嚴重': 4,
+            '🟠 嚴重': 3,
+            '🟡 中等': 2,
+            '🟢 輕微': 1
+        }
+        
+        # 找出最高等級
+        max_level = 0
+        max_severity = '未知'
+        
+        for severity in severities:
+            for key, level in severity_levels.items():
+                if key in severity and level > max_level:
+                    max_level = level
+                    max_severity = key
+        
+        return max_severity
+        
     def _extract_key_feature(self, reports: List[Dict]) -> str:
         """提取最關鍵的共同特徵作為簡化標題"""
         # 統計所有報告中的關鍵詞頻率
@@ -6063,12 +6189,26 @@ class LogAnalyzerSystem:
                 if group.get('problem_sets'):
                     sets_list = ', '.join(group['problem_sets'])
                     problem_sets_html = f'''
-                    <div class="problem-sets-summary">
-                        <span class="sets-label">問題 set:</span>
+                    <div>
+                        <span class="meta-item">問題 set:</span>
                         <span class="sets-list">{html.escape(sets_list)}</span>
                     </div>
                     '''
-                
+
+                # 處理嚴重程度
+                severity_html = ''
+                if group.get('severity'):
+                    severity_class = 'critical' if '極其嚴重' in group['severity'] else 'high' if '嚴重' in group['severity'] else 'medium' if '中等' in group['severity'] else 'low'
+                    severity_html = f'<span class="severity-badge severity-{severity_class}">{group["severity"]}</span>'
+
+                # 處理影響的進程
+                processes_html = ''
+                if group.get('affected_processes'):
+                    processes_html = '<span class="affected-processes">影響進程: ' + ', '.join(group['affected_processes']) + '</span>'
+
+                # 處理問題詳情
+                details = group.get('problem_details', {})
+
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
                     <div class="group-header" onclick="toggleGroup('{group['group_id']}')">
@@ -6076,9 +6216,29 @@ class LogAnalyzerSystem:
                             <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                         </svg>
                         <span class="group-icon">📋</span>
-                        <div class="group-title-wrapper">
-                            <span class="group-title">{html.escape(group['title'])}</span>
-                            {problem_sets_html}
+                        <div class="group-info-wrapper">                            
+                            <div class="group-description">
+                            <div class="group-title-line">
+                                {severity_html} - {html.escape(group['title'])}                 
+                            </div>                            
+                                <div class="problem-metrics">
+                                    <div class="metric-item">
+                                        <span class="metric-label">描述: </span>
+                                        <span class="metric-value">{html.escape(details.get('description', ''))}</span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="metric-label">影響範圍:</span>
+                                        <span class="metric-value">{html.escape(details.get('impact', ''))}</span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="metric-label">優先級:</span>
+                                        <span class="metric-value priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="metric-label">{problem_sets_html}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <span class="group-info">
                             <span class="file-count-badge">{group['count']} 個相似檔案</span>
