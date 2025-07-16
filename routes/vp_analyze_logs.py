@@ -6223,12 +6223,12 @@ class LogAnalyzerSystem:
                         </div>
                         <div class="group-header-right">
                             <button class="action-btn collapse-btn" onclick="toggleGroupCollapse('{group['group_id']}')" title="展開/收合">
-                                <svg class="collapse-icon" id="collapse-{group['group_id']}" width="16" height="16" viewBox="0 0 16 16">
+                                <svg class="collapse-icon" id="collapse-{group['group_id']}" width="14" height="14" viewBox="0 0 16 16">
                                     <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5" fill="none"/>
                                 </svg>
                             </button>
                             <button class="action-btn copy-btn" onclick="copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                                     <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
                                     <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
                                 </svg>
@@ -7847,22 +7847,6 @@ class LogAnalyzerSystem:
                 color: var(--text-secondary);
             }}
 
-            /* 響應式設計 */
-            @media (max-width: 768px) {{
-                .group-title-wrapper {{
-                    gap: 4px;
-                }}
-                
-                .problem-sets-summary {{
-                    font-size: 12px;
-                }}
-                
-                .sets-list {{
-                    padding: 2px 8px;
-                    font-size: 11px;
-                }}
-            }}
-
             .group-info {{
                 display: flex;
                 align-items: center;
@@ -7936,13 +7920,13 @@ class LogAnalyzerSystem:
             /* 複製按鈕 */
             .copy-btn {{
                 position: absolute;
-                right: 24px;
-                top: 24px;
+                right: 20px;
+                top: 20px;
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
                 color: var(--text-secondary);
-                padding: 8px 16px;
-                border-radius: 8px;
+                padding: 8px 12px;
+                border-radius: 6px;
                 font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
@@ -7950,7 +7934,8 @@ class LogAnalyzerSystem:
                 align-items: center;
                 gap: 6px;
                 z-index: 10;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                backdrop-filter: blur(10px);
             }}
 
             .copy-btn:hover {{
@@ -7958,13 +7943,14 @@ class LogAnalyzerSystem:
                 color: var(--accent);
                 border-color: var(--accent);
                 transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+                box-shadow: 0 4px 8px rgba(88, 166, 255, 0.2);
             }}
 
             .copy-btn.copied {{
-                background: var(--accent);
+                background: #10b981;
                 color: white;
-                border-color: var(--accent);
+                border-color: #10b981;
+                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
             }}
 
             /* 新視窗連結調整 */
@@ -7998,16 +7984,18 @@ class LogAnalyzerSystem:
 
             /* 第一區：標題和功能按鈕 */
             .group-header-section {{
-                padding: 24px;
+                padding: 20px 24px;  /* 從 24px 改為 20px */
                 background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
                 border-bottom: 1px solid var(--border);
                 display: flex;
                 justify-content: space-between;
-                align-items: center;
+                align-items: flex-start;  /* 從 center 改為 flex-start */
+                position: relative;
             }}
 
             .group-header-left {{
                 flex: 1;
+                margin-right: 12px;  /* 新增：為右側按鈕留出空間 */
             }}
 
             .group-title-wrapper {{
@@ -8037,21 +8025,26 @@ class LogAnalyzerSystem:
                 display: flex;
                 align-items: center;
                 gap: 8px;
+                flex-shrink: 0;
+                min-width: 80px;
             }}
 
             .action-btn {{
                 background: var(--bg-primary);
                 border: 1px solid var(--border);
                 color: var(--text-secondary);
-                padding: 8px;
-                border-radius: 8px;
+                padding: 8px 12px;  /* 調整內邊距 */
+                border-radius: 6px;
                 cursor: pointer;
                 transition: all 0.2s ease;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 36px;
-                height: 36px;
+                gap: 4px;  /* 新增：圖標和文字間距 */
+                font-size: 12px;
+                white-space: nowrap;
+                min-width: 36px;
+                height: 32px;
             }}
 
             .action-btn:hover {{
@@ -8059,6 +8052,12 @@ class LogAnalyzerSystem:
                 color: var(--accent);
                 border-color: var(--accent);
                 transform: translateY(-1px);
+            }}
+
+            .action-btn.copied {{
+                background: #10b981;
+                color: white;
+                border-color: #10b981;
             }}
 
             .collapse-icon {{
@@ -8071,7 +8070,7 @@ class LogAnalyzerSystem:
 
             /* 第二區：卡片橫向排列 */
             .group-cards-section {{
-                padding: 20px 24px;
+                padding: 20px 24px 16px 24px;  /* 調整內邊距 */
                 background: rgba(88, 166, 255, 0.02);
                 border-bottom: 1px solid var(--border-light);
                 transition: all 0.3s ease;
@@ -8088,16 +8087,21 @@ class LogAnalyzerSystem:
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: 16px;
+                margin-bottom: 0;  /* 移除底部間距 */
+                align-items: start;  /* 新增：卡片頂部對齊 */
             }}
 
             .problem-card {{
                 background: var(--bg-item);
                 border: 1px solid var(--border-light);
-                border-radius: 12px;
+                border-radius: 8px;
                 padding: 16px;
                 transition: all 0.2s ease;
                 position: relative;
                 overflow: hidden;
+                height: auto;  /* 移除 min-height，改為 auto */
+                display: flex;
+                flex-direction: column;
             }}
 
             .problem-card::before {{
@@ -8129,6 +8133,7 @@ class LogAnalyzerSystem:
                 display: flex;
                 align-items: center;
                 gap: 6px;
+                flex-shrink: 0;  /* 新增：標題不縮小 */
             }}
 
             .problem-card p {{
@@ -8136,6 +8141,12 @@ class LogAnalyzerSystem:
                 color: var(--text-secondary);
                 line-height: 1.4;
                 margin: 0;
+                flex: 1;  /* 新增：內容佔滿剩餘空間 */
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: -webkit-box;
+                -webkit-line-clamp: 4;  /* 從 3 改為 4 行 */
+                -webkit-box-orient: vertical;
             }}
 
             /* 優先級樣式 */
@@ -8223,33 +8234,36 @@ class LogAnalyzerSystem:
                 background: #dc2626;
             }}
 
-            /* 響應式設計 */
             @media (max-width: 768px) {{
                 .group-header-section {{
-                    flex-direction: column;
-                    gap: 16px;
-                    align-items: flex-start;
+                    padding: 16px 20px;
+                }}
+                
+                .group-header-left {{
+                    margin-right: 8px;
                 }}
                 
                 .group-header-right {{
-                    align-self: flex-end;
+                    gap: 6px;
+                }}
+                
+                .action-btn {{
+                    padding: 6px 8px;
+                    font-size: 11px;
+                    height: 28px;
+                    min-width: 28px;
                 }}
                 
                 .problem-cards {{
                     grid-template-columns: 1fr;
+                    gap: 12px;
                 }}
                 
-                .global-controls {{
-                    bottom: 16px;
-                    right: 16px;
+                .group-cards-section {{
+                    padding: 16px 20px 12px 20px;
                 }}
-                
-                .global-control-btn {{
-                    width: 44px;
-                    height: 44px;
-                    font-size: 16px;
-                }}
-            }}                     
+            }}
+
         </style>
     </head>
     <body>
@@ -8854,39 +8868,113 @@ class LogAnalyzerSystem:
             // 複製相似問題群組資訊
             function copyGroupInfo(groupId) {{
                 const group = document.getElementById(groupId);
-                const title = group.querySelector('.group-title').textContent;
-                const severity = group.querySelector('.severity-badge') ? group.querySelector('.severity-badge').textContent : '';
-                const description = group.querySelector('.metric-value').textContent;
-                const fileCount = group.querySelector('.file-count-badge').textContent;
-                const confidence = group.querySelector('.confidence-badge').textContent;
+                if (!group) return;
                 
-                const copyText = `${{severity}} - ${{title}}\n描述: ${{description}}\n${{fileCount}}\n${{confidence}}`;
+                // 獲取群組標題
+                const titleElement = group.querySelector('.group-title');
+                const title = titleElement ? titleElement.textContent.trim() : '未知問題';
+                
+                // 獲取嚴重程度
+                const severityElement = group.querySelector('.severity-badge');
+                const severity = severityElement ? severityElement.textContent.trim() : '';
+                
+                // 獲取檔案數量
+                const fileCountElement = group.querySelector('.file-count-badge');
+                const fileCount = fileCountElement ? fileCountElement.textContent.trim() : '';
+                
+                // 獲取信心度
+                const confidenceElement = group.querySelector('.confidence-badge');
+                const confidence = confidenceElement ? confidenceElement.textContent.trim() : '';
+                
+                // 獲取問題集資訊
+                const problemSetsElement = group.querySelector('.sets-list');
+                const problemSets = problemSetsElement ? problemSetsElement.textContent.trim() : '';
+                
+                // 獲取卡片內容
+                const cards = group.querySelectorAll('.problem-card');
+                let cardsContent = '';
+                
+                cards.forEach((card, index) => {{
+                    const cardTitle = card.querySelector('h4');
+                    const cardDescription = card.querySelector('p');
+                    
+                    if (cardTitle && cardDescription) {{
+                        cardsContent += `\n${{cardTitle.textContent.trim()}}: ${{cardDescription.textContent.trim()}}`;
+                    }}
+                }});
+                
+                // 組合複製文字
+                const copyText = `${{severity ? severity + ' - ' : ''}}${{title}}
+            ${{fileCount}}
+            ${{confidence}}
+            ${{problemSets ? '問題集: ' + problemSets : ''}}
+            ${{cardsContent}}
+
+            相關檔案列表:`;
+                
+                // 獲取檔案列表
+                const reportItems = group.querySelectorAll('.similarity-item .report-name');
+                let filesContent = '';
+                reportItems.forEach((item, index) => {{
+                    const fileName = item.textContent.trim();
+                    filesContent += `\n${{index + 1}}. ${{fileName}}`;
+                }});
+                
+                const finalCopyText = copyText + filesContent;
                 
                 // 複製到剪貼板
-                navigator.clipboard.writeText(copyText).then(function() {{
-                    // 更新按鈕狀態
-                    const copyBtn = group.querySelector('.copy-btn');
-                    copyBtn.classList.add('copied');
-                    copyBtn.innerHTML = `
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                            <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" fill="currentColor"/>
-                        </svg>
-                        已複製
-                    `;
-                    
-                    // 3秒後恢復
-                    setTimeout(function() {{
-                        copyBtn.classList.remove('copied');
-                        copyBtn.innerHTML = `
-                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
-                                <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
-                            </svg>
-                            複製
-                        `;
-                    }}, 3000);
-                }});
-            }}        
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(finalCopyText).then(() => {{
+                        showCopySuccess(group);
+                    }}).catch(err => {{
+                        console.error('複製失敗:', err);
+                        fallbackCopyTextToClipboard(finalCopyText, group);
+                    }});
+                }} else {{
+                    fallbackCopyTextToClipboard(finalCopyText, group);
+                }}
+            }}
+
+            function showCopySuccess(group) {{
+                const copyBtn = group.querySelector('.copy-btn');
+                if (!copyBtn) return;
+                
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.classList.add('copied');
+                copyBtn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" fill="currentColor"/>
+                    </svg>
+                    已複製
+                `;
+                
+                setTimeout(() => {{
+                    copyBtn.classList.remove('copied');
+                    copyBtn.innerHTML = originalHTML;
+                }}, 2000);
+            }}
+
+            function fallbackCopyTextToClipboard(text, group) {{
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {{
+                    document.execCommand('copy');
+                    showCopySuccess(group);
+                }} catch (err) {{
+                    console.error('Fallback 複製失敗:', err);
+                    alert('複製失敗，請手動複製內容');
+                }}
+                
+                document.body.removeChild(textArea);
+            }}
+               
         </script>
     </body>
     </html>"""    
