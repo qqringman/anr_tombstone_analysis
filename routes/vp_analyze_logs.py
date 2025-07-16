@@ -6058,6 +6058,17 @@ class LogAnalyzerSystem:
                 confidence_class = get_confidence_class(group['similarity'])
                 confidence_icon = get_confidence_icon(group['similarity'])
                 
+                # 處理問題集標籤
+                problem_sets_html = ''
+                if group.get('problem_sets'):
+                    sets_list = ', '.join(group['problem_sets'])
+                    problem_sets_html = f'''
+                    <div class="problem-sets-summary">
+                        <span class="sets-label">問題 set:</span>
+                        <span class="sets-list">{html.escape(sets_list)}</span>
+                    </div>
+                    '''
+                
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
                     <div class="group-header" onclick="toggleGroup('{group['group_id']}')">
@@ -6065,7 +6076,10 @@ class LogAnalyzerSystem:
                             <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                         </svg>
                         <span class="group-icon">📋</span>
-                        <span class="group-title">{html.escape(group['title'])}</span>
+                        <div class="group-title-wrapper">
+                            <span class="group-title">{html.escape(group['title'])}</span>
+                            {problem_sets_html}
+                        </div>
                         <span class="group-info">
                             <span class="file-count-badge">{group['count']} 個相似檔案</span>
                             <span class="confidence-badge {confidence_class}">
@@ -7551,6 +7565,126 @@ class LogAnalyzerSystem:
                 border: 1px solid var(--border);
             }}
 
+            /* 群組標題包裝器 */
+            .group-title-wrapper {{
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+                flex: 1;
+            }}
+
+            /* 問題集摘要樣式 */
+            .problem-sets-summary {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                margin-top: 2px;
+            }}
+
+            .sets-label {{
+                color: var(--text-muted);
+                font-weight: 500;
+            }}
+
+            .sets-list {{
+                color: var(--accent);
+                font-weight: 600;
+                font-family: 'Monaco', 'Consolas', monospace;
+                letter-spacing: 0.5px;
+                padding: 2px 10px;
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(88, 166, 255, 0.05) 100%);
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                border-radius: 12px;
+            }}
+
+            /* 調整群組標題樣式 */
+            .similarity-group .group-header {{
+                padding: 24px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                cursor: pointer;
+                user-select: none;
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
+                border-bottom: 1px solid var(--border);
+                transition: all 0.3s ease;
+            }}
+
+            /* 群組標題文字 */
+            .group-title {{
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--text-primary);
+                letter-spacing: 0.3px;
+            }}
+
+            /* 美化信心度標籤的漸變效果 */
+            .confidence-badge {{
+                padding: 5px 14px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                border: 1px solid;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
+
+            /* 檔案計數標籤美化 */
+            .file-count-badge {{
+                background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+                color: var(--text-primary);
+                padding: 5px 14px;
+                border-radius: 20px;
+                font-weight: 600;
+                border: 1px solid var(--border);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            }}
+
+            /* 相似度群組懸停效果 */
+            .similarity-group:hover {{
+                box-shadow: 0 8px 30px rgba(88, 166, 255, 0.15);
+                transform: translateY(-2px);
+            }}
+
+            /* Light theme 調整 */
+            .light-theme .sets-list {{
+                background: linear-gradient(135deg, rgba(9, 105, 218, 0.08) 0%, rgba(9, 105, 218, 0.04) 100%);
+                border-color: rgba(9, 105, 218, 0.2);
+            }}
+
+            .light-theme .problem-sets-summary {{
+                color: var(--text-secondary);
+            }}
+
+            /* 響應式設計 */
+            @media (max-width: 768px) {{
+                .group-title-wrapper {{
+                    gap: 4px;
+                }}
+                
+                .problem-sets-summary {{
+                    font-size: 12px;
+                }}
+                
+                .sets-list {{
+                    padding: 2px 8px;
+                    font-size: 11px;
+                }}
+            }}
+
+            .group-info {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 13px;
+                margin-left: auto;
+                flex-shrink: 0;
+            }}
         </style>
     </head>
     <body>
