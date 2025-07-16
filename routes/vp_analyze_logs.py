@@ -8218,20 +8218,45 @@ class LogAnalyzerSystem:
                 transform: translateY(0);
             }}
 
-            .global-control-btn.expand-all {{
-                background: #10b981;
-            }}
-
-            .global-control-btn.expand-all:hover {{
+            .global-control-btn.toggle-expand {{
                 background: #059669;
+                transition: all 0.3s ease;
             }}
 
-            .global-control-btn.collapse-all {{
-                background: #ef4444;
+            .global-control-btn.toggle-expand:hover {{
+                background: #047857;
             }}
 
-            .global-control-btn.collapse-all:hover {{
-                background: #dc2626;
+            .global-control-btn.toggle-expand.collapsed {{
+                background: #0ea5e9;
+            }}
+
+            .global-control-btn.toggle-expand.collapsed:hover {{
+                background: #0284c7;
+            }}
+
+            .control-btn.toggle-state-expanded {{
+                background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                color: white;
+                border-color: #059669;
+            }}
+
+            .control-btn.toggle-state-expanded:hover {{
+                background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+            }}
+
+            .control-btn.toggle-state-collapsed {{
+                background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+                color: white;
+                border-color: #0ea5e9;
+            }}
+
+            .control-btn.toggle-state-collapsed:hover {{
+                background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
             }}
 
             @media (max-width: 768px) {{
@@ -8317,17 +8342,11 @@ class LogAnalyzerSystem:
                 </div>
                 
                 <div class="controls">
-                    <button onclick="expandAll()" class="control-btn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5"/>
-                        </svg>
-                        全部展開
-                    </button>
-                    <button onclick="collapseAll()" class="control-btn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <button onclick="toggleExpandCollapse()" class="control-btn" id="toggleBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" id="toggleIcon">
                             <path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
-                        全部收合
+                        <span id="toggleText">全部收合</span>
                     </button>
                     <button onclick="toggleView('similarity')" class="view-toggle" id="similarityBtn">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -8369,13 +8388,8 @@ class LogAnalyzerSystem:
         </div>
         <!-- 浮動按鈕 -->
         <div class="floating-buttons">
-            <button class="floating-btn global-control-btn expand-all" onclick="expandAll()" title="全部展開">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 6l9 9 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </button>
-            <button class="floating-btn global-control-btn collapse-all" onclick="collapseAll()" title="全部收合">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <button class="floating-btn global-control-btn toggle-expand" onclick="toggleExpandCollapse()" title="全部收合" id="floatingToggleBtn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" id="floatingToggleIcon">
                     <path d="M3 18l9-9 9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
@@ -8465,7 +8479,8 @@ class LogAnalyzerSystem:
             }};
             
             let currentView = 'file';
-            
+            let isExpanded = true; // 追蹤展開/收合狀態
+
             // 定義為全局函數
             function adjustIframeHeight(iframe) {{
                 try {{
@@ -8487,7 +8502,54 @@ class LogAnalyzerSystem:
                     iframe.style.height = '700px';
                 }}
             }}
-            
+
+            function updateToggleButton() {{
+                const toggleBtn = document.getElementById('toggleBtn');
+                const toggleIcon = document.getElementById('toggleIcon');
+                const toggleText = document.getElementById('toggleText');
+                const floatingToggleBtn = document.getElementById('floatingToggleBtn');
+                const floatingToggleIcon = document.getElementById('floatingToggleIcon');
+                
+                if (isExpanded) {{
+                    // 當前是展開狀態，顯示收合按鈕
+                    toggleIcon.innerHTML = '<path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.5"/>';
+                    toggleText.textContent = '全部收合';
+                    floatingToggleIcon.innerHTML = '<path d="M3 18l9-9 9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+                    floatingToggleBtn.title = '全部收合';
+                    floatingToggleBtn.classList.remove('collapsed');
+                    
+                    // 更新按鈕狀態樣式
+                    toggleBtn.classList.remove('toggle-state-collapsed');
+                    toggleBtn.classList.add('toggle-state-expanded');
+                }} else {{
+                    // 當前是收合狀態，顯示展開按鈕
+                    toggleIcon.innerHTML = '<path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5"/>';
+                    toggleText.textContent = '全部展開';
+                    floatingToggleIcon.innerHTML = '<path d="M3 6l9 9 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+                    floatingToggleBtn.title = '全部展開';
+                    floatingToggleBtn.classList.add('collapsed');
+                    
+                    // 更新按鈕狀態樣式
+                    toggleBtn.classList.remove('toggle-state-expanded');
+                    toggleBtn.classList.add('toggle-state-collapsed');
+                }}
+            }}
+
+            function toggleExpandCollapse() {{
+                window.calledFromToggle = true; // 設置標誌
+                
+                if (isExpanded) {{
+                    collapseAll();
+                    isExpanded = false;
+                }} else {{
+                    expandAll();
+                    isExpanded = true;
+                }}
+                
+                updateToggleButton();
+                window.calledFromToggle = false; // 清除標誌
+            }}
+
             function toggleView(view) {{
                 const fileView = document.getElementById('fileView');
                 const similarityView = document.getElementById('similarityView');
@@ -8623,6 +8685,11 @@ class LogAnalyzerSystem:
                         arrow.classList.add('open');
                     }});
                 }}
+                // 更新狀態和按鈕（只有在不是從toggleExpandCollapse調用時）
+                if (!window.calledFromToggle) {{
+                    isExpanded = true;
+                    updateToggleButton();
+                }}                
             }}
 
             // 修改原有的 collapseAll 函數以支援兩種視圖
@@ -8655,13 +8722,19 @@ class LogAnalyzerSystem:
                         arrow.classList.remove('open');
                     }});
                 }}
+                if (!window.calledFromToggle) {{
+                    isExpanded = false;
+                    updateToggleButton();
+                }}                
             }}
             
             // 初始化
             document.addEventListener('DOMContentLoaded', function() {{
                 initTheme();
                 expandAll();
-                
+                isExpanded = true; // 設定狀態
+                updateToggleButton(); // 更新按鈕外觀
+
                 // 為所有 iframe 設置 onload 事件
                 const iframes = document.querySelectorAll('.report-iframe');
                 iframes.forEach(iframe => {{
