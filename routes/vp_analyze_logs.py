@@ -7030,15 +7030,16 @@ class LogAnalyzerSystem:
             }}
             
             .similarity-group .group-header {{
-                padding: 24px;
+                padding: 32px 120px 24px 24px; /* 右側留出複製按鈕空間 */
+                position: relative;
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                gap: 16px;
+                cursor: pointer;
                 user-select: none;
                 background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(88, 166, 255, 0.03) 100%);
                 border-bottom: 1px solid var(--border);
                 transition: all 0.3s ease;
-                position: relative;
             }}
             
             .similarity-group .group-header:hover {{
@@ -7069,6 +7070,7 @@ class LogAnalyzerSystem:
             }}
             
             .group-info {{
+                margin-left: auto;
                 display: flex;
                 align-items: center;
                 gap: 12px;
@@ -7935,26 +7937,30 @@ class LogAnalyzerSystem:
 
             /* 複製按鈕 */
             .copy-btn {{
-                position: relative;
+                position: absolute;
+                right: 24px;
+                top: 24px;
                 background: var(--bg-secondary);
                 border: 1px solid var(--border);
                 color: var(--text-secondary);
-                padding: 6px 12px;
-                border-radius: 6px;
+                padding: 8px 16px;
+                border-radius: 8px;
                 font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                margin-left: 12px;
-                flex-shrink: 0;
+                z-index: 10;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             }}
 
             .copy-btn:hover {{
                 background: var(--bg-hover);
                 color: var(--accent);
                 border-color: var(--accent);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
             }}
 
             .copy-btn.copied {{
