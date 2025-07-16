@@ -4927,13 +4927,27 @@ class LogAnalyzerSystem:
                 # 提取最關鍵的共同特徵作為標題
                 key_feature = self._extract_key_feature(group_reports)
                 
+                # 收集所有問題集
+                problem_sets = set()
+                for report in group_reports:
+                    if 'path' in report:
+                        path_parts = report['path'].split(os.sep)
+                        # 找出輸入目錄後的第二層目錄
+                        if self.input_folder:
+                            input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
+                            if len(path_parts) > len(input_parts) + 1:
+                                second_dir = path_parts[len(input_parts) + 1]
+                                if second_dir and second_dir not in ['.', '..', '']:
+                                    problem_sets.add(second_dir)
+                
                 similarity_groups.append({
-                    'title': key_feature,  # 使用簡化的標題
-                    'full_title': root_cause,  # 保留完整標題以備用
+                    'title': key_feature,
+                    'full_title': root_cause,
                     'reports': group_reports,
                     'count': len(group_reports),
                     'similarity': avg_similarity,
-                    'group_id': f"group_{len(similarity_groups)}"
+                    'group_id': f"group_{len(similarity_groups)}",
+                    'problem_sets': sorted(list(problem_sets))  # 新增：問題集列表
                 })
         
         # 按相似度排序
