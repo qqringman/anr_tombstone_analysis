@@ -4911,7 +4911,8 @@ class LogAnalyzerSystem:
                 reason_match = re.search(r'└─\s*([^"\n,]+?)(?:["\n,]|$)', section[stack_match.end():])
                 if reason_match:
                     reason_text = reason_match.group(1).strip()
-                    key_stack['reason'] = reason_text
+                    if reason_text != '':
+                        key_stack['reason'] = '  └─ ' + reason_text
                 break
 
         # Step 3: fallback
@@ -4928,7 +4929,8 @@ class LogAnalyzerSystem:
                     reason_match = re.search(r'└─\s*([^"\n,]+?)(?:["\n,]|$)', content[match.end():])
                     if reason_match:
                         reason_text = reason_match.group(1).strip()
-                        key_stack['reason'] = reason_text
+                        if reason_text != '':
+                            key_stack['reason'] = '  └─ ' + reason_text
                     break
             else:
                 # 最後 fallback
@@ -6436,7 +6438,7 @@ class LogAnalyzerSystem:
                                 <div class="key-stack">
                                     <div class="stack-marker {key_stack_info['marker_class']}">{key_stack_info['marker']}</div>
                                     <div class="stack-frame">{html.escape(key_stack_info['frame'])}</div>
-                                    <div class="stack-reason">  └─ {html.escape(key_stack_info['reason'])}</div>
+                                    <div class="stack-reason">{html.escape(key_stack_info['reason'])}</div>
                                 </div>
                             </div>
                         </div>
@@ -8863,6 +8865,8 @@ class LogAnalyzerSystem:
                 const fileView = document.getElementById('fileView');
                 const similarityView = document.getElementById('similarityView');
                 const similarityBtn = document.getElementById('similarityBtn');
+                const copySummaryBtn = document.getElementById('copySummaryBtn');
+                const floatingCopyBtn = document.querySelector('.copy-summary-btn');
                 
                 if (view === 'similarity') {{
                     if (currentView === 'similarity') {{
@@ -8871,12 +8875,20 @@ class LogAnalyzerSystem:
                         similarityView.classList.remove('active');
                         similarityBtn.classList.remove('active');
                         currentView = 'file';
+                        
+                        // 隱藏複製摘要按鈕
+                        if (copySummaryBtn) copySummaryBtn.classList.remove('visible');
+                        if (floatingCopyBtn) floatingCopyBtn.classList.remove('visible');
                     }} else {{
                         // 切換到相似問題視圖
                         fileView.classList.remove('active');
                         similarityView.classList.add('active');
                         similarityBtn.classList.add('active');
                         currentView = 'similarity';
+                        
+                        // 顯示複製摘要按鈕
+                        if (copySummaryBtn) copySummaryBtn.classList.add('visible');
+                        if (floatingCopyBtn) floatingCopyBtn.classList.add('visible');
                     }}
                 }}
             }}
@@ -9069,6 +9081,19 @@ class LogAnalyzerSystem:
                 isExpanded = true; // 設定狀態
                 updateToggleButton(); // 更新按鈕外觀
 
+                // 初始化複製摘要按鈕的顯示狀態
+                const copySummaryBtn = document.getElementById('copySummaryBtn');
+                const floatingCopyBtn = document.querySelector('.copy-summary-btn');
+
+                // 根據初始視圖設置按鈕狀態
+                if (currentView === 'similarity') {{
+                    if (copySummaryBtn) copySummaryBtn.classList.add('visible');
+                    if (floatingCopyBtn) floatingCopyBtn.classList.add('visible');
+                }} else {{
+                    if (copySummaryBtn) copySummaryBtn.classList.remove('visible');
+                    if (floatingCopyBtn) floatingCopyBtn.classList.remove('visible');
+                }}
+
                 // 為所有 iframe 設置 onload 事件
                 const iframes = document.querySelectorAll('.report-iframe');
                 iframes.forEach(iframe => {{
@@ -9234,6 +9259,8 @@ class LogAnalyzerSystem:
                 const similarityView = document.getElementById('similarityView');
                 const similarityBtn = document.getElementById('similarityBtn');
                 const viewSwitcher = document.querySelector('.view-switcher');
+                const copySummaryBtn = document.getElementById('copySummaryBtn');
+                const floatingCopyBtn = document.querySelector('.copy-summary-btn');
                 
                 if (currentView === 'file') {{
                     // 切換到相似問題視圖
@@ -9241,6 +9268,10 @@ class LogAnalyzerSystem:
                     similarityView.classList.add('active');
                     similarityBtn.classList.add('active');
                     currentView = 'similarity';
+                    
+                    // 顯示複製摘要按鈕
+                    if (copySummaryBtn) copySummaryBtn.classList.add('visible');
+                    if (floatingCopyBtn) floatingCopyBtn.classList.add('visible');
                     
                     // 更新按鈕圖標
                     viewSwitcher.innerHTML = `
@@ -9254,6 +9285,10 @@ class LogAnalyzerSystem:
                     similarityView.classList.remove('active');
                     similarityBtn.classList.remove('active');
                     currentView = 'file';
+                    
+                    // 隱藏複製摘要按鈕
+                    if (copySummaryBtn) copySummaryBtn.classList.remove('visible');
+                    if (floatingCopyBtn) floatingCopyBtn.classList.remove('visible');
                     
                     // 更新按鈕圖標
                     viewSwitcher.innerHTML = `
@@ -9501,20 +9536,6 @@ class LogAnalyzerSystem:
                     copyTextParts.push('=' + '='.repeat(50));
                     copyTextParts.push('');
                     
-                    // 獲取統計信息
-                    const statCards = document.querySelectorAll('.stat-card');
-                    if (statCards.length > 0) {{
-                        copyTextParts.push('📈 統計信息:');
-                        statCards.forEach(card => {{
-                            const value = card.querySelector('.stat-value')?.textContent || '';
-                            const label = card.querySelector('.stat-label')?.textContent || '';
-                            if (value && label) {{
-                                copyTextParts.push(`  • ${{label}}: ${{value}}`);
-                            }}
-                        }});
-                        copyTextParts.push('');
-                    }}
-                    
                     // 獲取所有相似問題群組
                     const groups = document.querySelectorAll('.similarity-group');
                     
@@ -9524,12 +9545,17 @@ class LogAnalyzerSystem:
                         copyTextParts.push(`🔍 發現 ${{groups.length}} 組相似問題:`);
                         copyTextParts.push('');
                         
-                        groups.forEach((group, index) => {{
+                        groups.forEach((group, groupIndex) => {{
                             // 分隔線
-                            copyTextParts.push('-'.repeat(50));
-                            copyTextParts.push('');
+                            if (groupIndex > 0) {{
+                                copyTextParts.push('');
+                                copyTextParts.push('-'.repeat(60));
+                                copyTextParts.push('');
+                            }}
                             
-                            // 群組標題
+                            copyTextParts.push(`【第 ${{groupIndex + 1}} 組】`);
+                            
+                            // 獲取群組標題
                             const titleElement = group.querySelector('.group-title');
                             if (titleElement) {{
                                 let title = titleElement.textContent.trim();
@@ -9540,17 +9566,17 @@ class LogAnalyzerSystem:
                                     title = title.replace(severity, '').trim();
                                 }}
                                 
-                                copyTextParts.push(`【第 ${{index + 1}} 組】${{severity}} ${{title}}`);
+                                copyTextParts.push(severity + ' ' + title);
                             }}
                             
-                            // 檔案數量和信心度
+                            // 獲取檔案數量
                             const fileCountElement = group.querySelector('.file-count-badge');
-                            const confidenceElement = group.querySelector('.confidence-badge');
-                            
                             if (fileCountElement) {{
                                 copyTextParts.push('🧩 ' + fileCountElement.textContent.trim());
                             }}
                             
+                            // 獲取信心度
+                            const confidenceElement = group.querySelector('.confidence-badge');
                             if (confidenceElement) {{
                                 const confidenceText = confidenceElement.textContent.trim();
                                 const confidenceMatch = confidenceText.match(/(\d+)%/);
@@ -9559,50 +9585,94 @@ class LogAnalyzerSystem:
                                 }}
                             }}
                             
-                            // 問題集
+                            // 獲取問題集資訊
                             const problemSetsElement = group.querySelector('.sets-list');
                             if (problemSetsElement) {{
                                 copyTextParts.push('🕵️ 問題集: ' + problemSetsElement.textContent.trim());
                             }}
                             
-                            // 簡要描述（只取描述卡片）
-                            const descCard = Array.from(group.querySelectorAll('.problem-card')).find(card => {{
-                                const title = card.querySelector('h4');
-                                return title && title.textContent.includes('描述');
+                            // 獲取卡片內容（與 copyGroupInfo 一致的格式）
+                            const cards = group.querySelectorAll('.problem-card');
+                            cards.forEach(function(card) {{
+                                const cardTitle = card.querySelector('h4');
+                                if (!cardTitle) return;
+                                
+                                const titleText = cardTitle.textContent.trim();
+                                
+                                // 特別處理關鍵堆疊卡片
+                                if (titleText.includes('關鍵堆疊')) {{
+                                    copyTextParts.push('');
+                                    copyTextParts.push(titleText);
+                                    
+                                    const keyStack = card.querySelector('.key-stack');
+                                    if (keyStack) {{
+                                        const stackMarker = keyStack.querySelector('.stack-marker');
+                                        const stackFrame = keyStack.querySelector('.stack-frame');
+                                        const stackReason = keyStack.querySelector('.stack-reason');
+                                        
+                                        if (stackMarker && stackFrame) {{
+                                            const markerText = stackMarker.textContent.trim();
+                                            const frameText = stackFrame.textContent.trim();
+                                            copyTextParts.push(markerText + ' ' + frameText);
+                                        }}
+                                        
+                                        if (stackReason && stackReason.textContent.trim()) {{
+                                            copyTextParts.push(stackReason.textContent.trim());
+                                        }}
+                                    }}
+                                }} else {{
+                                    // 處理其他類型的卡片內容
+                                    const cardP = card.querySelector('p');
+                                    const cardList = card.querySelector('.process-list');
+                                    const cardDiv = card.querySelector('div:not(.key-stack):not(.process-list)');
+                                    
+                                    copyTextParts.push('');
+                                    
+                                    if (cardP) {{
+                                        copyTextParts.push(titleText + ' ' + cardP.textContent.trim());
+                                    }} else if (cardList) {{
+                                        copyTextParts.push(titleText);
+                                        const listText = cardList.textContent.trim();
+                                        if (listText) {{
+                                            const lines = listText.split(NEWLINE).filter(line => line.trim());
+                                            lines.forEach(function(line) {{
+                                                const trimmedLine = line.trim();
+                                                if (trimmedLine && !trimmedLine.startsWith('•')) {{
+                                                    copyTextParts.push('  • ' + trimmedLine);
+                                                }} else if (trimmedLine) {{
+                                                    copyTextParts.push('  ' + trimmedLine);
+                                                }}
+                                            }});
+                                        }}
+                                    }} else if (cardDiv && titleText.includes('優先級')) {{
+                                        copyTextParts.push(titleText + ' ' + cardDiv.textContent.trim());
+                                    }} else {{
+                                        // 處理直接文字內容的卡片
+                                        const cardContent = card.textContent.trim();
+                                        const contentWithoutTitle = cardContent.replace(titleText, '').trim();
+                                        if (contentWithoutTitle) {{
+                                            copyTextParts.push(titleText + ' ' + contentWithoutTitle);
+                                        }}
+                                    }}
+                                }}
                             }});
                             
-                            if (descCard) {{
-                                const cardContent = descCard.textContent.trim();
-                                const titleText = descCard.querySelector('h4').textContent.trim();
-                                const contentWithoutTitle = cardContent.replace(titleText, '').trim();
-                                if (contentWithoutTitle) {{
-                                    copyTextParts.push('');
-                                    copyTextParts.push('📋 ' + contentWithoutTitle);
-                                }}
-                            }}
-                            
-                            // 關鍵堆疊（簡化版）
-                            const keyStackCard = Array.from(group.querySelectorAll('.problem-card')).find(card => {{
-                                const title = card.querySelector('h4');
-                                return title && title.textContent.includes('關鍵堆疊');
-                            }});
-                            
-                            if (keyStackCard) {{
-                                const stackFrame = keyStackCard.querySelector('.stack-frame');
-                                const stackMarker = keyStackCard.querySelector('.stack-marker');
-                                if (stackFrame && stackMarker) {{
-                                    copyTextParts.push('');
-                                    copyTextParts.push('🔍 關鍵堆疊: ' + stackMarker.textContent.trim() + ' ' + stackFrame.textContent.trim());
-                                }}
-                            }}
-                            
+                            // 獲取檔案列表
                             copyTextParts.push('');
+                            copyTextParts.push('📋 相關檔案列表:');
+                            
+                            const reportItems = group.querySelectorAll('.similarity-item .report-name');
+                            reportItems.forEach(function(item, index) {{
+                                const fileName = item.textContent.trim();
+                                const cleanFileName = fileName.replace(/\s*\(問題 set:.*?\)\s*$/, '').trim();
+                                copyTextParts.push((index + 1) + '. ' + cleanFileName);
+                            }});
                         }});
                     }}
                     
                     // 添加生成時間
                     copyTextParts.push('');
-                    copyTextParts.push('-'.repeat(50));
+                    copyTextParts.push('=' + '='.repeat(50));
                     copyTextParts.push('⏰ 生成時間: ' + new Date().toLocaleString('zh-TW'));
                     
                     // 結合所有內容
