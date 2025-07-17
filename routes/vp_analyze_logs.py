@@ -9203,83 +9203,147 @@ class LogAnalyzerSystem:
 
             // 複製相似問題群組資訊
             function copyGroupInfo(groupId) {{
-                // 阻止事件冒泡，避免觸發開合事件
-                if (event) {{
-                    event.stopPropagation();
-                    event.preventDefault();
-                }}      
-                const group = document.getElementById(groupId);
-                if (!group) return;
-                
-                // 獲取群組標題
-                const titleElement = group.querySelector('.group-title');
-                const title = titleElement ? titleElement.textContent.trim() : '未知問題';
-                
-                // 獲取嚴重程度
-                const severityElement = group.querySelector('.severity-badge');
-                const severity = severityElement ? severityElement.textContent.trim() : '';
-                
-                // 獲取檔案數量
-                const fileCountElement = group.querySelector('.file-count-badge');
-                const fileCount = fileCountElement ? fileCountElement.textContent.trim() : '';
-                
-                // 獲取信心度
-                const confidenceElement = group.querySelector('.confidence-badge');
-                const confidence = confidenceElement ? confidenceElement.textContent.trim() : '';
-                
-                // 獲取問題集資訊
-                const problemSetsElement = group.querySelector('.sets-list');
-                const problemSets = problemSetsElement ? problemSetsElement.textContent.trim() : '';
-                
-                // 獲取卡片內容
-                const cards = group.querySelectorAll('.problem-card');
-                let cardsContent = '';
-                
-                cards.forEach((card, index) => {{
-                    const cardTitle = card.querySelector('h4');
-                    const cardDescription = card.querySelector('p');
-                    
-                    if (cardTitle && cardDescription) {{
-                        cardsContent += `\n${{cardTitle.textContent.trim()}}: ${{cardDescription.textContent.trim()}}`;
+                try {{
+                    const group = document.getElementById(groupId);
+                    if (!group) {{
+                        console.error('找不到群組：', groupId);
+                        return;
                     }}
-                }});
-                
-                // 組合複製文字
-                const copyText = `${{severity ? severity + ' - ' : ''}}${{title}}
-            ${{fileCount}}
-            ${{confidence}}
-            ${{problemSets ? '問題集: ' + problemSets : ''}}
-            ${{cardsContent}}
-
-            相關檔案列表:`;
-                
-                // 獲取檔案列表
-                const reportItems = group.querySelectorAll('.similarity-item .report-name');
-                let filesContent = '';
-                reportItems.forEach((item, index) => {{
-                    const fileName = item.textContent.trim();
-                    filesContent += `\n${{index + 1}}. ${{fileName}}`;
-                }});
-                
-                const finalCopyText = copyText + filesContent;
-                
-                // 複製到剪貼板
-                if (navigator.clipboard && window.isSecureContext) {{
-                    navigator.clipboard.writeText(finalCopyText).then(() => {{
-                        showCopySuccess(group);
-                    }}).catch(err => {{
-                        console.error('複製失敗:', err);
-                        fallbackCopyTextToClipboard(finalCopyText, group);
+                    
+                    // 建立複製文字的陣列，最後再用 join 結合
+                    const copyTextParts = [];
+                    
+                    // 獲取群組標題
+                    const titleElement = group.querySelector('.group-title');
+                    if (titleElement) {{
+                        // 使用 textContent 而不是 innerHTML，避免 HTML 實體問題
+                        let title = titleElement.textContent.trim();
+                        
+                        // 獲取嚴重程度
+                        const severityElement = group.querySelector('.severity-badge');
+                        const severity = severityElement ? severityElement.textContent.trim() : '';
+                        
+                        // 移除標題中重複的嚴重程度文字
+                        if (severity && title.includes(severity)) {{
+                            title = title.replace(severity, '').trim();
+                        }}
+                        
+                        copyTextParts.push(severity + ' ' + title);
+                    }}
+                    
+                    // 獲取檔案數量
+                    const fileCountElement = group.querySelector('.file-count-badge');
+                    if (fileCountElement) {{
+                        copyTextParts.push('🧩 ' + fileCountElement.textContent.trim());
+                    }}
+                    
+                    // 獲取信心度
+                    const confidenceElement = group.querySelector('.confidence-badge');
+                    if (confidenceElement) {{
+                        const confidenceText = confidenceElement.textContent.trim();
+                        const confidenceMatch = confidenceText.match(/(\d+)%/);
+                        if (confidenceMatch) {{
+                            copyTextParts.push('✨ 信心度: ' + confidenceMatch[0]);
+                        }}
+                    }}
+                    
+                    // 獲取問題集資訊
+                    const problemSetsElement = group.querySelector('.sets-list');
+                    if (problemSetsElement) {{
+                        copyTextParts.push('🕵️ 問題集: ' + problemSetsElement.textContent.trim());
+                    }}
+                    
+                    // 獲取卡片內容
+                    const cards = group.querySelectorAll('.problem-card');
+                    cards.forEach(function(card) {{
+                        const cardTitle = card.querySelector('h4');
+                        if (!cardTitle) return;
+                        
+                        const titleText = cardTitle.textContent.trim();
+                        const cardContent = [];
+                        
+                        // 處理不同類型的卡片內容
+                        const cardP = card.querySelector('p');
+                        const cardList = card.querySelector('.process-list');
+                        const cardStack = card.querySelector('.key-stack');
+                        const cardDiv = card.querySelector('div:not(.key-stack):not(.process-list)');
+                        
+                        if (cardP) {{
+                            cardContent.push(titleText + ' ' + cardP.textContent.trim());
+                        }} else if (cardList) {{
+                            cardContent.push(titleText);
+                            // 使用 textContent 取得純文字，然後分割
+                            const listText = cardList.textContent.trim();
+                            if (listText) {{
+                                // 按照 • 符號分割
+                                const items = listText.split('•').filter(item => item.trim());
+                                items.forEach(function(item) {{
+                                    cardContent.push('  • ' + item.trim());
+                                }});
+                            }}
+                        }} else if (cardStack) {{
+                            cardContent.push(titleText);
+                            const stackFrame = cardStack.querySelector('.stack-frame');
+                            const stackReason = cardStack.querySelector('.stack-reason');
+                            if (stackFrame) {{
+                                cardContent.push('  ' + stackFrame.textContent.trim());
+                            }}
+                            if (stackReason && stackReason.textContent.trim()) {{
+                                cardContent.push('  └─ ' + stackReason.textContent.trim());
+                            }}
+                        }} else if (cardDiv && titleText.includes('優先級')) {{
+                            // 特殊處理優先級
+                            cardContent.push(titleText + ' ' + cardDiv.textContent.trim());
+                        }}
+                        
+                        if (cardContent.length > 0) {{
+                            copyTextParts.push(''); // 空行
+                            copyTextParts.push(...cardContent);
+                        }}
                     }});
-                }} else {{
-                    fallbackCopyTextToClipboard(finalCopyText, group);
+                    
+                    // 獲取檔案列表
+                    copyTextParts.push('');
+                    copyTextParts.push('📋 相關檔案列表:');
+                    
+                    const reportItems = group.querySelectorAll('.similarity-item .report-name');
+                    reportItems.forEach(function(item, index) {{
+                        const fileName = item.textContent.trim();
+                        // 移除 (問題 set: xxx) 部分
+                        const cleanFileName = fileName.replace(/\s*\(問題 set:.*?\)\s*$/, '').trim();
+                        copyTextParts.push((index + 1) + '. ' + cleanFileName);
+                    }});
+                    
+                    // 使用換行符號結合所有部分
+                    const NEWLINE = String.fromCharCode(10);                    
+                    const copyText = copyTextParts.join(NEWLINE);
+                    
+                    // 複製到剪貼板
+                    if (navigator.clipboard && window.isSecureContext) {{
+                        navigator.clipboard.writeText(copyText).then(function() {{
+                            showCopySuccess(groupId);
+                        }}).catch(function(err) {{
+                            console.error('複製失敗:', err);
+                            fallbackCopyTextToClipboard(copyText, groupId);
+                        }});
+                    }} else {{
+                        fallbackCopyTextToClipboard(copyText, groupId);
+                    }}
+                    
+                }} catch (error) {{
+                    console.error('copyGroupInfo 錯誤:', error);
+                    alert('複製時發生錯誤：' + error.message);
                 }}
             }}
 
-            function showCopySuccess(group) {{
+            function showCopySuccess(groupId) {{
+                // 找到該群組的複製按鈕
+                const group = document.getElementById(groupId);
+                if (!group) return;
+
                 const copyBtn = group.querySelector('.copy-btn');
                 if (!copyBtn) return;
-                
+                                
                 const originalHTML = copyBtn.innerHTML;
                 copyBtn.classList.add('copied');
                 copyBtn.innerHTML = `
@@ -9295,7 +9359,7 @@ class LogAnalyzerSystem:
                 }}, 2000);
             }}
 
-            function fallbackCopyTextToClipboard(text, group) {{
+            function fallbackCopyTextToClipboard(text, groupId) {{
                 const textArea = document.createElement('textarea');
                 textArea.value = text;
                 textArea.style.position = 'fixed';
@@ -9306,11 +9370,15 @@ class LogAnalyzerSystem:
                 textArea.select();
                 
                 try {{
-                    document.execCommand('copy');
-                    showCopySuccess(group);
+                    const successful = document.execCommand('copy');
+                    if (successful) {{
+                        showCopySuccess(groupId);
+                    }} else {{
+                        alert('複製失敗，請手動選擇文字複製');
+                    }}
                 }} catch (err) {{
                     console.error('Fallback 複製失敗:', err);
-                    alert('複製失敗，請手動複製內容');
+                    alert('複製失敗，請手動選擇文字複製');
                 }}
                 
                 document.body.removeChild(textArea);
