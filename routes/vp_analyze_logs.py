@@ -8559,6 +8559,32 @@ class LogAnalyzerSystem:
                 }}
             }}
 
+            /* 複製摘要按鈕 */
+            .copy-summary-btn {{
+                background: #059669;
+                transition: all 0.3s ease;
+            }}
+
+            .copy-summary-btn:hover {{
+                background: #047857;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(5, 150, 105, 0.3);
+            }}
+
+            .copy-summary-btn.copied {{
+                background: #10b981;
+            }}
+
+            /* 控制按鈕的複製狀態 */
+            .control-btn.copying {{
+                animation: pulse 0.5s ease-in-out;
+            }}
+
+            @keyframes pulse {{
+                0% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.05); }}
+                100% {{ transform: scale(1); }}
+            }}
         </style>
     </head>
     <body>
@@ -8624,7 +8650,14 @@ class LogAnalyzerSystem:
                         </svg>
                         相似問題
                     </button>
-                    
+                    <button onclick="copySimilarityView()" class="control-btn" id="copySummaryBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
+                            <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
+                        </svg>
+                        複製問題摘要
+                    </button>
+
                     <!-- 快速搜尋 -->
                     <div class="search-container">
                         <div class="search-box">
@@ -8658,6 +8691,12 @@ class LogAnalyzerSystem:
         </div>
         <!-- 浮動按鈕 -->
         <div class="floating-buttons">
+            <button class="floating-btn copy-summary-btn" onclick="copySimilarityView()" title="複製問題摘要">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" fill="currentColor"/>
+                    <path d="M10 9h7v2h-7zm0 3h7v2h-7zm0 3h5v2h-5z" fill="currentColor"/>
+                </svg>
+            </button>
             <button class="floating-btn global-control-btn toggle-expand" onclick="toggleExpandCollapse()" title="全部收合" id="floatingToggleBtn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" id="floatingToggleIcon">
                     <path d="M3 18l9-9 9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -8673,7 +8712,7 @@ class LogAnalyzerSystem:
                     <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
-        </div>      
+        </div>     
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
@@ -9449,7 +9488,200 @@ class LogAnalyzerSystem:
                 
                 document.body.removeChild(textArea);
             }}
-               
+
+            // 複製相似問題視圖摘要
+            function copySimilarityView() {{
+                const NEWLINE = String.fromCharCode(10);
+                
+                try {{
+                    const copyTextParts = [];
+                    
+                    // 添加標題
+                    copyTextParts.push('📊 Android Log 分析報告 - 相似問題摘要');
+                    copyTextParts.push('=' + '='.repeat(50));
+                    copyTextParts.push('');
+                    
+                    // 獲取統計信息
+                    const statCards = document.querySelectorAll('.stat-card');
+                    if (statCards.length > 0) {{
+                        copyTextParts.push('📈 統計信息:');
+                        statCards.forEach(card => {{
+                            const value = card.querySelector('.stat-value')?.textContent || '';
+                            const label = card.querySelector('.stat-label')?.textContent || '';
+                            if (value && label) {{
+                                copyTextParts.push(`  • ${{label}}: ${{value}}`);
+                            }}
+                        }});
+                        copyTextParts.push('');
+                    }}
+                    
+                    // 獲取所有相似問題群組
+                    const groups = document.querySelectorAll('.similarity-group');
+                    
+                    if (groups.length === 0) {{
+                        copyTextParts.push('沒有發現相似問題');
+                    }} else {{
+                        copyTextParts.push(`🔍 發現 ${{groups.length}} 組相似問題:`);
+                        copyTextParts.push('');
+                        
+                        groups.forEach((group, index) => {{
+                            // 分隔線
+                            copyTextParts.push('-'.repeat(50));
+                            copyTextParts.push('');
+                            
+                            // 群組標題
+                            const titleElement = group.querySelector('.group-title');
+                            if (titleElement) {{
+                                let title = titleElement.textContent.trim();
+                                const severityElement = group.querySelector('.severity-badge');
+                                const severity = severityElement ? severityElement.textContent.trim() : '';
+                                
+                                if (severity && title.includes(severity)) {{
+                                    title = title.replace(severity, '').trim();
+                                }}
+                                
+                                copyTextParts.push(`【第 ${{index + 1}} 組】${{severity}} ${{title}}`);
+                            }}
+                            
+                            // 檔案數量和信心度
+                            const fileCountElement = group.querySelector('.file-count-badge');
+                            const confidenceElement = group.querySelector('.confidence-badge');
+                            
+                            if (fileCountElement) {{
+                                copyTextParts.push('🧩 ' + fileCountElement.textContent.trim());
+                            }}
+                            
+                            if (confidenceElement) {{
+                                const confidenceText = confidenceElement.textContent.trim();
+                                const confidenceMatch = confidenceText.match(/(\d+)%/);
+                                if (confidenceMatch) {{
+                                    copyTextParts.push('✨ 信心度: ' + confidenceMatch[0]);
+                                }}
+                            }}
+                            
+                            // 問題集
+                            const problemSetsElement = group.querySelector('.sets-list');
+                            if (problemSetsElement) {{
+                                copyTextParts.push('🕵️ 問題集: ' + problemSetsElement.textContent.trim());
+                            }}
+                            
+                            // 簡要描述（只取描述卡片）
+                            const descCard = Array.from(group.querySelectorAll('.problem-card')).find(card => {{
+                                const title = card.querySelector('h4');
+                                return title && title.textContent.includes('描述');
+                            }});
+                            
+                            if (descCard) {{
+                                const cardContent = descCard.textContent.trim();
+                                const titleText = descCard.querySelector('h4').textContent.trim();
+                                const contentWithoutTitle = cardContent.replace(titleText, '').trim();
+                                if (contentWithoutTitle) {{
+                                    copyTextParts.push('');
+                                    copyTextParts.push('📋 ' + contentWithoutTitle);
+                                }}
+                            }}
+                            
+                            // 關鍵堆疊（簡化版）
+                            const keyStackCard = Array.from(group.querySelectorAll('.problem-card')).find(card => {{
+                                const title = card.querySelector('h4');
+                                return title && title.textContent.includes('關鍵堆疊');
+                            }});
+                            
+                            if (keyStackCard) {{
+                                const stackFrame = keyStackCard.querySelector('.stack-frame');
+                                const stackMarker = keyStackCard.querySelector('.stack-marker');
+                                if (stackFrame && stackMarker) {{
+                                    copyTextParts.push('');
+                                    copyTextParts.push('🔍 關鍵堆疊: ' + stackMarker.textContent.trim() + ' ' + stackFrame.textContent.trim());
+                                }}
+                            }}
+                            
+                            copyTextParts.push('');
+                        }});
+                    }}
+                    
+                    // 添加生成時間
+                    copyTextParts.push('');
+                    copyTextParts.push('-'.repeat(50));
+                    copyTextParts.push('⏰ 生成時間: ' + new Date().toLocaleString('zh-TW'));
+                    
+                    // 結合所有內容
+                    const copyText = copyTextParts.join(NEWLINE);
+                    
+                    // 複製到剪貼板
+                    if (navigator.clipboard && window.isSecureContext) {{
+                        navigator.clipboard.writeText(copyText).then(() => {{
+                            showCopySummarySuccess();
+                        }}).catch(err => {{
+                            console.error('複製失敗:', err);
+                            fallbackCopySummary(copyText);
+                        }});
+                    }} else {{
+                        fallbackCopySummary(copyText);
+                    }}
+                    
+                }} catch (error) {{
+                    console.error('複製摘要錯誤:', error);
+                    alert('複製時發生錯誤：' + error.message);
+                }}
+            }}
+
+            // 顯示複製成功（摘要）
+            function showCopySummarySuccess() {{
+                // 更新控制按鈕
+                const controlBtn = document.getElementById('copySummaryBtn');
+                if (controlBtn) {{
+                    const originalHTML = controlBtn.innerHTML;
+                    controlBtn.classList.add('copying');
+                    controlBtn.innerHTML = `
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" fill="currentColor"/>
+                        </svg>
+                        已複製
+                    `;
+                    
+                    setTimeout(() => {{
+                        controlBtn.classList.remove('copying');
+                        controlBtn.innerHTML = originalHTML;
+                    }}, 2000);
+                }}
+                
+                // 更新浮動按鈕
+                const floatingBtn = document.querySelector('.copy-summary-btn');
+                if (floatingBtn) {{
+                    floatingBtn.classList.add('copied');
+                    setTimeout(() => {{
+                        floatingBtn.classList.remove('copied');
+                    }}, 2000);
+                }}
+            }}
+
+            // Fallback 複製方法（摘要）
+            function fallbackCopySummary(text) {{
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {{
+                    const successful = document.execCommand('copy');
+                    if (successful) {{
+                        showCopySummarySuccess();
+                    }} else {{
+                        alert('複製失敗，請手動選擇文字複製');
+                    }}
+                }} catch (err) {{
+                    console.error('Fallback 複製失敗:', err);
+                    alert('複製失敗，請手動選擇文字複製');
+                }}
+                
+                document.body.removeChild(textArea);
+            }}
+
         </script>
     </body>
     </html>"""    
