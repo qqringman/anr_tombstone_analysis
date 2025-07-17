@@ -4954,184 +4954,482 @@ class LogAnalyzerSystem:
             'features': [],
             'content': html_content,
             'rel_path': os.path.relpath(file_path, self.input_folder),
-            'key_stack': '',  # 新增：關鍵堆疊
-            'stack_marker': ''  # 新增：堆疊標記
+            'key_stack': '',  # 關鍵堆疊
+            'stack_marker': '',  # 堆疊標記
+            'signal_type': '',
+            'fault_addr': '',
+            'crash_function': '',
+            'anr_type': '',  # 新增：ANR 類型
+            'wait_time': 0,  # 新增：等待時間
+            'thread_state': '',  # 新增：主線程狀態
         }
         
-        # 使用正則表達式提取關鍵信息
-        # 提取可能原因
-        cause_match = re.search(r'可能原因[：:]\s*([^<\n]+)', html_content)
-        if cause_match:
-            info['root_cause'] = cause_match.group(1).strip()
+        # 提取可能原因（更精確的模式）
+        cause_patterns = [
+            r'🎯\s*可能原因[：:]\s*([^<\n]+)',
+            r'可能原因[：:]\s*([^<\n]+)',
+            r'根本原因[：:]\s*([^<\n]+)',
+        ]
+        
+        for pattern in cause_patterns:
+            cause_match = re.search(pattern, html_content)
+            if cause_match:
+                info['root_cause'] = cause_match.group(1).strip()
+                break
         
         # 提取嚴重程度
-        severity_match = re.search(r'嚴重程度[：:]\s*([^<\n]+)', html_content)
-        if severity_match:
-            info['severity'] = severity_match.group(1).strip()
+        severity_patterns = [
+            r'🚨\s*嚴重程度[：:]\s*([^<\n]+)',
+            r'嚴重程度[：:]\s*([^<\n]+)',
+            r'⚠️\s*嚴重程度[：:]\s*([^<\n]+)',
+        ]
         
-        # 提取進程名稱 - 修正版本，只提取進程名
+        for pattern in severity_patterns:
+            severity_match = re.search(pattern, html_content)
+            if severity_match:
+                info['severity'] = severity_match.group(1).strip()
+                break
+        
+        # 提取進程名稱（更精確）
         process_patterns = [
-            r'進程名稱[：:]\s*([^\s,\(]+)',  # 提取到第一個空格、逗號或括號
-            r'進程[：:]\s*([^\s,\(]+)',
-            r'📱\s*進程名稱[：:]\s*([^\s,\(]+)',
-            r'Process:\s*([^\s,\(]+)',
-            r'ProcessName:\s*([^\s,\(]+)',
+            r'📱\s*進程名稱[：:]\s*([^\s,\(<]+)',
+            r'進程名稱[：:]\s*([^\s,\(<]+)',
+            r'進程[：:]\s*([^\s,\(<]+)',
+            r'Process:\s*([^\s,\(<]+)',
         ]
         
         for pattern in process_patterns:
             process_match = re.search(pattern, html_content)
             if process_match:
-                # 只取進程名，去掉後面的額外資訊
-                process_name = process_match.group(1).strip()
-                # 去掉引號如果有的話
-                process_name = process_name.strip('"\'')
+                process_name = process_match.group(1).strip().strip('"\'')
                 info['process_name'] = process_name
                 break
         
-        # 新增：提取關鍵堆疊 - 修正正則表達式
-        # 查找紅色標記的堆疊
-        red_patterns = [
-            r'🔴[^#]*#\d+\s+([^<\n]+)',
-            r'🔴\s*#\d+\s+([^<\n]+)',
+        # 提取關鍵堆疊（這是最重要的區分特徵）
+        stack_patterns = [
+            # 查找帶標記的堆疊
+            r'🔴\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
+            r'🟡\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
+            r'⚪\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
+            # 查找關鍵堆疊區段
+            r'關鍵堆疊[：:]\s*(?:.*\n)?.*?#\d+\s+([^<\n]+)',
+            # 查找第一個堆疊
+            r'#00\s+([^<\n]+)',
+            r'#0\s+([^<\n]+)',
         ]
         
-        stack_found = False
-        for pattern in red_patterns:
-            red_stack_match = re.search(pattern, html_content)
-            if red_stack_match:
-                stack_text = red_stack_match.group(1).strip()
+        for pattern in stack_patterns:
+            stack_match = re.search(pattern, html_content, re.MULTILINE | re.DOTALL)
+            if stack_match:
+                stack_text = stack_match.group(1).strip()
                 # 清理堆疊文字
-                stack_text = re.sub(r'["""]+', '', stack_text)
+                stack_text = re.sub(r'["""\']+', '', stack_text)
                 stack_text = re.sub(r'\s+', ' ', stack_text)
+                stack_text = stack_text.replace('&lt;', '<').replace('&gt;', '>')
                 info['key_stack'] = stack_text.strip()
-                info['stack_marker'] = '🔴'
-                stack_found = True
+                
+                # 提取標記
+                if '🔴' in stack_match.group(0):
+                    info['stack_marker'] = '🔴'
+                elif '🟡' in stack_match.group(0):
+                    info['stack_marker'] = '🟡'
+                else:
+                    info['stack_marker'] = '⚪'
                 break
         
-        if not stack_found:
-            # 如果沒有紅色，查找黃色標記的堆疊
-            yellow_patterns = [
-                r'🟡[^#]*#\d+\s+([^<\n]+)',
-                r'🟡\s*#\d+\s+([^<\n]+)',
+        if info['type'] == 'anr':
+            # ANR 特定資訊提取
+            
+            # 提取 ANR 類型
+            anr_type_patterns = [
+                r'📊\s*ANR 類型[：:]\s*([^<\n]+)',
+                r'ANR 類型[：:]\s*([^<\n]+)',
             ]
             
-            for pattern in yellow_patterns:
-                yellow_stack_match = re.search(pattern, html_content)
-                if yellow_stack_match:
-                    stack_text = yellow_stack_match.group(1).strip()
-                    stack_text = re.sub(r'["""]+', '', stack_text)
-                    stack_text = re.sub(r'\s+', ' ', stack_text)
-                    info['key_stack'] = stack_text.strip()
-                    info['stack_marker'] = '🟡'
-                    stack_found = True
+            for pattern in anr_type_patterns:
+                type_match = re.search(pattern, html_content)
+                if type_match:
+                    info['anr_type'] = type_match.group(1).strip()
                     break
-        
-        if not stack_found:
-            # 如果都沒有，嘗試找第一個堆疊
-            first_patterns = [
-                r'#00\s+([^<\n]+)',
-                r'#0\s+([^<\n]+)',
+            
+            # 提取等待時間
+            wait_time_match = re.search(r'等待時間[：:]\s*(\d+)ms', html_content)
+            if wait_time_match:
+                info['wait_time'] = int(wait_time_match.group(1))
+            
+            # 提取主線程狀態
+            thread_state_match = re.search(r'線程狀態[：:]\s*([^<\n]+)', html_content)
+            if thread_state_match:
+                info['thread_state'] = thread_state_match.group(1).strip()
+            
+            # 基於關鍵堆疊和原因提取特徵
+            if info['key_stack']:
+                stack_lower = info['key_stack'].lower()
+                
+                # Binder 相關
+                if any(keyword in info['key_stack'] for keyword in ['BinderProxy', 'Binder.transact', 'transactNative']):
+                    info['features'].append('binder_ipc')
+                    # 嘗試識別具體的 Binder 服務
+                    if 'WindowManager' in info['key_stack']:
+                        info['features'].append('window_manager_binder')
+                    elif 'ActivityManager' in info['key_stack']:
+                        info['features'].append('activity_manager_binder')
+                    elif 'PackageManager' in info['key_stack']:
+                        info['features'].append('package_manager_binder')
+                
+                # I/O 操作
+                if any(keyword in stack_lower for keyword in ['file', 'sqlite', 'sharedpreferences', 'read', 'write']):
+                    info['features'].append('io_operation')
+                    if 'sqlite' in stack_lower:
+                        info['features'].append('database_io')
+                    elif 'sharedpreferences' in stack_lower:
+                        info['features'].append('shared_prefs_io')
+                
+                # 網路操作
+                if any(keyword in stack_lower for keyword in ['socket', 'http', 'network', 'url']):
+                    info['features'].append('network_operation')
+                
+                # UI 相關
+                if any(keyword in stack_lower for keyword in ['ondraw', 'onmeasure', 'onlayout', 'inflate']):
+                    info['features'].append('ui_operation')
+                
+                # WebView
+                if 'webview' in stack_lower or 'chromium' in stack_lower:
+                    info['features'].append('webview')
+                
+                # 同步鎖
+                if any(keyword in stack_lower for keyword in ['synchronized', 'lock', 'monitor', 'wait']):
+                    info['features'].append('synchronization')
+            
+            # 基於 root_cause 提取特徵
+            if info['root_cause']:
+                cause_lower = info['root_cause'].lower()
+                
+                if '死鎖' in info['root_cause']:
+                    info['features'].append('deadlock')
+                if '線程數' in info['root_cause']:
+                    info['features'].append('too_many_threads')
+                if '記憶體' in info['root_cause']:
+                    info['features'].append('memory_issue')
+                if 'cpu' in cause_lower:
+                    info['features'].append('cpu_issue')
+                if '同步鎖' in info['root_cause']:
+                    info['features'].append('lock_wait')
+                if 'binder' in cause_lower:
+                    info['features'].append('binder_issue')
+                    
+        else:
+            # Tombstone 特徵（增強）
+            # 提取信號類型
+            signal_match = re.search(r'信號[：:]\s*([^<\n]+)', html_content)
+            if signal_match:
+                signal_text = signal_match.group(1).strip()
+                info['signal_type'] = signal_text
+                
+                if 'SIGSEGV' in signal_text:
+                    info['features'].append('sigsegv')
+                elif 'SIGABRT' in signal_text:
+                    info['features'].append('sigabrt')
+                elif 'SIGILL' in signal_text:
+                    info['features'].append('sigill')
+                elif 'SIGBUS' in signal_text:
+                    info['features'].append('sigbus')
+                elif 'SIGFPE' in signal_text:
+                    info['features'].append('sigfpe')
+            
+            # 提取故障地址
+            fault_addr_match = re.search(r'故障地址[：:]\s*([0-9a-fA-Fx]+)', html_content)
+            if fault_addr_match:
+                info['fault_addr'] = fault_addr_match.group(1).strip()
+                
+                if info['fault_addr'] in ['0x0', '0', '00000000']:
+                    info['features'].append('null_pointer')
+                elif info['fault_addr'] == '0xdeadbaad':
+                    info['features'].append('abort_marker')
+                elif info['fault_addr'].startswith('0xdead'):
+                    info['features'].append('debug_marker')
+            
+            # 提取崩潰函數
+            crash_func_patterns = [
+                r'崩潰點[：:]\s*#\d+\s+([^@\n]+)',
+                r'#00\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(([^)]+)\)',
+                r'💥\s*崩潰點[：:]\s*([^<\n]+)'
             ]
             
-            for pattern in first_patterns:
-                first_stack_match = re.search(pattern, html_content)
-                if first_stack_match:
-                    stack_text = first_stack_match.group(1).strip()
-                    stack_text = re.sub(r'["""]+', '', stack_text)
-                    stack_text = re.sub(r'\s+', ' ', stack_text)
-                    info['key_stack'] = stack_text.strip()
-                    info['stack_marker'] = '⚪'
+            for pattern in crash_func_patterns:
+                match = re.search(pattern, html_content)
+                if match:
+                    info['crash_function'] = match.group(1).strip()
                     break
+            
+            # 根據崩潰函數添加特徵
+            if info['crash_function']:
+                func_lower = info['crash_function'].lower()
+                if 'malloc' in func_lower or 'free' in func_lower:
+                    info['features'].append('memory_management')
+                elif 'strlen' in func_lower or 'strcpy' in func_lower:
+                    info['features'].append('string_operation')
+                elif 'jni' in func_lower:
+                    info['features'].append('jni_crash')
+            
+            # 其他 Tombstone 特徵
+            if '雙重釋放' in html_content or 'double free' in html_content.lower():
+                info['features'].append('double_free')
+            if '堆損壞' in html_content or 'heap corruption' in html_content.lower():
+                info['features'].append('heap_corruption')
+            if '緩衝區溢出' in html_content or 'buffer overflow' in html_content.lower():
+                info['features'].append('buffer_overflow')
+            if 'use-after-free' in html_content.lower():
+                info['features'].append('use_after_free')
+            if 'FORTIFY' in html_content:
+                info['features'].append('fortify_failure')
+            if 'Native' in html_content:
+                info['features'].append('native_crash')
+            if 'libc.so' in html_content:
+                info['features'].append('libc_crash')
+            if 'vendor' in html_content:
+                info['features'].append('vendor_lib_crash')
         
-        # 提取特徵（用於相似度計算）
-        if 'Binder IPC' in html_content:
-            info['features'].append('binder_ipc')
-        if 'WindowManager' in html_content:
-            info['features'].append('window_manager')
-        if '線程數過多' in html_content or '線程數量過多' in html_content:
-            info['features'].append('too_many_threads')
-        if '死鎖' in html_content:
-            info['features'].append('deadlock')
-        if '記憶體不足' in html_content:
-            info['features'].append('memory_low')
-        if 'WebView' in html_content:
-            info['features'].append('webview')
-        if '空指針' in html_content or 'null pointer' in html_content.lower():
-            info['features'].append('null_pointer')
-        if 'SIGSEGV' in html_content:
-            info['features'].append('sigsegv')
-        if 'SIGABRT' in html_content:
-            info['features'].append('sigabrt')
+            pass
         
-        return info if info['root_cause'] else None
+        return info if (info['root_cause'] or info['key_stack'] or len(info['features']) > 0) else None
 
     def _analyze_similarity(self, reports: List[Dict]) -> List[Dict]:
-        """分析報告的相似度並分組"""
+        """分析報告的相似度並分組（改進版）"""
         if not reports:
             return []
         
-        # 按 root_cause 初步分組
-        groups = {}
-        for report in reports:
-            root_cause = report['root_cause']
-            if root_cause not in groups:
-                groups[root_cause] = []
-            groups[root_cause].append(report)
+        # 使用更智能的分組策略
+        groups = []
+        processed = set()
         
-        # 計算每組的相似度並簡化標題
+        # 按相似度閾值分組
+        SIMILARITY_THRESHOLD = 60  # 相似度閾值
+        
+        for i, report in enumerate(reports):
+            if i in processed:
+                continue
+                
+            # 創建新組
+            group = [report]
+            processed.add(i)
+            
+            # 查找相似的報告
+            for j in range(i + 1, len(reports)):
+                if j in processed:
+                    continue
+                    
+                similarity = self._calculate_report_similarity(report, reports[j])
+                if similarity >= SIMILARITY_THRESHOLD:
+                    group.append(reports[j])
+                    processed.add(j)
+            
+            # 如果組內有多個報告，計算組的特徵
+            if len(group) >= 1:  # 即使單個報告也創建組，方便統一處理
+                groups.append(group)
+        
+        # 轉換為標準格式
         similarity_groups = []
-        for root_cause, group_reports in groups.items():
-            if len(group_reports) > 1:
-                # 計算組內相似度
-                avg_similarity = self._calculate_group_similarity(group_reports)
+        for group_reports in groups:
+            # 計算組內平均相似度
+            avg_similarity = self._calculate_group_similarity(group_reports)
+            
+            # 提取組的關鍵特徵
+            key_feature = self._extract_group_key_feature(group_reports)
+            
+            # 收集組的統計信息
+            problem_sets = set()
+            severities = []
+            processes = set()
+            root_causes = set()
+            
+            for report in group_reports:
+                # 收集問題集
+                if 'path' in report:
+                    path_parts = report['path'].split(os.sep)
+                    if self.input_folder:
+                        input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
+                        if len(path_parts) > len(input_parts) + 1:
+                            second_dir = path_parts[len(input_parts) + 1]
+                            if second_dir and second_dir not in ['.', '..', '']:
+                                problem_sets.add(second_dir)
                 
-                # 提取最關鍵的共同特徵作為標題
-                key_feature = self._extract_key_feature(group_reports)
-                
-                # 收集所有問題集
-                problem_sets = set()
-                severities = []
-                processes = set()
-                
-                for report in group_reports:
-                    # 收集問題集
-                    if 'path' in report:
-                        path_parts = report['path'].split(os.sep)
-                        if self.input_folder:
-                            input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
-                            if len(path_parts) > len(input_parts) + 1:
-                                second_dir = path_parts[len(input_parts) + 1]
-                                if second_dir and second_dir not in ['.', '..', '']:
-                                    problem_sets.add(second_dir)
-                    
-                    # 收集嚴重程度
-                    if report.get('severity'):
-                        severities.append(report['severity'])
-                    
-                    # 收集進程名
-                    if report.get('process_name'):
-                        processes.add(report['process_name'])
-                
-                # 分析問題詳情
-                problem_details = self._analyze_problem_details(key_feature, group_reports)
-                
-                similarity_groups.append({
-                    'title': key_feature,
-                    'full_title': root_cause,
-                    'reports': group_reports,
-                    'count': len(group_reports),
-                    'similarity': avg_similarity,
-                    'group_id': f"group_{len(similarity_groups)}",
-                    'problem_sets': sorted(list(problem_sets)),
-                    'severity': self._get_highest_severity(severities),
-                    'affected_processes': sorted(list(processes))[:3],  # 最多顯示3個
-                    'problem_details': problem_details  # 新增：問題詳情
-                })
+                # 收集其他信息
+                if report.get('severity'):
+                    severities.append(report['severity'])
+                if report.get('process_name'):
+                    processes.add(report['process_name'])
+                if report.get('root_cause'):
+                    root_causes.add(report['root_cause'])
+            
+            # 生成組標題
+            group_title = self._generate_group_title(group_reports, key_feature)
+            
+            similarity_groups.append({
+                'title': group_title,
+                'full_title': ' / '.join(root_causes) if root_causes else group_title,
+                'reports': group_reports,
+                'count': len(group_reports),
+                'similarity': avg_similarity,
+                'group_id': f"group_{len(similarity_groups)}",
+                'problem_sets': sorted(list(problem_sets)),
+                'severity': self._get_highest_severity(severities),
+                'affected_processes': sorted(list(processes))[:5],  # 最多顯示5個
+                'problem_details': self._analyze_problem_details(group_title, group_reports)
+            })
         
-        # 按相似度排序
-        similarity_groups.sort(key=lambda x: x['similarity'], reverse=True)
+        # 按數量和相似度排序
+        similarity_groups.sort(key=lambda x: (x['count'], x['similarity']), reverse=True)
         
         return similarity_groups
+
+    def _generate_group_title(self, reports: List[Dict], key_feature: str) -> str:
+        """生成更有意義的組標題"""
+        # 如果有明確的模式，直接使用
+        if key_feature and key_feature not in ["未知問題", "未分類問題", "未知堆疊"]:
+            return key_feature
+        
+        # 基於共同特徵生成標題
+        common_features = None
+        for report in reports:
+            features = set(report.get('features', []))
+            if common_features is None:
+                common_features = features
+            else:
+                common_features = common_features.intersection(features)
+        
+        if common_features:
+            # 優先級映射
+            feature_priority = {
+                'deadlock': '死鎖問題',
+                'binder_ipc': 'Binder IPC 問題',
+                'window_manager_binder': 'WindowManager 服務問題',
+                'io_operation': 'I/O 操作問題',
+                'network_operation': '網路請求問題',
+                'synchronization': '同步問題',
+                'too_many_threads': '線程管理問題',
+                'memory_issue': '記憶體問題',
+            }
+            
+            for feature, title in feature_priority.items():
+                if feature in common_features:
+                    return title
+        
+        # 基於進程名
+        processes = set(report.get('process_name', '') for report in reports)
+        processes.discard('')  # 移除空字符串
+        if len(processes) == 1:
+            return f"{list(processes)[0]} 相關問題"
+        
+        # 默認標題
+        return "相似問題組"
+
+    def _extract_group_key_feature(self, reports: List[Dict]) -> str:
+        """提取組的關鍵特徵（基於共同的堆疊和原因）"""
+        if not reports:
+            return "未知問題"
+        
+        # 統計最常見的堆疊模式
+        stack_patterns = {}
+        cause_patterns = {}
+        
+        for report in reports:
+            # 分析堆疊
+            if report.get('key_stack'):
+                stack_key = self._extract_stack_pattern(report['key_stack'])
+                stack_patterns[stack_key] = stack_patterns.get(stack_key, 0) + 1
+            
+            # 分析原因
+            if report.get('root_cause'):
+                cause_key = self._extract_cause_pattern(report['root_cause'])
+                cause_patterns[cause_key] = cause_patterns.get(cause_key, 0) + 1
+        
+        # 找出最常見的模式
+        if stack_patterns:
+            most_common_stack = max(stack_patterns.items(), key=lambda x: x[1])[0]
+            return most_common_stack
+        elif cause_patterns:
+            most_common_cause = max(cause_patterns.items(), key=lambda x: x[1])[0]
+            return most_common_cause
+        else:
+            # 基於特徵
+            all_features = []
+            for report in reports:
+                all_features.extend(report.get('features', []))
+            
+            if all_features:
+                from collections import Counter
+                feature_counter = Counter(all_features)
+                most_common = feature_counter.most_common(1)[0][0]
+                
+                feature_map = {
+                    'binder_ipc': 'Binder IPC 阻塞',
+                    'window_manager_binder': 'WindowManager 服務阻塞',
+                    'activity_manager_binder': 'ActivityManager 服務阻塞',
+                    'io_operation': 'I/O 操作阻塞',
+                    'database_io': '資料庫操作阻塞',
+                    'network_operation': '網路請求阻塞',
+                    'ui_operation': 'UI 渲染阻塞',
+                    'webview': 'WebView 問題',
+                    'synchronization': '同步鎖等待',
+                    'deadlock': '死鎖',
+                    'too_many_threads': '線程數過多',
+                    'memory_issue': '記憶體問題',
+                }
+                
+                return feature_map.get(most_common, '相似問題')
+        
+        return "未分類問題"
+
+    def _extract_cause_pattern(self, cause: str) -> str:
+        """從原因中提取模式"""
+        # 定義原因模式
+        patterns = {
+            'Binder IPC 阻塞': ['Binder IPC', 'Binder 調用'],
+            '同步鎖等待': ['同步鎖', '鎖等待', '等待鎖'],
+            'I/O 操作阻塞': ['I/O 操作', '文件操作', '資料庫操作'],
+            '網路請求阻塞': ['網路請求', '網路操作', 'Socket'],
+            '死鎖': ['死鎖', '循環等待'],
+            '線程數過多': ['線程數過多', '線程過多'],
+            '記憶體不足': ['記憶體不足', '記憶體嚴重不足'],
+            'CPU 使用率過高': ['CPU 使用率', 'CPU 過載'],
+        }
+        
+        for pattern_name, keywords in patterns.items():
+            if any(keyword in cause for keyword in keywords):
+                return pattern_name
+        
+        # 返回原始原因的簡化版本
+        if len(cause) > 20:
+            return cause[:20] + "..."
+        
+        return cause
+
+    def _extract_stack_pattern(self, stack: str) -> str:
+        """從堆疊中提取模式"""
+        # 優先匹配特定的模式
+        patterns = {
+            'Binder IPC 阻塞': ['BinderProxy.transact', 'Binder.transact'],
+            'WindowManager 阻塞': ['WindowManager', 'getWindowInsets'],
+            'I/O 操作阻塞': ['FileInputStream', 'FileOutputStream', 'SQLite'],
+            '網路操作阻塞': ['Socket', 'Http', 'URLConnection'],
+            'SharedPreferences 阻塞': ['SharedPreferences', 'commit'],
+            'UI 渲染阻塞': ['onDraw', 'onMeasure', 'onLayout'],
+            '同步鎖等待': ['synchronized', 'lock', 'wait'],
+        }
+        
+        for pattern_name, keywords in patterns.items():
+            if any(keyword in stack for keyword in keywords):
+                return pattern_name
+        
+        # 如果沒有匹配到，返回簡化的堆疊
+        elements = self._extract_stack_elements(stack)
+        if elements['class'] and elements['method']:
+            return f"{elements['class']}.{elements['method']}"
+        elif elements['class']:
+            return elements['class']
+        
+        return "未知堆疊"
 
     def _analyze_problem_details(self, key_feature: str, reports: List[Dict]) -> Dict:
         """分析問題的詳細資訊"""
@@ -5244,22 +5542,37 @@ class LogAnalyzerSystem:
         
     def _extract_key_feature(self, reports: List[Dict]) -> str:
         """提取最關鍵的共同特徵作為簡化標題"""
-        # 統計所有報告中的關鍵詞頻率
-        keyword_count = {}
+        # 檢查是否都是同類型
+        all_anr = all(r['type'] == 'anr' for r in reports)
+        all_tombstone = all(r['type'] == 'tombstone' for r in reports)
         
-        # 定義關鍵詞優先級
-        priority_keywords = {
-            'Binder IPC 阻塞': ['Binder IPC', 'BinderProxy', 'transact'],
-            '線程數過多': ['線程數過多', '線程數量過多', 'too many threads'],
-            '死鎖': ['死鎖', 'deadlock', '循環等待'],
-            '記憶體不足': ['記憶體不足', '記憶體嚴重不足', 'OutOfMemoryError'],
-            '主線程阻塞': ['主線程', 'main thread', 'UI thread'],
-            'WindowManager 服務阻塞': ['WindowManager', 'window service'],
-            'WebView 問題': ['WebView', 'chromium'],
-            '空指針': ['空指針', 'null pointer', 'NullPointerException'],
-            'I/O 操作阻塞': ['I/O', 'File', 'SQLite', 'SharedPreferences'],
-            '網路請求阻塞': ['Http', 'Socket', 'Network'],
-        }
+        if all_tombstone:
+            # Tombstone 特定的關鍵特徵
+            priority_keywords = {
+                '空指針崩潰': ['null_pointer', '空指針', '0x0'],
+                '記憶體管理錯誤': ['memory_management', 'malloc', 'free', '雙重釋放'],
+                '字串操作錯誤': ['string_operation', 'strlen', 'strcpy'],
+                'JNI 崩潰': ['jni_crash', 'JNI'],
+                '堆損壞': ['heap_corruption', '堆損壞'],
+                '緩衝區溢出': ['buffer_overflow', '緩衝區溢出'],
+                'SIGSEGV 記憶體訪問違規': ['sigsegv', 'SIGSEGV'],
+                'SIGABRT 程序終止': ['sigabrt', 'SIGABRT'],
+                'Native 崩潰': ['native_crash', 'Native'],
+                '廠商庫崩潰': ['vendor_lib_crash', 'vendor'],
+            }
+        else:
+            # ANR 的優先關鍵詞（保持原有）
+            priority_keywords = {
+                'Binder IPC 阻塞': ['Binder IPC', 'BinderProxy', 'transact'],
+                '線程數過多': ['線程數過多', '線程數量過多', 'too many threads'],
+                '死鎖': ['死鎖', 'deadlock', '循環等待'],
+                '記憶體不足': ['記憶體不足', '記憶體嚴重不足', 'OutOfMemoryError'],
+                '主線程阻塞': ['主線程', 'main thread', 'UI thread'],
+                'WindowManager 服務阻塞': ['WindowManager', 'window service'],
+                'WebView 問題': ['WebView', 'chromium'],
+                'I/O 操作阻塞': ['I/O', 'File', 'SQLite', 'SharedPreferences'],
+                '網路請求阻塞': ['Http', 'Socket', 'Network'],
+            }
         
         # 檢查每個優先關鍵詞在所有報告中的出現情況
         for key_feature, keywords in priority_keywords.items():
@@ -5268,8 +5581,10 @@ class LogAnalyzerSystem:
                 found = False
                 # 檢查這個特徵的任何關鍵詞是否在報告中
                 for keyword in keywords:
-                    if (keyword in report['root_cause'] or 
-                        keyword in ' '.join(report['features'])):
+                    if (keyword in report.get('root_cause', '') or 
+                        keyword in ' '.join(report['features']) or
+                        keyword in report.get('signal_type', '') or
+                        keyword in report.get('crash_function', '')):
                         found = True
                         break
                 if not found:
@@ -5299,13 +5614,23 @@ class LogAnalyzerSystem:
                 'webview': 'WebView 問題',
                 'null_pointer': '空指針錯誤',
                 'sigsegv': '記憶體訪問違規',
-                'sigabrt': '程序異常終止'
+                'sigabrt': '程序異常終止',
+                'memory_management': '記憶體管理錯誤',
+                'string_operation': '字串操作錯誤',
+                'jni_crash': 'JNI 崩潰',
+                'native_crash': 'Native 崩潰',
+                'vendor_lib_crash': '廠商庫崩潰'
             }
             
             return feature_map.get(most_common, '相似問題')
         
-        # 最後的fallback
-        return '相似問題'
+        # 最後的 fallback
+        if all_tombstone:
+            return '相似崩潰'
+        elif all_anr:
+            return '相似 ANR'
+        else:
+            return '相似問題'
 
     def _calculate_group_similarity(self, reports: List[Dict]) -> float:
         """計算組內平均相似度"""
@@ -5321,32 +5646,140 @@ class LogAnalyzerSystem:
         return sum(similarities) / len(similarities) if similarities else 0
 
     def _calculate_report_similarity(self, report1: Dict, report2: Dict) -> float:
-        """計算兩個報告的相似度"""
+        """計算兩個報告的相似度（改進版）"""
+        if report1['type'] != report2['type']:
+            return 0  # 不同類型直接返回0
+        
+        weights = {
+            'process_name': 15,      # 進程名相同
+            'root_cause': 25,        # 根本原因相同
+            'key_stack': 30,         # 關鍵堆疊相似
+            'features': 20,          # 特徵相似
+            'severity': 5,           # 嚴重程度相同
+            'anr_type': 5,          # ANR類型相同（僅ANR）
+        }
+        
         score = 0.0
         
-        # 相同的 root_cause
-        if report1['root_cause'] == report2['root_cause']:
-            score += 40
+        # 1. 進程名比較
+        if report1.get('process_name') and report2.get('process_name'):
+            if report1['process_name'] == report2['process_name']:
+                score += weights['process_name']
         
-        # 相同的嚴重程度
-        if report1['severity'] == report2['severity']:
-            score += 10
+        # 2. 根本原因比較（使用更智能的比較）
+        cause1 = report1.get('root_cause', '')
+        cause2 = report2.get('root_cause', '')
+        if cause1 and cause2:
+            if cause1 == cause2:
+                score += weights['root_cause']
+            else:
+                # 計算相似度
+                cause_similarity = self._calculate_text_similarity(cause1, cause2)
+                score += weights['root_cause'] * cause_similarity
         
-        # 相同的類型
-        if report1['type'] == report2['type']:
-            score += 10
+        # 3. 關鍵堆疊比較（最重要）
+        stack1 = report1.get('key_stack', '')
+        stack2 = report2.get('key_stack', '')
+        if stack1 and stack2:
+            stack_similarity = self._calculate_stack_similarity(stack1, stack2)
+            score += weights['key_stack'] * stack_similarity
         
-        # 特徵相似度
-        features1 = set(report1['features'])
-        features2 = set(report2['features'])
+        # 4. 特徵相似度（Jaccard係數）
+        features1 = set(report1.get('features', []))
+        features2 = set(report2.get('features', []))
         if features1 and features2:
             intersection = features1.intersection(features2)
             union = features1.union(features2)
-            jaccard = len(intersection) / len(union)
-            score += jaccard * 40
+            if union:
+                jaccard = len(intersection) / len(union)
+                score += weights['features'] * jaccard
+        elif features1 == features2:  # 都是空集也算相同
+            score += weights['features']
+        
+        # 5. 嚴重程度比較
+        if report1.get('severity') == report2.get('severity'):
+            score += weights['severity']
+        
+        # 6. ANR 特定比較
+        if report1['type'] == 'anr':
+            if report1.get('anr_type') == report2.get('anr_type'):
+                score += weights['anr_type']
         
         return min(score, 100)
-                    
+
+    def _calculate_text_similarity(self, text1: str, text2: str) -> float:
+        """計算文本相似度"""
+        if not text1 or not text2:
+            return 0.0
+        
+        # 簡單的詞袋模型
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
+
+    def _calculate_stack_similarity(self, stack1: str, stack2: str) -> float:
+        """計算堆疊相似度"""
+        if not stack1 or not stack2:
+            return 0.0
+        
+        if stack1 == stack2:
+            return 1.0
+        
+        # 提取關鍵元素
+        key_elements1 = self._extract_stack_elements(stack1)
+        key_elements2 = self._extract_stack_elements(stack2)
+        
+        # 比較類名、方法名等
+        if key_elements1['class'] == key_elements2['class']:
+            if key_elements1['method'] == key_elements2['method']:
+                return 0.9  # 同類同方法
+            else:
+                return 0.6  # 同類不同方法
+        elif key_elements1['package'] == key_elements2['package']:
+            return 0.4  # 同包不同類
+        else:
+            # 檢查是否都是系統調用
+            system_keywords = ['android.', 'java.', 'com.android.']
+            if any(kw in stack1 for kw in system_keywords) and any(kw in stack2 for kw in system_keywords):
+                return 0.2
+        
+        return 0.0
+
+    def _extract_stack_elements(self, stack: str) -> Dict[str, str]:
+        """從堆疊字符串中提取關鍵元素"""
+        elements = {
+            'package': '',
+            'class': '',
+            'method': ''
+        }
+        
+        # 嘗試匹配 Java 堆疊格式
+        # 例如: com.example.app.MainActivity.onCreate
+        java_match = re.search(r'((?:[\w]+\.)+)([\w$]+)\.([\w<>$]+)', stack)
+        if java_match:
+            elements['package'] = java_match.group(1).rstrip('.')
+            elements['class'] = java_match.group(2)
+            elements['method'] = java_match.group(3)
+        else:
+            # 嘗試提取類名
+            class_match = re.search(r'(\w+(?:\$\w+)?)\.\w+', stack)
+            if class_match:
+                elements['class'] = class_match.group(1)
+            
+            # 嘗試提取方法名
+            method_match = re.search(r'\.(\w+)\s*\(', stack)
+            if method_match:
+                elements['method'] = method_match.group(1)
+        
+        return elements
+                
     def analyze(self):
         """執行分析"""
         start_time = time.time()
