@@ -4851,19 +4851,67 @@ class LogAnalyzerSystem:
             'total_time': 0,
         }
 
+    def _extract_key_stack_from_group(self, reports: List[Dict]) -> Dict:
+        """從群組報告中提取關鍵堆疊"""
+        key_stack = {
+            'frame': '無堆疊資訊',
+            'marker': '⚪',
+            'marker_class': 'normal',
+            'reason': ''
+        }
+        
+        # 從第一個報告中提取關鍵堆疊
+        if reports and reports[0].get('content'):
+            content = reports[0]['content']
+            
+            # 尋找紅色標記的堆疊
+            red_match = re.search(r'🔴[^#]*#(\d+)\s+([^\n]+)', content)
+            if red_match:
+                key_stack['frame'] = red_match.group(2).strip()
+                key_stack['marker'] = '🔴'
+                key_stack['marker_class'] = 'critical'
+                
+                # 提取原因
+                reason_match = re.search(r'└─\s*([^\n]+)', content[red_match.end():])
+                if reason_match:
+                    key_stack['reason'] = reason_match.group(1).strip()
+            else:
+                # 尋找黃色標記的堆疊
+                yellow_match = re.search(r'🟡[^#]*#(\d+)\s+([^\n]+)', content)
+                if yellow_match:
+                    key_stack['frame'] = yellow_match.group(2).strip()
+                    key_stack['marker'] = '🟡'
+                    key_stack['marker_class'] = 'important'
+                    
+                    # 提取原因
+                    reason_match = re.search(r'└─\s*([^\n]+)', content[yellow_match.end():])
+                    if reason_match:
+                        key_stack['reason'] = reason_match.group(1).strip()
+                else:
+                    # 如果都沒有，找第一個堆疊
+                    stack_match = re.search(r'#00\s+([^\n]+)', content)
+                    if stack_match:
+                        key_stack['frame'] = stack_match.group(1).strip()
+                        key_stack['marker'] = '⚪'
+                        key_stack['marker_class'] = 'normal'
+        
+        return key_stack
+        
     def _extract_report_info(self, html_content: str, file_path: str) -> Optional[Dict]:
         """從 HTML 報告中提取關鍵信息"""
-
+        
         info = {
-            'path': file_path,  # 保留絕對路徑供後續讀取
+            'path': file_path,
             'filename': os.path.basename(file_path),
             'type': 'anr' if 'anr' in file_path.lower() else 'tombstone',
             'root_cause': '',
             'severity': '',
             'process_name': '',
             'features': [],
-            'content': html_content,  # 直接保存內容
-            'rel_path': os.path.relpath(file_path, self.input_folder)  # 新增相對路徑
+            'content': html_content,
+            'rel_path': os.path.relpath(file_path, self.input_folder),
+            'key_stack': '',  # 新增：關鍵堆疊
+            'stack_marker': ''  # 新增：堆疊標記
         }
         
         # 使用正則表達式提取關鍵信息
@@ -4877,10 +4925,79 @@ class LogAnalyzerSystem:
         if severity_match:
             info['severity'] = severity_match.group(1).strip()
         
-        # 提取進程名稱
-        process_match = re.search(r'進程名稱[：:]\s*([^<\n]+)', html_content)
-        if process_match:
-            info['process_name'] = process_match.group(1).strip()
+        # 提取進程名稱 - 修正版本，只提取進程名
+        process_patterns = [
+            r'進程名稱[：:]\s*([^\s,\(]+)',  # 提取到第一個空格、逗號或括號
+            r'進程[：:]\s*([^\s,\(]+)',
+            r'📱\s*進程名稱[：:]\s*([^\s,\(]+)',
+            r'Process:\s*([^\s,\(]+)',
+            r'ProcessName:\s*([^\s,\(]+)',
+        ]
+        
+        for pattern in process_patterns:
+            process_match = re.search(pattern, html_content)
+            if process_match:
+                # 只取進程名，去掉後面的額外資訊
+                process_name = process_match.group(1).strip()
+                # 去掉引號如果有的話
+                process_name = process_name.strip('"\'')
+                info['process_name'] = process_name
+                break
+        
+        # 新增：提取關鍵堆疊 - 修正正則表達式
+        # 查找紅色標記的堆疊
+        red_patterns = [
+            r'🔴[^#]*#\d+\s+([^<\n]+)',
+            r'🔴\s*#\d+\s+([^<\n]+)',
+        ]
+        
+        stack_found = False
+        for pattern in red_patterns:
+            red_stack_match = re.search(pattern, html_content)
+            if red_stack_match:
+                stack_text = red_stack_match.group(1).strip()
+                # 清理堆疊文字
+                stack_text = re.sub(r'["""]+', '', stack_text)
+                stack_text = re.sub(r'\s+', ' ', stack_text)
+                info['key_stack'] = stack_text.strip()
+                info['stack_marker'] = '🔴'
+                stack_found = True
+                break
+        
+        if not stack_found:
+            # 如果沒有紅色，查找黃色標記的堆疊
+            yellow_patterns = [
+                r'🟡[^#]*#\d+\s+([^<\n]+)',
+                r'🟡\s*#\d+\s+([^<\n]+)',
+            ]
+            
+            for pattern in yellow_patterns:
+                yellow_stack_match = re.search(pattern, html_content)
+                if yellow_stack_match:
+                    stack_text = yellow_stack_match.group(1).strip()
+                    stack_text = re.sub(r'["""]+', '', stack_text)
+                    stack_text = re.sub(r'\s+', ' ', stack_text)
+                    info['key_stack'] = stack_text.strip()
+                    info['stack_marker'] = '🟡'
+                    stack_found = True
+                    break
+        
+        if not stack_found:
+            # 如果都沒有，嘗試找第一個堆疊
+            first_patterns = [
+                r'#00\s+([^<\n]+)',
+                r'#0\s+([^<\n]+)',
+            ]
+            
+            for pattern in first_patterns:
+                first_stack_match = re.search(pattern, html_content)
+                if first_stack_match:
+                    stack_text = first_stack_match.group(1).strip()
+                    stack_text = re.sub(r'["""]+', '', stack_text)
+                    stack_text = re.sub(r'\s+', ' ', stack_text)
+                    info['key_stack'] = stack_text.strip()
+                    info['stack_marker'] = '⚪'
+                    break
         
         # 提取特徵（用於相似度計算）
         if 'Binder IPC' in html_content:
@@ -6204,6 +6321,19 @@ class LogAnalyzerSystem:
                 # 處理問題詳情
                 details = group.get('problem_details', {})
 
+                # 準備進程名稱資料
+                unique_processes = set()
+                for report in group['reports']:
+                    if report.get('process_name'):
+                        unique_processes.add(report['process_name'])
+
+                processes_html = '<br>'.join([f'• {html.escape(p)}' for p in sorted(unique_processes)])
+                if not processes_html:
+                    processes_html = '無進程資訊'
+
+                # 準備關鍵堆疊資料
+                key_stack_info = self._extract_key_stack_from_group(group['reports'])
+
                 html_str += f'''
                 <div class="similarity-group" id="{group['group_id']}">
                     <!-- 第一區：標題和功能按鈕 -->
@@ -6241,19 +6371,31 @@ class LogAnalyzerSystem:
                         <div class="problem-cards">
                             <div class="problem-card">
                                 <h4>📋 描述</h4>
-                                <p>{html.escape(details.get('description', ''))}</p>
+                                {html.escape(details.get('description', ''))}
                             </div>
                             <div class="problem-card">
                                 <h4>🎯 影響範圍</h4>
-                                <p>{html.escape(details.get('impact', ''))}</p>
+                                {html.escape(details.get('impact', ''))}
                             </div>
                             <div class="problem-card">
                                 <h4>⚡ 優先級</h4>
-                                <p class="priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</p>
+                                <div class="priority-{details.get('priority', '').replace('極', 'very-')}">{html.escape(details.get('priority', ''))}</div>
                             </div>
                             <div class="problem-card">
                                 <h4>💡 建議</h4>
-                                <p>{html.escape(details.get('recommendation', ''))}</p>
+                                {html.escape(details.get('recommendation', ''))}
+                            </div>
+                            <div class="problem-card">
+                                <h4>📱 進程名稱</h4>
+                                <div>{processes_html}</div>
+                            </div>
+                            <div class="problem-card">
+                                <h4>🔍 關鍵堆疊</h4>
+                                <div class="key-stack">
+                                    <div class="stack-marker {key_stack_info['marker_class']}">{key_stack_info['marker']}</div>
+                                    <div class="stack-frame">{html.escape(key_stack_info['frame'])}</div>
+                                    <div class="stack-reason">{html.escape(key_stack_info['reason'])}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -8120,6 +8262,7 @@ class LogAnalyzerSystem:
             .problem-card:hover {{
                 transform: translateY(-2px);
                 box-shadow: 0 4px 12px rgba(88, 166, 255, 0.1);
+                border-color: var(--accent);                
             }}
 
             .problem-card:hover::before {{
@@ -8148,6 +8291,88 @@ class LogAnalyzerSystem:
                 display: -webkit-box;
                 -webkit-line-clamp: 4;  /* 從 3 改為 4 行 */
                 -webkit-box-orient: vertical;
+            }}
+
+            /* 進程列表樣式 */
+            .process-list {{
+                font-size: 13px;
+                color: var(--text-secondary);
+                line-height: 1.6;
+                max-height: 80px;
+                overflow-y: auto;
+            }}
+
+            .process-list::-webkit-scrollbar {{
+                width: 6px;
+            }}
+
+            .process-list::-webkit-scrollbar-thumb {{
+                background: rgba(88, 166, 255, 0.3);
+                border-radius: 3px;
+            }}
+
+            /* 關鍵堆疊樣式 */
+            .key-stack {{
+                font-size: 12px;
+                font-family: 'Monaco', 'Consolas', monospace;
+            }}
+
+            .stack-marker {{
+                display:inline-black;
+                float:left;
+                margin-bottom: 4px;
+                font-size: 14px;
+            }}
+
+            .stack-marker.critical {{
+                color: #ef4444;
+            }}
+
+            .stack-marker.important {{
+                color: #f59e0b;
+            }}
+
+            .stack-marker.normal {{
+                color: var(--text-muted);
+            }}
+
+            .stack-frame {{
+                color: var(--text-primary);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-bottom: 4px;
+                font-weight: 500;
+            }}
+
+            .stack-reason {{
+                color: var(--text-secondary);
+                font-size: 11px;
+                font-style: italic;
+            }}
+
+            .problem-cards {{
+                display: grid;
+                font-size: 12px;
+                font-family: 'Monaco', 'Consolas', monospace;                
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));  /* 從 280px 改為 240px */
+                gap: 16px;
+                margin-bottom: 0;
+                align-items: start;                
+            }}
+
+            /* 針對較大螢幕，固定為 3 欄 */
+            @media (min-width: 1200px) {{
+                .problem-cards {{
+                    grid-template-columns: repeat(3, 1fr);
+                }}
+            }}
+
+            /* 針對中等螢幕，固定為 2 欄 */
+            @media (min-width: 768px) and (max-width: 1199px) {{
+                .problem-cards {{
+                    grid-template-columns: repeat(2, 1fr);
+                }}
             }}
 
             /* 優先級樣式 */
