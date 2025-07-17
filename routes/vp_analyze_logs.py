@@ -737,6 +737,24 @@ class ANRAnalyzer(BaseAnalyzer):
             
             return "\n".join(basic_report)
 
+class SimilarityConfig:
+    """相似度配置"""
+    # 基礎閾值
+    SIMILARITY_THRESHOLD = 60  # 基本相似度閾值
+    
+    # ANR 特定閾值
+    ANR_STACK_WEIGHT = 0.35    # 堆疊權重
+    ANR_CAUSE_WEIGHT = 0.25    # 原因權重
+    ANR_FEATURE_WEIGHT = 0.20  # 特徵權重
+    ANR_PROCESS_WEIGHT = 0.15  # 進程權重
+    ANR_SEVERITY_WEIGHT = 0.05 # 嚴重度權重
+    
+    # Tombstone 特定閾值
+    TOMBSTONE_SIGNAL_WEIGHT = 0.30   # 信號類型權重
+    TOMBSTONE_ADDR_WEIGHT = 0.25     # 故障地址權重
+    TOMBSTONE_FUNC_WEIGHT = 0.25     # 崩潰函數權重
+    TOMBSTONE_NATIVE_WEIGHT = 0.20   # Native/Java 權重
+    
 class ANRReportGenerator:
     """ANR 報告生成器"""
     
@@ -3775,21 +3793,148 @@ class TombstoneAnalyzer(BaseAnalyzer):
         return info
     
     def _extract_abort_message(self, content: str) -> Optional[str]:
-        """提取 abort message"""
-        for pattern in self.patterns['abort_patterns']:
-            match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+        """提取 abort message - 增強版"""
+        # 現有的模式
+        abort_patterns = [
+            r'Abort message:\s*["\'](.+?)["\']',
+            r'Abort message:\s*(.+?)(?:\n|$)',
+            r'abort_message:\s*"(.+?)"',
+            r'CHECK\s+failed:\s*(.+)',
+            r'Fatal Exception:\s*(.+)',
+        ]
+        
+        # 新增的 abort 相關模式
+        additional_patterns = [
+            # 標準 abort 信號
+            r'Fatal signal.*?Abort.*?reason:\s*(.+?)(?:\n|$)',
+            r'libc:\s*Fatal signal.*?abort.*?:\s*(.+?)(?:\n|$)',
+            r'Abort trap:\s*(.+?)(?:\n|$)',
+            r'Process.*?aborted.*?reason:\s*(.+?)(?:\n|$)',
+            r'SIGABRT.*?reason:\s*(.+?)(?:\n|$)',
+            
+            # Android 特定的 abort
+            r'android::abort\(\).*?:\s*(.+?)(?:\n|$)',
+            r'art::Runtime::Abort\(\).*?:\s*(.+?)(?:\n|$)',
+            r'__libc_fatal\(\).*?:\s*(.+?)(?:\n|$)',
+            
+            # JNI 相關的 abort
+            r'JNI DETECTED ERROR.*?:\s*(.+?)(?:\n|$)',
+            r'JNI FatalError called:\s*(.+?)(?:\n|$)',
+            r'JNI WARNING.*?aborting.*?:\s*(.+?)(?:\n|$)',
+            
+            # FORTIFY 相關
+            r'FORTIFY:\s*(.+?)(?:\n|$)',
+            r'fortify_fatal:\s*(.+?)(?:\n|$)',
+            r'detected source and destination buffer overlap',
+            r'buffer overflow detected',
+            r'stack corruption detected',
+            
+            # Native heap 相關
+            r'native heap corruption detected.*?:\s*(.+?)(?:\n|$)',
+            r'invalid address or address of corrupt block.*?:\s*(.+?)(?:\n|$)',
+            r'heap corruption detected by.*?:\s*(.+?)(?:\n|$)',
+            
+            # Bionic 相關
+            r'bionic:\s*(.+?abort.+?)(?:\n|$)',
+            r'async_safe_fatal\(\):\s*(.+?)(?:\n|$)',
+            
+            # 其他常見的 abort 訊息
+            r'Aborting.*?:\s*(.+?)(?:\n|$)',
+            r'abort\(\) called.*?:\s*(.+?)(?:\n|$)',
+            r'Fatal error:\s*(.+?)(?:\n|$)',
+            r'FATAL:\s*(.+?)(?:\n|$)',
+        ]
+        
+        # 合併所有模式
+        all_patterns = abort_patterns + additional_patterns
+        
+        # 嘗試匹配所有模式
+        for pattern in all_patterns:
+            match = re.search(pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
             if match:
                 message = match.group(1).strip()
+                
                 # 清理訊息
                 message = message.replace('\\n', '\n')
                 message = message.replace('\\t', '\t')
+                message = message.replace('\\"', '"')
+                message = message.replace("\\'", "'")
+                
+                # 移除多餘的空白
+                message = ' '.join(message.split())
+                
+                # 限制長度
+                if len(message) > 500:
+                    message = message[:497] + "..."
+                
                 return message
         
-        # 檢查 FORTIFY 訊息
-        for pattern in self.patterns['fortify_patterns']:
-            match = re.search(pattern, content)
-            if match:
-                return f"FORTIFY: {match.group(1)}"
+        # 檢查特殊的 abort 標記
+        special_abort_checks = [
+            # 檢查 SIGABRT
+            (r'signal\s+6\s+\(SIGABRT\)', "Signal 6 (SIGABRT) - 程序主動終止"),
+            (r'si_signo=6', "SIGABRT - 程序異常終止"),
+            
+            # 檢查特定的 abort 地址
+            (r'fault addr 0xdeadbaad', "Android libc abort marker (0xdeadbaad)"),
+            (r'pc 0xdeadbaad', "Abort at debug marker address"),
+            
+            # 檢查 abort 函數調用
+            (r'\babort\s*\(\)', "Direct abort() call"),
+            (r'__libc_android_abort', "Android libc abort"),
+            (r'raise\(SIGABRT\)', "Raised SIGABRT signal"),
+        ]
+        
+        for pattern, description in special_abort_checks:
+            if re.search(pattern, content, re.IGNORECASE):
+                # 嘗試找到更多上下文
+                context_patterns = [
+                    r'(?:reason|cause|because|due to):\s*([^\n]+)',
+                    r'(?:error|failure):\s*([^\n]+)',
+                    r'(?:message):\s*([^\n]+)',
+                ]
+                
+                for ctx_pattern in context_patterns:
+                    ctx_match = re.search(ctx_pattern, content, re.IGNORECASE)
+                    if ctx_match:
+                        return f"{description} - {ctx_match.group(1).strip()}"
+                
+                return description
+        
+        # 檢查堆疊中的 abort 調用
+        abort_stack_patterns = [
+            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(abort\+',
+            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(__libc_android_abort',
+            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(raise\+',
+        ]
+        
+        for pattern in abort_stack_patterns:
+            if re.search(pattern, content):
+                # 嘗試從堆疊前後找到原因
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if re.search(pattern, line):
+                        # 檢查前後 5 行
+                        start = max(0, i - 5)
+                        end = min(len(lines), i + 5)
+                        
+                        for j in range(start, end):
+                            if 'assert' in lines[j].lower():
+                                return f"Assertion failed: {lines[j].strip()}"
+                            elif 'check failed' in lines[j].lower():
+                                return f"Check failed: {lines[j].strip()}"
+                            elif 'fatal' in lines[j].lower() and j != i:
+                                return f"Fatal error: {lines[j].strip()}"
+        
+        # 最後的 fallback：如果檔案中包含 abort 相關關鍵字但沒有明確訊息
+        if any(keyword in content.lower() for keyword in ['abort', 'sigabrt', 'fatal', '0xdeadbaad']):
+            # 統計關鍵字出現次數
+            abort_count = content.lower().count('abort')
+            sigabrt_count = content.lower().count('sigabrt')
+            fatal_count = content.lower().count('fatal')
+            
+            if abort_count > 0 or sigabrt_count > 0:
+                return f"Abort detected (abort: {abort_count}, sigabrt: {sigabrt_count}, fatal: {fatal_count})"
         
         return None
     
@@ -5195,47 +5340,57 @@ class LogAnalyzerSystem:
         return info if (info['root_cause'] or info['key_stack'] or len(info['features']) > 0) else None
 
     def _analyze_similarity(self, reports: List[Dict]) -> List[Dict]:
-        """分析報告的相似度並分組（改進版）"""
+        """分析報告的相似度並分組 - 改進版"""
         if not reports:
             return []
         
-        # 使用更智能的分組策略
-        groups = []
-        processed = set()
+        # 使用 DBSCAN 聚類算法進行分組
+        from sklearn.cluster import DBSCAN
+        import numpy as np
         
-        # 按相似度閾值分組
-        SIMILARITY_THRESHOLD = 60  # 相似度閾值
+        # 構建相似度矩陣
+        n = len(reports)
+        similarity_matrix = np.zeros((n, n))
         
-        for i, report in enumerate(reports):
-            if i in processed:
-                continue
+        for i in range(n):
+            for j in range(i + 1, n):
+                # 根據類型使用不同的相似度計算
+                if reports[i]['type'] == 'tombstone' and reports[j]['type'] == 'tombstone':
+                    base_similarity = self._calculate_report_similarity(reports[i], reports[j])
+                    tombstone_similarity = self._calculate_tombstone_similarity(reports[i], reports[j])
+                    similarity = base_similarity * 0.7 + tombstone_similarity * 0.3
+                else:
+                    similarity = self._calculate_report_similarity(reports[i], reports[j])
                 
-            # 創建新組
-            group = [report]
-            processed.add(i)
-            
-            # 查找相似的報告
-            for j in range(i + 1, len(reports)):
-                if j in processed:
-                    continue
-                    
-                similarity = self._calculate_report_similarity(report, reports[j])
-                if similarity >= SIMILARITY_THRESHOLD:
-                    group.append(reports[j])
-                    processed.add(j)
-            
-            # 如果組內有多個報告，計算組的特徵
-            if len(group) >= 1:  # 即使單個報告也創建組，方便統一處理
-                groups.append(group)
+                similarity_matrix[i, j] = similarity
+                similarity_matrix[j, i] = similarity
+        
+        # 對角線設為 100（自身相似度）
+        np.fill_diagonal(similarity_matrix, 100)
+        
+        # 轉換為距離矩陣（DBSCAN 需要）
+        distance_matrix = 100 - similarity_matrix
+        
+        # 使用 DBSCAN 聚類
+        clustering = DBSCAN(eps=40, min_samples=1, metric='precomputed')
+        cluster_labels = clustering.fit_predict(distance_matrix)
+        
+        # 組織聚類結果
+        clusters = {}
+        for idx, label in enumerate(cluster_labels):
+            if label not in clusters:
+                clusters[label] = []
+            clusters[label].append(reports[idx])
         
         # 轉換為標準格式
         similarity_groups = []
-        for group_reports in groups:
-            # 計算組內平均相似度
-            avg_similarity = self._calculate_group_similarity(group_reports)
-            
-            # 提取組的關鍵特徵
-            key_feature = self._extract_group_key_feature(group_reports)
+        for label, group_reports in clusters.items():
+            if len(group_reports) >= 1:  # 即使單個報告也創建組
+                # 計算組內平均相似度
+                avg_similarity = self._calculate_group_similarity(group_reports)
+                
+                # 提取組的關鍵特徵
+                key_feature = self._extract_group_key_feature(group_reports)
             
             # 收集組的統計信息
             problem_sets = set()
@@ -5651,12 +5806,13 @@ class LogAnalyzerSystem:
             return 0  # 不同類型直接返回0
         
         weights = {
-            'process_name': 15,      # 進程名相同
-            'root_cause': 25,        # 根本原因相同
-            'key_stack': 30,         # 關鍵堆疊相似
-            'features': 20,          # 特徵相似
-            'severity': 5,           # 嚴重程度相同
-            'anr_type': 5,          # ANR類型相同（僅ANR）
+            'process_name': 15,
+            'root_cause': 20,      # 降低一點權重
+            'key_stack': 25,       # 降低一點權重
+            'features': 20,
+            'severity': 5,
+            'anr_type': 5,
+            'time_proximity': 10,  # 新增：時間接近度
         }
         
         score = 0.0
@@ -5704,28 +5860,117 @@ class LogAnalyzerSystem:
         if report1['type'] == 'anr':
             if report1.get('anr_type') == report2.get('anr_type'):
                 score += weights['anr_type']
-        
+
+        # 7. 時間接近度（新增）
+        if hasattr(report1, 'timestamp') and hasattr(report2, 'timestamp'):
+            time_diff = abs(report1['timestamp'] - report2['timestamp'])
+            if time_diff < 60:  # 1分鐘內
+                score += weights['time_proximity']
+            elif time_diff < 300:  # 5分鐘內
+                score += weights['time_proximity'] * 0.7
+            elif time_diff < 3600:  # 1小時內
+                score += weights['time_proximity'] * 0.3
+                        
         return min(score, 100)
 
+    def _calculate_tombstone_similarity(self, report1: Dict, report2: Dict) -> float:
+        """計算 Tombstone 特定的相似度"""
+        similarity_factors = []
+        
+        # 1. 信號類型完全匹配
+        if report1.get('signal_type') == report2.get('signal_type'):
+            similarity_factors.append(1.0)
+        else:
+            similarity_factors.append(0.0)
+        
+        # 2. 故障地址相似度
+        addr1 = report1.get('fault_addr', '')
+        addr2 = report2.get('fault_addr', '')
+        
+        if addr1 == addr2:
+            similarity_factors.append(1.0)
+        elif addr1 in ['0x0', '0'] and addr2 in ['0x0', '0']:
+            similarity_factors.append(0.9)  # 都是空指針
+        elif addr1.startswith('0xdead') and addr2.startswith('0xdead'):
+            similarity_factors.append(0.8)  # 都是調試標記
+        else:
+            similarity_factors.append(0.0)
+        
+        # 3. 崩潰函數相似度
+        func1 = report1.get('crash_function', '')
+        func2 = report2.get('crash_function', '')
+        
+        if func1 and func2:
+            if func1 == func2:
+                similarity_factors.append(1.0)
+            elif func1.split('::')[-1] == func2.split('::')[-1]:  # 同名函數
+                similarity_factors.append(0.7)
+            else:
+                similarity_factors.append(0.2)
+        
+        # 4. Native/Java 層面
+        is_native1 = 'native_crash' in report1.get('features', [])
+        is_native2 = 'native_crash' in report2.get('features', [])
+        
+        if is_native1 == is_native2:
+            similarity_factors.append(0.8)
+        else:
+            similarity_factors.append(0.2)
+        
+        return sum(similarity_factors) / len(similarity_factors) if similarity_factors else 0.0
+
     def _calculate_text_similarity(self, text1: str, text2: str) -> float:
-        """計算文本相似度"""
+        """計算文本相似度 - 使用多種算法"""
         if not text1 or not text2:
             return 0.0
         
-        # 簡單的詞袋模型
+        # 1. 完全匹配
+        if text1 == text2:
+            return 1.0
+        
+        # 2. 詞袋模型（原有）
         words1 = set(text1.lower().split())
         words2 = set(text2.lower().split())
         
-        if not words1 or not words2:
-            return 0.0
+        if words1 and words2:
+            jaccard = len(words1.intersection(words2)) / len(words1.union(words2))
+        else:
+            jaccard = 0.0
         
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
+        # 3. 編輯距離（Levenshtein）
+        def levenshtein_ratio(s1: str, s2: str) -> float:
+            if len(s1) < len(s2):
+                return levenshtein_ratio(s2, s1)
+            
+            if len(s2) == 0:
+                return 0.0
+            
+            previous_row = range(len(s2) + 1)
+            for i, c1 in enumerate(s1):
+                current_row = [i + 1]
+                for j, c2 in enumerate(s2):
+                    insertions = previous_row[j + 1] + 1
+                    deletions = current_row[j] + 1
+                    substitutions = previous_row[j] + (c1 != c2)
+                    current_row.append(min(insertions, deletions, substitutions))
+                previous_row = current_row
+            
+            return 1 - (previous_row[-1] / max(len(s1), len(s2)))
         
-        return len(intersection) / len(union) if union else 0.0
+        # 4. 子串匹配
+        substring_score = 0.0
+        if len(text1) < len(text2):
+            if text1 in text2:
+                substring_score = len(text1) / len(text2)
+        else:
+            if text2 in text1:
+                substring_score = len(text2) / len(text1)
+        
+        # 綜合評分
+        return max(jaccard * 0.4 + levenshtein_ratio(text1[:100], text2[:100]) * 0.4 + substring_score * 0.2, 0.0)
 
     def _calculate_stack_similarity(self, stack1: str, stack2: str) -> float:
-        """計算堆疊相似度"""
+        """計算堆疊相似度 - 增強版"""
         if not stack1 or not stack2:
             return 0.0
         
@@ -5736,21 +5981,69 @@ class LogAnalyzerSystem:
         key_elements1 = self._extract_stack_elements(stack1)
         key_elements2 = self._extract_stack_elements(stack2)
         
-        # 比較類名、方法名等
+        # 多維度相似度計算
+        similarity_scores = []
+        
+        # 1. 結構相似度（類名、方法名、包名）
         if key_elements1['class'] == key_elements2['class']:
             if key_elements1['method'] == key_elements2['method']:
-                return 0.9  # 同類同方法
+                similarity_scores.append(0.9)  # 同類同方法
             else:
-                return 0.6  # 同類不同方法
+                similarity_scores.append(0.6)  # 同類不同方法
         elif key_elements1['package'] == key_elements2['package']:
-            return 0.4  # 同包不同類
+            similarity_scores.append(0.4)  # 同包不同類
         else:
-            # 檢查是否都是系統調用
-            system_keywords = ['android.', 'java.', 'com.android.']
-            if any(kw in stack1 for kw in system_keywords) and any(kw in stack2 for kw in system_keywords):
-                return 0.2
+            similarity_scores.append(0.1)  # 完全不同
         
-        return 0.0
+        # 2. 關鍵詞相似度
+        keywords1 = self._extract_stack_keywords(stack1)
+        keywords2 = self._extract_stack_keywords(stack2)
+        if keywords1 and keywords2:
+            keyword_similarity = len(keywords1.intersection(keywords2)) / len(keywords1.union(keywords2))
+            similarity_scores.append(keyword_similarity)
+        
+        # 3. 模式相似度（檢查是否都是同類型問題）
+        pattern1 = self._identify_stack_pattern(stack1)
+        pattern2 = self._identify_stack_pattern(stack2)
+        if pattern1 == pattern2 and pattern1 != 'unknown':
+            similarity_scores.append(0.8)
+        
+        # 返回加權平均
+        return sum(similarity_scores) / len(similarity_scores) if similarity_scores else 0.0
+
+    def _extract_stack_keywords(self, stack: str) -> Set[str]:
+        """提取堆疊關鍵詞"""
+        keywords = set()
+        
+        # 重要的系統調用
+        important_calls = [
+            'Binder', 'transact', 'wait', 'lock', 'synchronized',
+            'Socket', 'File', 'SQLite', 'Http', 'inflate', 'measure',
+            'onDraw', 'WebView', 'Handler', 'Looper'
+        ]
+        
+        for keyword in important_calls:
+            if keyword in stack:
+                keywords.add(keyword.lower())
+        
+        return keywords
+
+    def _identify_stack_pattern(self, stack: str) -> str:
+        """識別堆疊模式類型"""
+        patterns = {
+            'binder': ['BinderProxy', 'transact', 'IPC'],
+            'io': ['File', 'Input', 'Output', 'Stream', 'SQLite'],
+            'network': ['Socket', 'Http', 'URL', 'Network'],
+            'ui': ['View', 'inflate', 'measure', 'draw', 'layout'],
+            'lock': ['synchronized', 'lock', 'wait', 'monitor'],
+            'webview': ['WebView', 'chromium', 'webkit']
+        }
+        
+        for pattern_name, keywords in patterns.items():
+            if any(keyword in stack for keyword in keywords):
+                return pattern_name
+        
+        return 'unknown'
 
     def _extract_stack_elements(self, stack: str) -> Dict[str, str]:
         """從堆疊字符串中提取關鍵元素"""
