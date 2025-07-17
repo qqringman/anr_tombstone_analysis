@@ -5583,16 +5583,38 @@ class LogAnalyzerSystem:
             }}
             
             .control-btn {{
-                background: transparent;
-                border: none;
-                color: #cccccc;
-                cursor: pointer;
-                padding: 5px 10px;
-                border-radius: 3px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 20px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                color: var(--text-primary);
                 font-size: 14px;
-                transition: all 0.2s;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
             }}
             
+            # 新增複製摘要按鈕的特殊樣式（紫色系）
+            #copySummaryBtn {{
+                display: none;  /* 初始隱藏 */
+                background: rgba(147, 51, 234, 0.1);  /* 紫色背景 */
+                border-color: rgba(147, 51, 234, 0.3);
+                color: #9333ea;
+            }}
+
+            #copySummaryBtn:hover {{
+                background: rgba(147, 51, 234, 0.2);
+                border-color: #9333ea;
+                color: #a855f7;
+            }}
+
+            #copySummaryBtn.visible {{
+                display: flex;  /* 顯示時使用 flex */
+            }}
+
             .control-btn:hover {{
                 background: #3e3e42;
                 color: #ffffff;
@@ -8563,18 +8585,27 @@ class LogAnalyzerSystem:
 
             /* 複製摘要按鈕 */
             .copy-summary-btn {{
-                background: #059669;
+                background: #9333ea;  /* 紫色 */
+                display: none;  /* 初始隱藏 */
+                opacity: 0;
+                transform: scale(0.8);
                 transition: all 0.3s ease;
             }}
 
+            .copy-summary-btn.visible {{
+                display: flex;
+                opacity: 1;
+                transform: scale(1);
+            }}
+
             .copy-summary-btn:hover {{
-                background: #047857;
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(5, 150, 105, 0.3);
+                background: #a855f7;  /* 較亮的紫色 */
+                transform: translateY(-2px) scale(1.05);
+                box-shadow: 0 6px 20px rgba(147, 51, 234, 0.3);
             }}
 
             .copy-summary-btn.copied {{
-                background: #10b981;
+                background: #7c3aed;  /* 深紫色 */
             }}
 
             /* 控制按鈕的複製狀態 */
@@ -8877,8 +8908,14 @@ class LogAnalyzerSystem:
                         currentView = 'file';
                         
                         // 隱藏複製摘要按鈕
-                        if (copySummaryBtn) copySummaryBtn.classList.remove('visible');
-                        if (floatingCopyBtn) floatingCopyBtn.classList.remove('visible');
+                        if (copySummaryBtn) {{
+                            copySummaryBtn.classList.remove('visible');
+                            copySummaryBtn.style.display = 'none';
+                        }}
+                        if (floatingCopyBtn) {{
+                            floatingCopyBtn.classList.remove('visible');
+                            floatingCopyBtn.style.display = 'none';
+                        }}
                     }} else {{
                         // 切換到相似問題視圖
                         fileView.classList.remove('active');
@@ -8887,8 +8924,18 @@ class LogAnalyzerSystem:
                         currentView = 'similarity';
                         
                         // 顯示複製摘要按鈕
-                        if (copySummaryBtn) copySummaryBtn.classList.add('visible');
-                        if (floatingCopyBtn) floatingCopyBtn.classList.add('visible');
+                        if (copySummaryBtn) {{
+                            copySummaryBtn.style.display = 'flex';
+                            setTimeout(() => {{
+                                copySummaryBtn.classList.add('visible');
+                            }}, 10);
+                        }}
+                        if (floatingCopyBtn) {{
+                            floatingCopyBtn.style.display = 'flex';
+                            setTimeout(() => {{
+                                floatingCopyBtn.classList.add('visible');
+                            }}, 10);
+                        }}
                     }}
                 }}
             }}
@@ -9085,6 +9132,16 @@ class LogAnalyzerSystem:
                 const copySummaryBtn = document.getElementById('copySummaryBtn');
                 const floatingCopyBtn = document.querySelector('.copy-summary-btn');
 
+                // 確保初始狀態是隱藏的
+                if (copySummaryBtn) {{
+                    copySummaryBtn.classList.remove('visible');
+                    copySummaryBtn.style.display = 'none';
+                }}
+                if (floatingCopyBtn) {{
+                    floatingCopyBtn.classList.remove('visible');
+                    floatingCopyBtn.style.display = 'none';
+                }}
+
                 // 根據初始視圖設置按鈕狀態
                 if (currentView === 'similarity') {{
                     if (copySummaryBtn) copySummaryBtn.classList.add('visible');
@@ -9270,8 +9327,18 @@ class LogAnalyzerSystem:
                     currentView = 'similarity';
                     
                     // 顯示複製摘要按鈕
-                    if (copySummaryBtn) copySummaryBtn.classList.add('visible');
-                    if (floatingCopyBtn) floatingCopyBtn.classList.add('visible');
+                    if (copySummaryBtn) {{
+                        copySummaryBtn.style.display = 'flex';
+                        setTimeout(() => {{
+                            copySummaryBtn.classList.add('visible');
+                        }}, 10);
+                    }}
+                    if (floatingCopyBtn) {{
+                        floatingCopyBtn.style.display = 'flex';
+                        setTimeout(() => {{
+                            floatingCopyBtn.classList.add('visible');
+                        }}, 10);
+                    }}
                     
                     // 更新按鈕圖標
                     viewSwitcher.innerHTML = `
@@ -9287,8 +9354,14 @@ class LogAnalyzerSystem:
                     currentView = 'file';
                     
                     // 隱藏複製摘要按鈕
-                    if (copySummaryBtn) copySummaryBtn.classList.remove('visible');
-                    if (floatingCopyBtn) floatingCopyBtn.classList.remove('visible');
+                    if (copySummaryBtn) {{
+                        copySummaryBtn.classList.remove('visible');
+                        copySummaryBtn.style.display = 'none';
+                    }}
+                    if (floatingCopyBtn) {{
+                        floatingCopyBtn.classList.remove('visible');
+                        floatingCopyBtn.style.display = 'none';
+                    }}
                     
                     // 更新按鈕圖標
                     viewSwitcher.innerHTML = `
