@@ -752,7 +752,36 @@ class ANRReportGenerator:
         # 如果是 HTML 格式，創建 HTML 生成器
         if output_format == 'html' and source_linker:
             self.html_generator = HTMLReportGenerator(source_linker)
-    
+
+    def _get_key_stack_frames(self, backtrace: List[str], frame_importances: List[Dict]) -> List[Tuple[int, str, Dict]]:
+        """獲取真正的關鍵堆疊幀"""
+        key_frames = []
+        
+        # 優先找紅色標記（critical）的幀
+        for i, (frame, importance) in enumerate(zip(backtrace, frame_importances)):
+            if importance['level'] == 'critical':
+                key_frames.append((i, frame, importance))
+                # 只要找到一個 critical 就返回
+                return key_frames[:1]
+        
+        # 如果沒有 critical，找黃色標記（important）的幀
+        for i, (frame, importance) in enumerate(zip(backtrace, frame_importances)):
+            if importance['level'] == 'important':
+                key_frames.append((i, frame, importance))
+                # 只要找到一個 important 就返回
+                return key_frames[:1]
+        
+        # 如果都沒有，只取第一幀
+        if backtrace:
+            importance = frame_importances[0] if frame_importances else {
+                'level': 'normal', 
+                'marker': '⚪', 
+                'explanation': None
+            }
+            key_frames.append((0, backtrace[0], importance))
+        
+        return key_frames[:1]  # 確保只返回一個
+            
     def generate(self) -> str:
         """生成報告"""
         try:
@@ -2081,29 +2110,25 @@ class ANRReportGenerator:
                 for finding in stack_analysis['key_findings']:
                     self.report_lines.append(f"  • {finding}")
             
-            # 顯示帶優先級標記的堆疊
-            self.report_lines.append("\n🔍 關鍵堆疊 (標記重要幀):")
-            
+            # 關鍵堆疊部分 - 簡化版本
+            self.report_lines.append("\n🔍 關鍵堆疊:")
+
             # 分析每一幀的重要性
             frame_importances = self._analyze_frame_importance(main.backtrace)
-            
-            for i, (frame, importance) in enumerate(zip(main.backtrace[:20], frame_importances[:20])):
-                priority_marker = importance['marker']
-                explanation = importance['explanation']
-                
-                # 根據重要性顯示不同顏色的標記
-                if importance['level'] == 'critical':
-                    self.report_lines.append(f"  {priority_marker} #{i:02d} {frame}")
-                    if explanation:
-                        self.report_lines.append(f"        └─ {explanation}")
-                elif importance['level'] == 'important':
-                    self.report_lines.append(f"  {priority_marker} #{i:02d} {frame}")
-                    if explanation:
-                        self.report_lines.append(f"        └─ {explanation}")
-                elif importance['level'] == 'normal' and i < 10:  # 只顯示前10個普通幀
-                    self.report_lines.append(f"  {priority_marker} #{i:02d} {frame}")
+
+            # 使用新方法獲取關鍵堆疊
+            key_frames = self._get_key_stack_frames(main.backtrace, frame_importances)
+
+            if key_frames:
+                # 只顯示最關鍵的那一幀
+                frame_num, frame, importance = key_frames[0]
+                self.report_lines.append(f"  {importance['marker']} #{frame_num:02d} {frame}")
+                if importance['explanation']:
+                    self.report_lines.append(f"  └─ {importance['explanation']}")
+            else:
+                self.report_lines.append("  ℹ️ 無關鍵堆疊資訊")
         
-        # 顯示鎖資訊
+        # 顯示鎖資訊（保持原有邏輯）
         if main.held_locks:
             self.report_lines.append(f"\n🔒 持有的鎖: {', '.join(main.held_locks)}")
         
@@ -2313,8 +2338,9 @@ class ANRReportGenerator:
                     importance['level'] = 'important'
                     importance['marker'] = '🟡'
                     importance['explanation'] = 'Native 方法'
-                else:
-                    importance['marker'] = '⚪'
+            
+            # 對於普通的 Java 基礎類操作，保持 normal
+            # 不需要特別說明
             
             importances.append(importance)
         
@@ -4859,42 +4885,49 @@ class LogAnalyzerSystem:
             'marker_class': 'normal',
             'reason': ''
         }
-        
-        # 從第一個報告中提取關鍵堆疊
-        if reports and reports[0].get('content'):
-            content = reports[0]['content']
-            
-            # 尋找紅色標記的堆疊
-            red_match = re.search(r'🔴[^#]*#(\d+)\s+([^\n]+)', content)
-            if red_match:
-                key_stack['frame'] = red_match.group(2).strip()
-                key_stack['marker'] = '🔴'
-                key_stack['marker_class'] = 'critical'
-                
-                # 提取原因
-                reason_match = re.search(r'└─\s*([^\n]+)', content[red_match.end():])
+
+        if not reports or not reports[0].get('content'):
+            return key_stack
+
+        content = reports[0]['content']
+
+        # Step 1: 提取「🔍 關鍵堆疊」段落（預設最多抓 5 行）
+        section_match = re.search(r'🔍 關鍵堆疊\s*:?\s*\n((?:.*\n?){1,5})', content)
+        section = section_match.group(1) if section_match else ""
+
+        # Step 2: 搜尋堆疊（優先順序：紅 > 黃 > 白）
+        for marker, cls in [('🔴', 'critical'), ('🟡', 'important'), ('⚪', 'normal')]:
+            stack_match = re.search(rf'{marker}\s*#(\d+)\s+([^\n]+)', section)
+            if stack_match:
+                key_stack['frame'] = f"#{stack_match.group(1)} {stack_match.group(2).strip()}"
+                key_stack['marker'] = marker
+                key_stack['marker_class'] = cls
+
+                # 嘗試從堆疊下方提取 └─ 原因行
+                reason_match = re.search(r'└─\s*([^\n]+)', section[stack_match.end():])
                 if reason_match:
                     key_stack['reason'] = reason_match.group(1).strip()
-            else:
-                # 尋找黃色標記的堆疊
-                yellow_match = re.search(r'🟡[^#]*#(\d+)\s+([^\n]+)', content)
-                if yellow_match:
-                    key_stack['frame'] = yellow_match.group(2).strip()
-                    key_stack['marker'] = '🟡'
-                    key_stack['marker_class'] = 'important'
-                    
-                    # 提取原因
-                    reason_match = re.search(r'└─\s*([^\n]+)', content[yellow_match.end():])
+                break
+
+        # Step 3: fallback，如果 🔍 關鍵堆疊段落沒有任何標記，就掃整篇 content
+        if key_stack['frame'] == '無堆疊資訊':
+            for marker, cls in [('🔴', 'critical'), ('🟡', 'important')]:
+                match = re.search(rf'{marker}[^#]*#(\d+)\s+([^\n]+)', content)
+                if match:
+                    key_stack['frame'] = f"#{match.group(1)} {match.group(2).strip()}"
+                    key_stack['marker'] = marker
+                    key_stack['marker_class'] = cls
+
+                    reason_match = re.search(r'└─\s*([^\n]+)', content[match.end():])
                     if reason_match:
                         key_stack['reason'] = reason_match.group(1).strip()
-                else:
-                    # 如果都沒有，找第一個堆疊
-                    stack_match = re.search(r'#00\s+([^\n]+)', content)
-                    if stack_match:
-                        key_stack['frame'] = stack_match.group(1).strip()
-                        key_stack['marker'] = '⚪'
-                        key_stack['marker_class'] = 'normal'
-        
+                    break
+            else:
+                # 最後 fallback: 任意堆疊
+                match = re.search(r'#(\d+)\s+([^\n]+)', content)
+                if match:
+                    key_stack['frame'] = f"#{match.group(1)} {match.group(2).strip()}"
+
         return key_stack
         
     def _extract_report_info(self, html_content: str, file_path: str) -> Optional[Dict]:
@@ -6327,7 +6360,7 @@ class LogAnalyzerSystem:
                     if report.get('process_name'):
                         unique_processes.add(report['process_name'])
 
-                processes_html = '<br>'.join([f'• {html.escape(p)}' for p in sorted(unique_processes)])
+                processes_html = '<br>'.join([f'{html.escape(p)}' for p in sorted(unique_processes)])
                 if not processes_html:
                     processes_html = '無進程資訊'
 
@@ -6357,7 +6390,7 @@ class LogAnalyzerSystem:
                                     <path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="1.5" fill="none"/>
                                 </svg>
                             </button>
-                            <button class="action-btn copy-btn" onclick="copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
+                            <button class="action-btn copy-btn" onclick="event.stopPropagation(); copyGroupInfo('{group['group_id']}')" title="複製群組資訊">
                                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                                     <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor"/>
                                     <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor"/>
@@ -9203,6 +9236,9 @@ class LogAnalyzerSystem:
 
             // 複製相似問題群組資訊
             function copyGroupInfo(groupId) {{
+
+                const NEWLINE = String.fromCharCode(10);  
+
                 try {{
                     const group = document.getElementById(groupId);
                     if (!group) {{
@@ -9262,38 +9298,58 @@ class LogAnalyzerSystem:
                         const titleText = cardTitle.textContent.trim();
                         const cardContent = [];
                         
-                        // 處理不同類型的卡片內容
-                        const cardP = card.querySelector('p');
-                        const cardList = card.querySelector('.process-list');
-                        const cardStack = card.querySelector('.key-stack');
-                        const cardDiv = card.querySelector('div:not(.key-stack):not(.process-list)');
-                        
-                        if (cardP) {{
-                            cardContent.push(titleText + ' ' + cardP.textContent.trim());
-                        }} else if (cardList) {{
+                        // 特別處理關鍵堆疊卡片
+                        if (titleText.includes('關鍵堆疊')) {{
                             cardContent.push(titleText);
-                            // 使用 textContent 取得純文字，然後分割
-                            const listText = cardList.textContent.trim();
-                            if (listText) {{
-                                // 按照 • 符號分割
-                                const items = listText.split('•').filter(item => item.trim());
-                                items.forEach(function(item) {{
-                                    cardContent.push('  • ' + item.trim());
-                                }});
+                            
+                            const keyStack = card.querySelector('.key-stack');
+                            if (keyStack) {{
+                                const stackMarker = keyStack.querySelector('.stack-marker');
+                                const stackFrame = keyStack.querySelector('.stack-frame');
+                                const stackReason = keyStack.querySelector('.stack-reason');
+                                
+                                if (stackMarker && stackFrame) {{
+                                    // 將標記和堆疊放在同一行
+                                    const markerText = stackMarker.textContent.trim();
+                                    const frameText = stackFrame.textContent.trim();
+                                    cardContent.push('  ' + markerText + ' ' + frameText);
+                                }}
+                                
+                                if (stackReason && stackReason.textContent.trim()) {{
+                                    // 原因單獨一行
+                                    cardContent.push('  └─ ' + stackReason.textContent.trim());
+                                }}
                             }}
-                        }} else if (cardStack) {{
-                            cardContent.push(titleText);
-                            const stackFrame = cardStack.querySelector('.stack-frame');
-                            const stackReason = cardStack.querySelector('.stack-reason');
-                            if (stackFrame) {{
-                                cardContent.push('  ' + stackFrame.textContent.trim());
+                        }} else {{
+                            // 處理其他類型的卡片內容
+                            const cardP = card.querySelector('p');
+                            const cardList = card.querySelector('.process-list');
+                            const cardDiv = card.querySelector('div:not(.key-stack):not(.process-list)');
+                            
+                            if (cardP) {{
+                                // 一般段落內容
+                                cardContent.push(titleText + ' ' + cardP.textContent.trim());
+                            }} else if (cardList) {{
+                                // 處理進程列表
+                                cardContent.push(titleText);
+                                // 使用 textContent 取得純文字，然後分割
+                                const listText = cardList.textContent.trim();
+                                if (listText) {{
+                                    // 按照換行符號分割（innerHTML 中的 <br> 在 textContent 中會變成換行）
+                                    const lines = listText.split(NEWLINE).filter(line => line.trim());
+                                    lines.forEach(function(line) {{
+                                        const trimmedLine = line.trim();
+                                        if (trimmedLine && !trimmedLine.startsWith('•')) {{
+                                            cardContent.push('  • ' + trimmedLine);
+                                        }} else if (trimmedLine) {{
+                                            cardContent.push('  ' + trimmedLine);
+                                        }}
+                                    }});
+                                }}
+                            }} else if (cardDiv && titleText.includes('優先級')) {{
+                                // 特殊處理優先級
+                                cardContent.push(titleText + ' ' + cardDiv.textContent.trim());
                             }}
-                            if (stackReason && stackReason.textContent.trim()) {{
-                                cardContent.push('  └─ ' + stackReason.textContent.trim());
-                            }}
-                        }} else if (cardDiv && titleText.includes('優先級')) {{
-                            // 特殊處理優先級
-                            cardContent.push(titleText + ' ' + cardDiv.textContent.trim());
                         }}
                         
                         if (cardContent.length > 0) {{
@@ -9314,8 +9370,7 @@ class LogAnalyzerSystem:
                         copyTextParts.push((index + 1) + '. ' + cleanFileName);
                     }});
                     
-                    // 使用換行符號結合所有部分
-                    const NEWLINE = String.fromCharCode(10);                    
+                    // 使用換行符號結合所有部分                  
                     const copyText = copyTextParts.join(NEWLINE);
                     
                     // 複製到剪貼板
@@ -9334,7 +9389,7 @@ class LogAnalyzerSystem:
                     console.error('copyGroupInfo 錯誤:', error);
                     alert('複製時發生錯誤：' + error.message);
                 }}
-            }}
+            }}            
 
             function showCopySuccess(groupId) {{
                 // 找到該群組的複製按鈕
@@ -9343,7 +9398,7 @@ class LogAnalyzerSystem:
 
                 const copyBtn = group.querySelector('.copy-btn');
                 if (!copyBtn) return;
-                                
+
                 const originalHTML = copyBtn.innerHTML;
                 copyBtn.classList.add('copied');
                 copyBtn.innerHTML = `
