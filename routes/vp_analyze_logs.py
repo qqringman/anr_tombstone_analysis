@@ -4891,42 +4891,51 @@ class LogAnalyzerSystem:
 
         content = reports[0]['content']
 
-        # Step 1: 提取「🔍 關鍵堆疊」段落（預設最多抓 5 行）
+        # Step 1: 提取「🔍 關鍵堆疊」段落
         section_match = re.search(r'🔍 關鍵堆疊\s*:?\s*\n((?:.*\n?){1,5})', content)
         section = section_match.group(1) if section_match else ""
 
         # Step 2: 搜尋堆疊（優先順序：紅 > 黃 > 白）
         for marker, cls in [('🔴', 'critical'), ('🟡', 'important'), ('⚪', 'normal')]:
-            stack_match = re.search(rf'{marker}\s*#(\d+)\s+([^\n]+)', section)
+            # 修改這裡：更精確的正則表達式，排除引號和逗號
+            stack_match = re.search(rf'{marker}\s*#(\d+)\s+([^"\n,]+?)(?:["\n,]|$)', section)
             if stack_match:
-                key_stack['frame'] = f"#{stack_match.group(1)} {stack_match.group(2).strip()}"
+                # 清理提取的內容
+                frame_text = stack_match.group(2).strip()
+                key_stack['frame'] = f"#{stack_match.group(1)} {frame_text}"
                 key_stack['marker'] = marker
                 key_stack['marker_class'] = cls
 
                 # 嘗試從堆疊下方提取 └─ 原因行
-                reason_match = re.search(r'└─\s*([^\n]+)', section[stack_match.end():])
+                # 同樣需要更精確的匹配
+                reason_match = re.search(r'└─\s*([^"\n,]+?)(?:["\n,]|$)', section[stack_match.end():])
                 if reason_match:
-                    key_stack['reason'] = reason_match.group(1).strip()
+                    reason_text = reason_match.group(1).strip()
+                    key_stack['reason'] = reason_text
                 break
 
-        # Step 3: fallback，如果 🔍 關鍵堆疊段落沒有任何標記，就掃整篇 content
+        # Step 3: fallback
         if key_stack['frame'] == '無堆疊資訊':
             for marker, cls in [('🔴', 'critical'), ('🟡', 'important')]:
-                match = re.search(rf'{marker}[^#]*#(\d+)\s+([^\n]+)', content)
+                # 同樣修改 fallback 的正則表達式
+                match = re.search(rf'{marker}[^#]*#(\d+)\s+([^"\n,]+?)(?:["\n,]|$)', content)
                 if match:
-                    key_stack['frame'] = f"#{match.group(1)} {match.group(2).strip()}"
+                    frame_text = match.group(2).strip()
+                    key_stack['frame'] = f"#{match.group(1)} {frame_text}"
                     key_stack['marker'] = marker
                     key_stack['marker_class'] = cls
 
-                    reason_match = re.search(r'└─\s*([^\n]+)', content[match.end():])
+                    reason_match = re.search(r'└─\s*([^"\n,]+?)(?:["\n,]|$)', content[match.end():])
                     if reason_match:
-                        key_stack['reason'] = reason_match.group(1).strip()
+                        reason_text = reason_match.group(1).strip()
+                        key_stack['reason'] = reason_text
                     break
             else:
-                # 最後 fallback: 任意堆疊
-                match = re.search(r'#(\d+)\s+([^\n]+)', content)
+                # 最後 fallback
+                match = re.search(r'#(\d+)\s+([^"\n,]+?)(?:["\n,]|$)', content)
                 if match:
-                    key_stack['frame'] = f"#{match.group(1)} {match.group(2).strip()}"
+                    frame_text = match.group(2).strip().rstrip(')",\'')
+                    key_stack['frame'] = f"#{match.group(1)} {frame_text}"
 
         return key_stack
         
@@ -6427,7 +6436,7 @@ class LogAnalyzerSystem:
                                 <div class="key-stack">
                                     <div class="stack-marker {key_stack_info['marker_class']}">{key_stack_info['marker']}</div>
                                     <div class="stack-frame">{html.escape(key_stack_info['frame'])}</div>
-                                    <div class="stack-reason">{html.escape(key_stack_info['reason'])}</div>
+                                    <div class="stack-reason">  └─ {html.escape(key_stack_info['reason'])}</div>
                                 </div>
                             </div>
                         </div>
@@ -9296,11 +9305,11 @@ class LogAnalyzerSystem:
                         if (!cardTitle) return;
                         
                         const titleText = cardTitle.textContent.trim();
-                        const cardContent = [];
                         
                         // 特別處理關鍵堆疊卡片
                         if (titleText.includes('關鍵堆疊')) {{
-                            cardContent.push(titleText);
+                            copyTextParts.push(''); // 空行
+                            copyTextParts.push(titleText + ': ');  // 標題
                             
                             const keyStack = card.querySelector('.key-stack');
                             if (keyStack) {{
@@ -9312,12 +9321,12 @@ class LogAnalyzerSystem:
                                     // 將標記和堆疊放在同一行
                                     const markerText = stackMarker.textContent.trim();
                                     const frameText = stackFrame.textContent.trim();
-                                    cardContent.push('  ' + markerText + ' ' + frameText);
+                                    copyTextParts.push(markerText + ' ' + frameText);
                                 }}
                                 
                                 if (stackReason && stackReason.textContent.trim()) {{
                                     // 原因單獨一行
-                                    cardContent.push('  └─ ' + stackReason.textContent.trim());
+                                    copyTextParts.push(stackReason.textContent);
                                 }}
                             }}
                         }} else {{
@@ -9326,35 +9335,37 @@ class LogAnalyzerSystem:
                             const cardList = card.querySelector('.process-list');
                             const cardDiv = card.querySelector('div:not(.key-stack):not(.process-list)');
                             
+                            copyTextParts.push(''); // 空行
+                            
                             if (cardP) {{
                                 // 一般段落內容
-                                cardContent.push(titleText + ' ' + cardP.textContent.trim());
+                                copyTextParts.push(titleText + ': ' + cardP.textContent.trim());
                             }} else if (cardList) {{
                                 // 處理進程列表
-                                cardContent.push(titleText);
-                                // 使用 textContent 取得純文字，然後分割
+                                copyTextParts.push(titleText);
                                 const listText = cardList.textContent.trim();
                                 if (listText) {{
-                                    // 按照換行符號分割（innerHTML 中的 <br> 在 textContent 中會變成換行）
                                     const lines = listText.split(NEWLINE).filter(line => line.trim());
                                     lines.forEach(function(line) {{
                                         const trimmedLine = line.trim();
                                         if (trimmedLine && !trimmedLine.startsWith('•')) {{
-                                            cardContent.push('  • ' + trimmedLine);
+                                            copyTextParts.push('  • ' + trimmedLine);
                                         }} else if (trimmedLine) {{
-                                            cardContent.push('  ' + trimmedLine);
+                                            copyTextParts.push('  ' + trimmedLine);
                                         }}
                                     }});
                                 }}
                             }} else if (cardDiv && titleText.includes('優先級')) {{
                                 // 特殊處理優先級
-                                cardContent.push(titleText + ' ' + cardDiv.textContent.trim());
+                                copyTextParts.push(titleText + ': ' + cardDiv.textContent.trim());
+                            }} else {{
+                                // 處理直接文字內容的卡片（如描述、影響範圍、建議）
+                                const cardContent = card.textContent.trim();
+                                const contentWithoutTitle = cardContent.replace(titleText, '').trim();
+                                if (contentWithoutTitle) {{
+                                    copyTextParts.push(titleText + ': ' + contentWithoutTitle);
+                                }}
                             }}
-                        }}
-                        
-                        if (cardContent.length > 0) {{
-                            copyTextParts.push(''); // 空行
-                            copyTextParts.push(...cardContent);
                         }}
                     }});
                     
