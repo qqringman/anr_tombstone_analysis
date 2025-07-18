@@ -1508,7 +1508,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 導出全域函數供 HTML 使用
-window.aiAnalyzer = aiAnalyzer;
+//window.aiAnalyzer = aiAnalyzer;
 
 // 創建全局實例並掛載到 window
 window.aiRequestManager = new AIRequestManager();

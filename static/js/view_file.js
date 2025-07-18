@@ -20,7 +20,7 @@ let searchDebounceTimer = null;
 let isSearching = false;
 let visibleRange = { start: 0, end: 100 }; // 追蹤可見範圍
 let hoveredLine = null; // 追蹤滑鼠懸停的行號
-let aiAnalyzer = null;
+//let aiAnalyzer = null;
 
 // Search optimization variables
 const SEARCH_DELAY = 500; // 500ms 延遲
@@ -220,8 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 初始化 AI 分析器
     if (typeof AIAnalyzer !== 'undefined' && document.getElementById('analyzeBtn')) {
-        aiAnalyzer = new AIAnalyzer();
-        window.aiAnalyzer = aiAnalyzer;  // 確保全局可訪問
+        window.aiAnalyzer = new AIAnalyzer();
     }
 
     // 綁定模式按鈕事件
@@ -620,6 +619,32 @@ function highlightCode(code, language) {
     }
 }
 
+// JSON 高亮
+function highlightJSON(code) {
+    try {
+        // 嘗試解析 JSON 以確保格式正確
+        JSON.parse(code);
+        
+        // 高亮字符串
+        code = code.replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>');
+        
+        // 高亮數字
+        code = code.replace(/\b-?\d+\.?\d*([eE][+-]?\d+)?\b/g, '<span class="number">$&</span>');
+        
+        // 高亮布爾值和 null
+        code = code.replace(/\b(true|false|null)\b/g, '<span class="boolean">$&</span>');
+        
+        // 高亮屬性名（在冒號前的字符串）
+        code = code.replace(/"([^"]+)"\s*:/g, '<span class="json-key">"$1"</span>:');
+        
+    } catch (e) {
+        // 如果不是有效的 JSON，至少高亮字符串
+        code = code.replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>');
+    }
+    
+    return code;
+}
+
 // YAML 高亮
 function highlightYAML(code) {
     // 高亮分隔符 ---
@@ -682,6 +707,34 @@ function highlightBash(code) {
     
     // 註釋
     code = code.replace(/#.*$/gm, '<span class="comment">$&</span>');
+    
+    return code;
+}
+
+// XML/HTML 高亮
+function highlightXML(code) {
+    // 高亮標籤
+    code = code.replace(/<(\/?[a-zA-Z][a-zA-Z0-9\-]*)((?:\s+[a-zA-Z\-:]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^>\s]+))?)*)\s*(\/?)?>/g, 
+        function(match, tagName, attributes, selfClosing) {
+            // 處理屬性
+            const highlightedAttrs = attributes.replace(/([a-zA-Z\-:]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^>\s]+)))?/g,
+                function(attrMatch, attrName, doubleQuoted, singleQuoted, unquoted) {
+                    const value = doubleQuoted || singleQuoted || unquoted || '';
+                    if (value) {
+                        return `<span class="xml-attr-name">${attrName}</span>=<span class="string">"${value}"</span>`;
+                    }
+                    return `<span class="xml-attr-name">${attrName}</span>`;
+                }
+            );
+            return `<span class="xml-tag">&lt;${tagName}${highlightedAttrs}${selfClosing || ''}&gt;</span>`;
+        }
+    );
+    
+    // 高亮註釋
+    code = code.replace(/&lt;!--[\s\S]*?--&gt;/g, '<span class="comment">$&</span>');
+    
+    // 高亮 CDATA
+    code = code.replace(/&lt;!\[CDATA\[[\s\S]*?\]\]&gt;/g, '<span class="xml-cdata">$&</span>');
     
     return code;
 }
@@ -1063,7 +1116,8 @@ async function handleStreamResponse(response, conversationItem) {
 function createQuestionConversationItem(question) {
     const conversationItem = document.createElement('div');
     conversationItem.className = 'ai-conversation-item';
-    conversationItem.id = `conversation-${Date.now()}`;
+    const conversationId = `conversation-${Date.now()}`;  // 定義變數
+    conversationItem.id = conversationId;  // 使用變數
     
     const shortQuestion = question.length > 50 ? question.substring(0, 50) + '...' : question;
     
@@ -1081,10 +1135,10 @@ function createQuestionConversationItem(question) {
                 <button class="copy-btn" onclick="copyAIResponse('${conversationId}')">
                     📋 複製
                 </button>
-                <button class="export-html-btn" onclick="exportSingleResponse('${conversationItem.id}', 'html')">
+                <button class="export-html-btn" onclick="exportSingleResponse('${conversationId}', 'html')">
                     🌐 HTML
                 </button>
-                <button class="export-md-btn" onclick="exportSingleResponse('${conversationItem.id}', 'markdown')">
+                <button class="export-md-btn" onclick="exportSingleResponse('${conversationId}', 'markdown')">
                     📝 MD
                 </button>
             </div>
@@ -2226,7 +2280,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	const requiredElements = [
 		'aiResponse',
 		'aiResponseContent',
-		'analyzeBtn',
 		'askBtnInline',
 		'customQuestion'
 	];
