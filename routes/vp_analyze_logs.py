@@ -740,7 +740,7 @@ class ANRAnalyzer(BaseAnalyzer):
 class SimilarityConfig:
     """相似度配置"""
     # 基礎閾值
-    SIMILARITY_THRESHOLD = 60  # 基本相似度閾值
+    SIMILARITY_THRESHOLD = 10  # 基本相似度閾值
     
     # ANR 特定閾值
     ANR_STACK_WEIGHT = 0.35    # 堆疊權重
@@ -5092,7 +5092,7 @@ class LogAnalyzerSystem:
         info = {
             'path': file_path,
             'filename': os.path.basename(file_path),
-            'type': 'anr' if 'anr' in file_path.lower() else 'tombstone',
+            'type': 'anr' if 'anr' in os.path.basename(file_path) else 'tombstone',
             'root_cause': '',
             'severity': '',
             'process_name': '',
@@ -5298,13 +5298,31 @@ class LogAnalyzerSystem:
             crash_func_patterns = [
                 r'崩潰點[：:]\s*#\d+\s+([^@\n]+)',
                 r'#00\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(([^)]+)\)',
-                r'💥\s*崩潰點[：:]\s*([^<\n]+)'
+                r'💥\s*崩潰點[：:]\s*([^<\n]+)',
+                # 新增：更精確的模式
+                r'#00\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^+]+)',  # 捕獲函數名（不含偏移）
+                r'#0+\s+pc\s+[0-9a-fA-F]+\s+[^\(]+\(([^\+\)]+)',    # 另一種格式
+                r'關鍵堆疊[：:]\s*\n\s*[^\n]*#0+\s+([^\n]+)',        # 從關鍵堆疊區段提取
             ]
             
             for pattern in crash_func_patterns:
                 match = re.search(pattern, html_content)
                 if match:
-                    info['crash_function'] = match.group(1).strip()
+                    # 處理多個捕獲組的情況
+                    if len(match.groups()) > 1:
+                        # 優先使用第二個捕獲組（通常是函數名）
+                        func_name = match.group(2) if match.group(2) else match.group(1)
+                    else:
+                        func_name = match.group(1)
+                    
+                    # 清理函數名
+                    func_name = func_name.strip()
+                    # 移除偏移量（如 +12）
+                    func_name = re.sub(r'\+\d+\s*$', '', func_name)
+                    # 移除參數列表
+                    func_name = re.sub(r'\([^)]*\)$', '', func_name)
+                    
+                    info['crash_function'] = func_name.strip()
                     break
             
             # 根據崩潰函數添加特徵
@@ -5317,6 +5335,72 @@ class LogAnalyzerSystem:
                 elif 'jni' in func_lower:
                     info['features'].append('jni_crash')
             
+
+            # 嘗試提取完整的崩潰堆疊（前3幀）
+            crash_stack_patterns = [
+                # 匹配完整的堆疊幀，包括 pc、地址、庫和函數
+                r'#00\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)\s+\(([^)]+)\)',
+                r'#0\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)\s+\(([^)]+)\)',
+                r'💥[^#]*#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)',
+            ]
+            
+            for pattern in crash_stack_patterns:
+                match = re.search(pattern, html_content)
+                if match:
+                    # 組合成完整的堆疊信息
+                    if len(match.groups()) >= 3:
+                        pc = match.group(1)
+                        lib = match.group(2)
+                        func = match.group(3) if len(match.groups()) >= 3 else ''
+                        
+                        # 清理庫路徑，只保留文件名
+                        lib_name = lib.split('/')[-1] if '/' in lib else lib
+                        
+                        # 組合關鍵堆疊
+                        info['key_stack'] = f"pc {pc} {lib_name} ({func})"
+                        
+                        # 同時保存分解的信息以便比較
+                        info['crash_pc'] = pc
+                        info['crash_lib'] = lib_name
+                        info['crash_func_detail'] = func
+                    break
+
+            # 提取關鍵堆疊 - 更精確的模式
+            key_stack_patterns = [
+                # 查找崩潰點標記的堆疊
+                r'💥\s*崩潰點[：:]\s*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
+                r'💥\s*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
+                # 查找第一個堆疊幀
+                r'#00\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
+                r'#0\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
+                # 從關鍵堆疊區段提取
+                r'關鍵堆疊[：:]\s*\n[^\n]*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
+            ]
+            
+            for pattern in key_stack_patterns:
+                match = re.search(pattern, html_content, re.MULTILINE)
+                if match:
+                    lib_path = match.group(1)
+                    func_info = match.group(2)
+                    
+                    # 提取庫名（只保留文件名）
+                    lib_name = lib_path.split('/')[-1]
+                    
+                    # 組合關鍵堆疊信息
+                    info['key_stack'] = f"{lib_name} ({func_info})"
+                    
+                    # 同時保存詳細信息
+                    info['crash_lib'] = lib_name
+                    info['crash_function'] = func_info
+                    
+                    # 如果是 libc.so 的系統調用，特別標記
+                    if 'libc.so' in lib_name:
+                        info['features'].append('libc_crash')
+                        if any(syscall in func_info for syscall in ['__ioctl', '__write', '__read', '__open']):
+                            info['features'].append('system_call_crash')
+                    
+                    break
+                                                    
             # 其他 Tombstone 特徵
             if '雙重釋放' in html_content or 'double free' in html_content.lower():
                 info['features'].append('double_free')
@@ -5339,8 +5423,30 @@ class LogAnalyzerSystem:
         
         return info if (info['root_cause'] or info['key_stack'] or len(info['features']) > 0) else None
 
+    def _extract_tombstone_group_feature(self, reports: List[Dict]) -> str:
+        """提取 tombstone 組的關鍵特徵"""
+        if not reports:
+            return "未知崩潰"
+        
+        # 使用第一個報告的信息
+        first_report = reports[0]
+        
+        # 基於崩潰信息生成標題
+        crash_func = first_report.get('crash_function', '')
+        crash_lib = first_report.get('crash_lib', '')
+        signal_type = first_report.get('signal_type', '')
+        
+        if crash_func and crash_lib:
+            # 清理函數名
+            clean_func = re.sub(r'\+\d+$', '', crash_func)  # 移除偏移量
+            return f"{clean_func} @ {crash_lib} ({signal_type})"
+        elif crash_lib:
+            return f"崩潰於 {crash_lib} ({signal_type})"
+        else:
+            return f"{signal_type} 崩潰"
+            
     def _analyze_similarity(self, reports: List[Dict]) -> List[Dict]:
-        """分析報告的相似度並分組 - 改進版"""
+        """分析報告的相似度並分組 - 改進版（ANR 和 Tombstone 分開處理）"""
         if not reports:
             return []
         
@@ -5348,96 +5454,159 @@ class LogAnalyzerSystem:
         from sklearn.cluster import DBSCAN
         import numpy as np
         
-        # 構建相似度矩陣
-        n = len(reports)
-        similarity_matrix = np.zeros((n, n))
+        # 先將報告按類型分開
+        tombstone_reports = [r for r in reports if r['type'] == 'tombstone']
+        anr_reports = [r for r in reports if r['type'] == 'anr']
         
-        for i in range(n):
-            for j in range(i + 1, n):
-                # 根據類型使用不同的相似度計算
-                if reports[i]['type'] == 'tombstone' and reports[j]['type'] == 'tombstone':
-                    base_similarity = self._calculate_report_similarity(reports[i], reports[j])
-                    tombstone_similarity = self._calculate_tombstone_similarity(reports[i], reports[j])
-                    similarity = base_similarity * 0.7 + tombstone_similarity * 0.3
-                else:
-                    similarity = self._calculate_report_similarity(reports[i], reports[j])
-                
-                similarity_matrix[i, j] = similarity
-                similarity_matrix[j, i] = similarity
+        print(f"\n報告統計: {len(anr_reports)} 個 ANR, {len(tombstone_reports)} 個 Tombstone")
         
-        # 對角線設為 100（自身相似度）
-        np.fill_diagonal(similarity_matrix, 100)
-        
-        # 轉換為距離矩陣（DBSCAN 需要）
-        distance_matrix = 100 - similarity_matrix
-        
-        # 使用 DBSCAN 聚類
-        clustering = DBSCAN(eps=40, min_samples=1, metric='precomputed')
-        cluster_labels = clustering.fit_predict(distance_matrix)
-        
-        # 組織聚類結果
-        clusters = {}
-        for idx, label in enumerate(cluster_labels):
-            if label not in clusters:
-                clusters[label] = []
-            clusters[label].append(reports[idx])
-        
-        # 轉換為標準格式
         similarity_groups = []
-        for label, group_reports in clusters.items():
-            if len(group_reports) >= 1:  # 即使單個報告也創建組
-                # 計算組內平均相似度
-                avg_similarity = self._calculate_group_similarity(group_reports)
-                
-                # 提取組的關鍵特徵
-                key_feature = self._extract_group_key_feature(group_reports)
-            
-            # 收集組的統計信息
-            problem_sets = set()
-            severities = []
-            processes = set()
-            root_causes = set()
-            
-            for report in group_reports:
-                # 收集問題集
-                if 'path' in report:
-                    path_parts = report['path'].split(os.sep)
-                    if self.input_folder:
-                        input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
-                        if len(path_parts) > len(input_parts) + 1:
-                            second_dir = path_parts[len(input_parts) + 1]
-                            if second_dir and second_dir not in ['.', '..', '']:
-                                problem_sets.add(second_dir)
-                
-                # 收集其他信息
-                if report.get('severity'):
-                    severities.append(report['severity'])
-                if report.get('process_name'):
-                    processes.add(report['process_name'])
-                if report.get('root_cause'):
-                    root_causes.add(report['root_cause'])
-            
-            # 生成組標題
-            group_title = self._generate_group_title(group_reports, key_feature)
-            
-            similarity_groups.append({
-                'title': group_title,
-                'full_title': ' / '.join(root_causes) if root_causes else group_title,
-                'reports': group_reports,
-                'count': len(group_reports),
-                'similarity': avg_similarity,
-                'group_id': f"group_{len(similarity_groups)}",
-                'problem_sets': sorted(list(problem_sets)),
-                'severity': self._get_highest_severity(severities),
-                'affected_processes': sorted(list(processes))[:5],  # 最多顯示5個
-                'problem_details': self._analyze_problem_details(group_title, group_reports)
-            })
         
-        # 按數量和相似度排序
-        similarity_groups.sort(key=lambda x: (x['count'], x['similarity']), reverse=True)
+        # 1. 處理 Tombstone 分群
+        if tombstone_reports:
+            print("\n處理 Tombstone 分群...")
+            n_tombstone = len(tombstone_reports)
+            tombstone_similarity_matrix = np.zeros((n_tombstone, n_tombstone))
+            
+            # 構建 tombstone 相似度矩陣
+            for i in range(n_tombstone):
+                for j in range(i + 1, n_tombstone):
+                    base_similarity = self._calculate_report_similarity(tombstone_reports[i], tombstone_reports[j])
+                    tombstone_similarity = self._calculate_tombstone_similarity(tombstone_reports[i], tombstone_reports[j])
+                    # Tombstone 更重視專門的相似度計算
+                    similarity = base_similarity * 0.3 + tombstone_similarity * 0.7
+                    
+                    tombstone_similarity_matrix[i, j] = similarity
+                    tombstone_similarity_matrix[j, i] = similarity
+            
+            # 對角線設為 100
+            np.fill_diagonal(tombstone_similarity_matrix, 100)
+            
+            # 轉換為距離矩陣
+            tombstone_distance_matrix = 100 - tombstone_similarity_matrix
+            
+            # Tombstone 使用較低的閾值（50分）
+            tombstone_clustering = DBSCAN(eps=50, min_samples=1, metric='precomputed')
+            tombstone_labels = tombstone_clustering.fit_predict(tombstone_distance_matrix)
+            
+            # 組織 tombstone 聚類結果
+            tombstone_clusters = {}
+            for idx, label in enumerate(tombstone_labels):
+                if label not in tombstone_clusters:
+                    tombstone_clusters[label] = []
+                tombstone_clusters[label].append(tombstone_reports[idx])
+            
+            # 轉換 tombstone 組
+            for label, group_reports in tombstone_clusters.items():
+                if len(group_reports) >= 1:
+                    group = self._create_similarity_group(group_reports, f"tombstone_group_{len(similarity_groups)}")
+                    similarity_groups.append(group)
+            
+            print(f"Tombstone 分為 {len(tombstone_clusters)} 組")
+        
+        # 2. 處理 ANR 分群
+        if anr_reports:
+            print("\n處理 ANR 分群...")
+            n_anr = len(anr_reports)
+            anr_similarity_matrix = np.zeros((n_anr, n_anr))
+            
+            # 構建 ANR 相似度矩陣
+            for i in range(n_anr):
+                for j in range(i + 1, n_anr):
+                    similarity = self._calculate_report_similarity(anr_reports[i], anr_reports[j])
+                    anr_similarity_matrix[i, j] = similarity
+                    anr_similarity_matrix[j, i] = similarity
+            
+            # 對角線設為 100
+            np.fill_diagonal(anr_similarity_matrix, 100)
+            
+            # 轉換為距離矩陣
+            anr_distance_matrix = 100 - anr_similarity_matrix
+            
+            # ANR 使用標準閾值（60分）
+            anr_clustering = DBSCAN(eps=40, min_samples=1, metric='precomputed')
+            anr_labels = anr_clustering.fit_predict(anr_distance_matrix)
+            
+            # 組織 ANR 聚類結果
+            anr_clusters = {}
+            for idx, label in enumerate(anr_labels):
+                if label not in anr_clusters:
+                    anr_clusters[label] = []
+                anr_clusters[label].append(anr_reports[idx])
+            
+            # 轉換 ANR 組
+            for label, group_reports in anr_clusters.items():
+                if len(group_reports) >= 1:
+                    group = self._create_similarity_group(group_reports, f"anr_group_{len(similarity_groups)}")
+                    similarity_groups.append(group)
+            
+            print(f"ANR 分為 {len(anr_clusters)} 組")
+        
+        # 按類型和數量排序（tombstone 優先，然後按數量）
+        def sort_key(group):
+            # tombstone 組優先級更高
+            is_tombstone = any(r['type'] == 'tombstone' for r in group['reports'])
+            return (not is_tombstone, -group['count'], -group['similarity'])
+        
+        similarity_groups.sort(key=sort_key)
+        
+        # 打印分組統計
+        print(f"\n最終分組結果: 共 {len(similarity_groups)} 組")
+        for i, group in enumerate(similarity_groups):
+            group_type = "Tombstone" if any(r['type'] == 'tombstone' for r in group['reports']) else "ANR"
+            print(f"  {i+1}. [{group_type}] {group['title']}: {group['count']} 個檔案, 平均相似度 {group['similarity']:.1f}%")
         
         return similarity_groups
 
+    def _create_similarity_group(self, group_reports: List[Dict], group_id: str) -> Dict:
+        """創建相似度組"""
+        # 計算組內平均相似度
+        avg_similarity = self._calculate_group_similarity(group_reports)
+        
+        # 提取組的關鍵特徵
+        key_feature = self._extract_group_key_feature(group_reports)
+        
+        # 收集組的統計信息
+        problem_sets = set()
+        severities = []
+        processes = set()
+        root_causes = set()
+        
+        for report in group_reports:
+            # 收集問題集
+            if 'path' in report:
+                path_parts = report['path'].split(os.sep)
+                if self.input_folder:
+                    input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
+                    if len(path_parts) > len(input_parts) + 1:
+                        second_dir = path_parts[len(input_parts) + 1]
+                        if second_dir and second_dir not in ['.', '..', '']:
+                            problem_sets.add(second_dir)
+            
+            # 收集其他信息
+            if report.get('severity'):
+                severities.append(report['severity'])
+            if report.get('process_name'):
+                processes.add(report['process_name'])
+            if report.get('root_cause'):
+                root_causes.add(report['root_cause'])
+        
+        # 生成組標題
+        group_title = self._generate_group_title(group_reports, key_feature)
+        
+        return {
+            'title': group_title,
+            'full_title': ' / '.join(root_causes) if root_causes else group_title,
+            'reports': group_reports,
+            'count': len(group_reports),
+            'similarity': avg_similarity,
+            'group_id': group_id,
+            'problem_sets': sorted(list(problem_sets)),
+            'severity': self._get_highest_severity(severities),
+            'affected_processes': sorted(list(processes))[:5],  # 最多顯示5個
+            'problem_details': self._analyze_problem_details(group_title, group_reports)
+        }
+        
     def _generate_group_title(self, reports: List[Dict], key_feature: str) -> str:
         """生成更有意義的組標題"""
         # 如果有明確的模式，直接使用
@@ -5805,22 +5974,60 @@ class LogAnalyzerSystem:
         if report1['type'] != report2['type']:
             return 0  # 不同類型直接返回0
         
+        # 對 tombstone 使用特殊的相似度計算
+        if report1['type'] == 'tombstone' and report2['type'] == 'tombstone':
+            # 如果關鍵堆疊和崩潰函數都相同，直接返回高相似度
+            if (report1.get('key_stack') == report2.get('key_stack') and 
+                report1.get('crash_function') == report2.get('crash_function') and
+                report1.get('key_stack')):  # 確保不是空值
+                
+                # 基礎分數 80
+                base_score = 80.0
+                
+                # 如果進程名也相同，加分
+                if report1.get('process_name') == report2.get('process_name'):
+                    base_score += 10.0
+                
+                # 如果信號類型相同，加分
+                if report1.get('signal_type') == report2.get('signal_type'):
+                    base_score += 5.0
+                
+                # 如果故障地址相同，加分
+                if report1.get('fault_addr') == report2.get('fault_addr'):
+                    base_score += 5.0
+                
+                print(f"  >>> 相同崩潰點，返回高相似度: {base_score}")
+                return base_score
+        
+        # 原有的通用計算邏輯
         weights = {
             'process_name': 15,
-            'root_cause': 20,      # 降低一點權重
-            'key_stack': 25,       # 降低一點權重
+            'root_cause': 20,
+            'key_stack': 25,
             'features': 20,
             'severity': 5,
             'anr_type': 5,
-            'time_proximity': 10,  # 新增：時間接近度
+            'time_proximity': 10,
         }
+        
+        # 對 tombstone 調整權重
+        if report1['type'] == 'tombstone':
+            weights = {
+                'process_name': 5,      # 大幅降低
+                'root_cause': 10,       
+                'key_stack': 40,        # 大幅提高
+                'features': 10,
+                'severity': 5,
+                'signal_type': 10,      
+                'crash_function': 20,   # 新增
+            }
         
         score = 0.0
         
-        # 1. 進程名比較
+        # 1. 進程名比較（對 tombstone 降低權重）
         if report1.get('process_name') and report2.get('process_name'):
             if report1['process_name'] == report2['process_name']:
-                score += weights['process_name']
+                score += weights.get('process_name', 0)
         
         # 2. 根本原因比較（使用更智能的比較）
         cause1 = report1.get('root_cause', '')
@@ -5877,47 +6084,76 @@ class LogAnalyzerSystem:
         """計算 Tombstone 特定的相似度"""
         similarity_factors = []
         
-        # 1. 信號類型完全匹配
+        # 1. 信號類型完全匹配（權重降低）
         if report1.get('signal_type') == report2.get('signal_type'):
-            similarity_factors.append(1.0)
+            similarity_factors.append(('signal', 1.0, 0.15))  # 權重 15%
         else:
-            similarity_factors.append(0.0)
+            similarity_factors.append(('signal', 0.0, 0.15))
         
-        # 2. 故障地址相似度
-        addr1 = report1.get('fault_addr', '')
-        addr2 = report2.get('fault_addr', '')
-        
-        if addr1 == addr2:
-            similarity_factors.append(1.0)
-        elif addr1 in ['0x0', '0'] and addr2 in ['0x0', '0']:
-            similarity_factors.append(0.9)  # 都是空指針
-        elif addr1.startswith('0xdead') and addr2.startswith('0xdead'):
-            similarity_factors.append(0.8)  # 都是調試標記
-        else:
-            similarity_factors.append(0.0)
-        
-        # 3. 崩潰函數相似度
+        # 2. 崩潰函數相似度（提高權重）
         func1 = report1.get('crash_function', '')
         func2 = report2.get('crash_function', '')
         
         if func1 and func2:
             if func1 == func2:
-                similarity_factors.append(1.0)
+                similarity_factors.append(('function', 1.0, 0.35))  # 權重 35%
             elif func1.split('::')[-1] == func2.split('::')[-1]:  # 同名函數
-                similarity_factors.append(0.7)
+                similarity_factors.append(('function', 0.7, 0.35))
             else:
-                similarity_factors.append(0.2)
+                # 檢查是否都是系統函數
+                system_funcs = ['__ioctl', '__write', '__read', 'malloc', 'free', 'memcpy']
+                if any(sf in func1 for sf in system_funcs) and any(sf in func2 for sf in system_funcs):
+                    similarity_factors.append(('function', 0.3, 0.35))
+                else:
+                    similarity_factors.append(('function', 0.0, 0.35))
+        else:
+            similarity_factors.append(('function', 0.0, 0.35))
         
-        # 4. Native/Java 層面
+        # 3. 崩潰庫相似度（新增）
+        lib1 = report1.get('crash_lib', '')
+        lib2 = report2.get('crash_lib', '')
+        
+        if lib1 and lib2:
+            if lib1 == lib2:
+                similarity_factors.append(('library', 1.0, 0.25))  # 權重 25%
+            elif 'libc.so' in lib1 and 'libc.so' in lib2:
+                similarity_factors.append(('library', 0.8, 0.25))
+            else:
+                similarity_factors.append(('library', 0.0, 0.25))
+        else:
+            similarity_factors.append(('library', 0.0, 0.25))
+        
+        # 4. 故障地址相似度（降低權重）
+        addr1 = report1.get('fault_addr', '')
+        addr2 = report2.get('fault_addr', '')
+        
+        if addr1 == addr2:
+            similarity_factors.append(('address', 1.0, 0.15))  # 權重 15%
+        elif addr1 in ['0x0', '0'] and addr2 in ['0x0', '0']:
+            similarity_factors.append(('address', 0.9, 0.15))
+        elif addr1.startswith('0xdead') and addr2.startswith('0xdead'):
+            similarity_factors.append(('address', 0.8, 0.15))
+        else:
+            similarity_factors.append(('address', 0.0, 0.15))
+        
+        # 5. Native/Java 層面（降低權重）
         is_native1 = 'native_crash' in report1.get('features', [])
         is_native2 = 'native_crash' in report2.get('features', [])
         
         if is_native1 == is_native2:
-            similarity_factors.append(0.8)
+            similarity_factors.append(('layer', 0.8, 0.10))  # 權重 10%
         else:
-            similarity_factors.append(0.2)
+            similarity_factors.append(('layer', 0.2, 0.10))
         
-        return sum(similarity_factors) / len(similarity_factors) if similarity_factors else 0.0
+        # 計算加權平均
+        total_score = 0.0
+        total_weight = 0.0
+        
+        for name, score, weight in similarity_factors:
+            total_score += score * weight
+            total_weight += weight
+        
+        return total_score / total_weight if total_weight > 0 else 0.0
 
     def _calculate_text_similarity(self, text1: str, text2: str) -> float:
         """計算文本相似度 - 使用多種算法"""
@@ -5976,7 +6212,48 @@ class LogAnalyzerSystem:
         
         if stack1 == stack2:
             return 1.0
+
+        # 特別處理 tombstone 格式的堆疊
+        # 格式: pc 00085e64 libc.so (__ioctl+12)
+        tombstone_pattern = r'pc\s+([0-9a-fA-F]+)\s+([^\s]+)\s+\(([^)]+)\)'
         
+        match1 = re.match(tombstone_pattern, stack1)
+        match2 = re.match(tombstone_pattern, stack2)
+        
+        if match1 and match2:
+            # 比較各個組成部分
+            pc1, lib1, func1 = match1.groups()
+            pc2, lib2, func2 = match2.groups()
+            
+            similarity_score = 0.0
+            
+            # 庫名相同（權重 40%）
+            if lib1 == lib2:
+                similarity_score += 0.4
+            elif lib1.split('/')[-1] == lib2.split('/')[-1]:
+                similarity_score += 0.3
+            
+            # 函數名相同（權重 50%）
+            # 移除偏移量比較
+            func1_clean = re.sub(r'\+\d+$', '', func1)
+            func2_clean = re.sub(r'\+\d+$', '', func2)
+            
+            if func1_clean == func2_clean:
+                similarity_score += 0.5
+            elif func1_clean.split('::')[-1] == func2_clean.split('::')[-1]:
+                similarity_score += 0.3
+            
+            # PC 地址接近（權重 10%）
+            try:
+                pc1_int = int(pc1, 16)
+                pc2_int = int(pc2, 16)
+                if abs(pc1_int - pc2_int) < 0x1000:  # 4KB 範圍內
+                    similarity_score += 0.1
+            except:
+                pass
+            
+            return similarity_score
+                    
         # 提取關鍵元素
         key_elements1 = self._extract_stack_elements(stack1)
         key_elements2 = self._extract_stack_elements(stack2)
