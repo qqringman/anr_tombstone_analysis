@@ -1006,14 +1006,16 @@ class AIAnalyzer {
         
         const msgDiv = document.createElement('div');
         msgDiv.className = `ai-${type}-message`;
-        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
+        // 確保圖標和文字在同一行
+        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> <span class="${type}-text">${message}</span>`;
         messageArea.appendChild(msgDiv);
     }
 
     displayMessage(container, type, message) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `ai-${type}-message`;
-        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
+        // 確保圖標和文字在同一行
+        msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> <span class="${type}-text">${message}</span>`;
         container.appendChild(msgDiv);
     }
 

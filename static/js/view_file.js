@@ -100,6 +100,12 @@ function toggleAIFullscreen() {
         } else if (rightPanel.msRequestFullscreen) {
             rightPanel.msRequestFullscreen();
         }
+        // 確保事件綁定在全螢幕模式下正常工作
+        setTimeout(() => {
+            // 重新綁定全局函數
+            window.copyAIResponse = copyAIResponse;
+            window.exportSingleResponse = exportSingleResponse;
+        }, 100);        
     } else {
         rightPanel.classList.remove('fullscreen-mode');
         mainContainer.classList.remove('ai-fullscreen');
@@ -5495,19 +5501,62 @@ askCustomQuestion = async function() {
 
 // 複製 AI 回應
 window.copyAIResponse = function(conversationId) {
-    const conversation = document.getElementById(conversationId);
-    if (!conversation) return;
+    // 改進查找邏輯，支援全螢幕模式
+    let conversation = document.getElementById(conversationId);
     
-    // 找到 AI 回應內容
-    const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content, .chatgpt-content, .gpt-content');
+    // 如果在全螢幕模式下，也檢查 rightPanel 內部
+    if (!conversation) {
+        const rightPanel = document.getElementById('rightPanel');
+        if (rightPanel) {
+            conversation = rightPanel.querySelector(`#${conversationId}`);
+        }
+    }
+    
+    if (!conversation) {
+        console.error('找不到對話項目:', conversationId);
+        return;
+    }
+    
+    // 找到 AI 回應內容 - 擴展選擇器
+    const responseElement = conversation.querySelector(
+        '.ai-response-text, .ai-analysis-content, .chatgpt-content, .gpt-content, .content-area, .message-area'
+    );
+    
     if (!responseElement) {
         console.error('找不到回應內容');
         return;
     }
     
-    // 獲取純文字內容
-    const textContent = responseElement.innerText || responseElement.textContent || '';
+    // 獲取純文字內容，處理格式
+    let textContent = '';
     
+    // 特別處理訊息區域的格式
+    const messageArea = conversation.querySelector('.message-area');
+    if (messageArea) {
+        // 提取訊息內容，保持單行格式
+        const messages = messageArea.querySelectorAll('.ai-info-message, .ai-warning-message');
+        messages.forEach(msg => {
+            const text = msg.textContent.trim();
+            if (text) {
+                textContent += text + '\n';
+            }
+        });
+    }
+    
+    // 獲取主要內容
+    const contentArea = conversation.querySelector('.content-area');
+    if (contentArea) {
+        const mainContent = contentArea.innerText || contentArea.textContent || '';
+        if (mainContent) {
+            textContent += '\n' + mainContent;
+        }
+    }
+    
+    // 如果沒有特定區域，獲取整個回應內容
+    if (!textContent) {
+        textContent = responseElement.innerText || responseElement.textContent || '';
+    }
+
     // 複製到剪貼板（兼容性處理）
     const copyToClipboard = (text) => {
         // 優先使用 Clipboard API
