@@ -5263,7 +5263,7 @@ class LogAnalyzerSystem:
                 if 'binder' in cause_lower:
                     info['features'].append('binder_issue')
                     
-        else:
+        if info['type'] == 'tombstone':
             # Tombstone 特徵（增強）
             # 提取信號類型
             signal_match = re.search(r'信號[：:]\s*([^<\n]+)', html_content)
@@ -5400,7 +5400,71 @@ class LogAnalyzerSystem:
                             info['features'].append('system_call_crash')
                     
                     break
-                                                    
+
+            # 1. 提取 Abort Message（重要！）
+            abort_patterns = [
+                r'Abort message[：:]\s*([^<\n]+)',
+                r'abort_message[：:]\s*"([^"]+)"',
+                r'訊息[：:]\s*([^<\n]+)',
+            ]
+            
+            for pattern in abort_patterns:
+                abort_match = re.search(pattern, html_content)
+                if abort_match:
+                    info['abort_message'] = abort_match.group(1).strip()
+                    # Abort message 通常能精確定位問題
+                    if 'abort_message' not in info['features']:
+                        info['features'].append('has_abort_message')
+                    break
+            
+            # 2. 提取信號碼（signal code）
+            signal_code_match = re.search(r'信號碼[：:]\s*([^<\n]+)', html_content)
+            if signal_code_match:
+                info['signal_code'] = signal_code_match.group(1).strip()
+            
+            # 3. 提取線程名稱
+            thread_name_match = re.search(r'線程[：:]\s*([^(]+)\s*\(tid=', html_content)
+            if thread_name_match:
+                info['thread_name'] = thread_name_match.group(1).strip()
+            
+            # 4. 提取堆疊的前3層（不只是崩潰點）
+            stack_section_pattern = r'關鍵堆疊[：:]\s*\n((?:[^\n]+\n?){1,5})'
+            stack_match = re.search(stack_section_pattern, html_content, re.MULTILINE)
+            
+            if stack_match:
+                stack_frames = []
+                frame_pattern = r'#(\d+)\s+([^<\n]+)'
+                frames = re.findall(frame_pattern, stack_match.group(1))
+                
+                for frame_num, frame_content in frames[:3]:  # 取前3層
+                    # 清理並標準化堆疊幀
+                    clean_frame = frame_content.strip()
+                    clean_frame = re.sub(r'\s+', ' ', clean_frame)  # 統一空白
+                    stack_frames.append(clean_frame)
+                
+                info['stack_frames'] = stack_frames
+                
+                # 生成堆疊指紋（用於精確匹配）
+                if stack_frames:
+                    # 使用前3層生成指紋
+                    info['stack_fingerprint'] = '|'.join(stack_frames[:3])
+            
+            # 5. 提取崩潰類型（從摘要部分）
+            crash_type_match = re.search(r'崩潰類型[：:]\s*([^<\n]+)', html_content)
+            if crash_type_match:
+                info['crash_type'] = crash_type_match.group(1).strip()
+                
+            # 6. 特殊模式識別
+            # TimeCheck timeout 模式
+            if 'TimeCheck timeout' in html_content:
+                info['features'].append('timecheck_timeout')
+                info['crash_pattern'] = 'TimeCheck Timeout'
+                
+                # 提取超時服務
+                timeout_service_match = re.search(r'TimeCheck timeout for\s+([^<\n]+)', html_content)
+                if timeout_service_match:
+                    info['timeout_service'] = timeout_service_match.group(1).strip()
+                                                                        
             # 其他 Tombstone 特徵
             if '雙重釋放' in html_content or 'double free' in html_content.lower():
                 info['features'].append('double_free')
@@ -5523,8 +5587,8 @@ class LogAnalyzerSystem:
             # 轉換為距離矩陣
             anr_distance_matrix = 100 - anr_similarity_matrix
             
-            # ANR 使用標準閾值（60分）
-            anr_clustering = DBSCAN(eps=40, min_samples=1, metric='precomputed')
+            # ANR 使用標準閾值（70分）
+            anr_clustering = DBSCAN(eps=30, min_samples=1, metric='precomputed')
             anr_labels = anr_clustering.fit_predict(anr_distance_matrix)
             
             # 組織 ANR 聚類結果
@@ -5609,6 +5673,46 @@ class LogAnalyzerSystem:
         
     def _generate_group_title(self, reports: List[Dict], key_feature: str) -> str:
         """生成更有意義的組標題"""
+
+        if not reports:
+            return "未知問題"
+        
+        # 檢查是否都是 tombstone
+        if all(r['type'] == 'tombstone' for r in reports):
+            first_report = reports[0]
+            
+            # 優先使用崩潰模式
+            if first_report.get('crash_pattern'):
+                return first_report['crash_pattern']
+            
+            # 使用 abort message（如果有）
+            if first_report.get('abort_message'):
+                abort_msg = first_report['abort_message']
+                # 截取關鍵部分
+                if 'TimeCheck timeout' in abort_msg:
+                    return 'TimeCheck 超時'
+                elif 'buffer overflow' in abort_msg:
+                    return '緩衝區溢出'
+                elif 'null pointer' in abort_msg:
+                    return '空指針解引用'
+                # 如果太長，截取
+                elif len(abort_msg) > 50:
+                    return abort_msg[:50] + '...'
+                else:
+                    return abort_msg
+            
+            # 使用崩潰函數和庫
+            crash_func = first_report.get('crash_function', '')
+            crash_lib = first_report.get('crash_lib', '')
+            
+            if crash_func and crash_lib:
+                clean_func = re.sub(r'\+\d+$', '', crash_func)
+                return f"{clean_func} @ {crash_lib}"
+            
+            # 使用信號類型
+            if first_report.get('signal_type'):
+                return f"{first_report['signal_type']} 崩潰"
+                
         # 如果有明確的模式，直接使用
         if key_feature and key_feature not in ["未知問題", "未分類問題", "未知堆疊"]:
             return key_feature
@@ -6081,69 +6185,74 @@ class LogAnalyzerSystem:
         return min(score, 100)
 
     def _calculate_tombstone_similarity(self, report1: Dict, report2: Dict) -> float:
-        """計算 Tombstone 特定的相似度"""
+        """計算 Tombstone 特定的相似度 - 增強版"""
+        
+        # 如果有堆疊指紋且完全相同，直接返回高分
+        if (report1.get('stack_fingerprint') and 
+            report1.get('stack_fingerprint') == report2.get('stack_fingerprint')):
+            return 95.0  # 相同堆疊指紋，幾乎可以確定是同一個問題
+        
         similarity_factors = []
         
-        # 1. 信號類型完全匹配（權重降低）
-        if report1.get('signal_type') == report2.get('signal_type'):
-            similarity_factors.append(('signal', 1.0, 0.15))  # 權重 15%
-        else:
-            similarity_factors.append(('signal', 0.0, 0.15))
+        # 1. Abort Message 相似度（非常重要）
+        abort1 = report1.get('abort_message', '')
+        abort2 = report2.get('abort_message', '')
         
-        # 2. 崩潰函數相似度（提高權重）
+        if abort1 and abort2:
+            if abort1 == abort2:
+                similarity_factors.append(('abort_message', 1.0, 0.30))  # 權重 30%
+            else:
+                # 計算文本相似度
+                text_sim = self._calculate_text_similarity(abort1, abort2)
+                similarity_factors.append(('abort_message', text_sim, 0.30))
+        else:
+            similarity_factors.append(('abort_message', 0.0, 0.30))
+        
+        # 2. 崩潰函數相似度
         func1 = report1.get('crash_function', '')
         func2 = report2.get('crash_function', '')
         
         if func1 and func2:
-            if func1 == func2:
-                similarity_factors.append(('function', 1.0, 0.35))  # 權重 35%
-            elif func1.split('::')[-1] == func2.split('::')[-1]:  # 同名函數
-                similarity_factors.append(('function', 0.7, 0.35))
+            # 移除偏移量比較
+            func1_clean = re.sub(r'\+\d+$', '', func1)
+            func2_clean = re.sub(r'\+\d+$', '', func2)
+            
+            if func1_clean == func2_clean:
+                similarity_factors.append(('function', 1.0, 0.25))  # 權重 25%
             else:
-                # 檢查是否都是系統函數
-                system_funcs = ['__ioctl', '__write', '__read', 'malloc', 'free', 'memcpy']
-                if any(sf in func1 for sf in system_funcs) and any(sf in func2 for sf in system_funcs):
-                    similarity_factors.append(('function', 0.3, 0.35))
-                else:
-                    similarity_factors.append(('function', 0.0, 0.35))
+                similarity_factors.append(('function', 0.0, 0.25))
         else:
-            similarity_factors.append(('function', 0.0, 0.35))
+            similarity_factors.append(('function', 0.0, 0.25))
         
-        # 3. 崩潰庫相似度（新增）
-        lib1 = report1.get('crash_lib', '')
-        lib2 = report2.get('crash_lib', '')
+        # 3. 崩潰庫相似度
+        lib1 = report1.get('crash_lib', '') or report1.get('key_stack', '').split()[0] if report1.get('key_stack') else ''
+        lib2 = report2.get('crash_lib', '') or report2.get('key_stack', '').split()[0] if report2.get('key_stack') else ''
         
         if lib1 and lib2:
             if lib1 == lib2:
-                similarity_factors.append(('library', 1.0, 0.25))  # 權重 25%
-            elif 'libc.so' in lib1 and 'libc.so' in lib2:
-                similarity_factors.append(('library', 0.8, 0.25))
+                similarity_factors.append(('library', 1.0, 0.20))  # 權重 20%
             else:
-                similarity_factors.append(('library', 0.0, 0.25))
+                similarity_factors.append(('library', 0.0, 0.20))
         else:
-            similarity_factors.append(('library', 0.0, 0.25))
+            similarity_factors.append(('library', 0.0, 0.20))
         
-        # 4. 故障地址相似度（降低權重）
-        addr1 = report1.get('fault_addr', '')
-        addr2 = report2.get('fault_addr', '')
-        
-        if addr1 == addr2:
-            similarity_factors.append(('address', 1.0, 0.15))  # 權重 15%
-        elif addr1 in ['0x0', '0'] and addr2 in ['0x0', '0']:
-            similarity_factors.append(('address', 0.9, 0.15))
-        elif addr1.startswith('0xdead') and addr2.startswith('0xdead'):
-            similarity_factors.append(('address', 0.8, 0.15))
+        # 4. 信號類型和信號碼
+        if (report1.get('signal_type') == report2.get('signal_type') and 
+            report1.get('signal_code') == report2.get('signal_code')):
+            similarity_factors.append(('signal', 1.0, 0.15))  # 權重 15%
+        elif report1.get('signal_type') == report2.get('signal_type'):
+            similarity_factors.append(('signal', 0.7, 0.15))
         else:
-            similarity_factors.append(('address', 0.0, 0.15))
+            similarity_factors.append(('signal', 0.0, 0.15))
         
-        # 5. Native/Java 層面（降低權重）
-        is_native1 = 'native_crash' in report1.get('features', [])
-        is_native2 = 'native_crash' in report2.get('features', [])
+        # 5. 崩潰模式相似度（TimeCheck timeout 等特殊模式）
+        pattern1 = report1.get('crash_pattern', '')
+        pattern2 = report2.get('crash_pattern', '')
         
-        if is_native1 == is_native2:
-            similarity_factors.append(('layer', 0.8, 0.10))  # 權重 10%
+        if pattern1 and pattern2 and pattern1 == pattern2:
+            similarity_factors.append(('pattern', 1.0, 0.10))  # 權重 10%
         else:
-            similarity_factors.append(('layer', 0.2, 0.10))
+            similarity_factors.append(('pattern', 0.0, 0.10))
         
         # 計算加權平均
         total_score = 0.0
@@ -6153,7 +6262,15 @@ class LogAnalyzerSystem:
             total_score += score * weight
             total_weight += weight
         
-        return total_score / total_weight if total_weight > 0 else 0.0
+        final_score = (total_score / total_weight * 100) if total_weight > 0 else 0.0
+        
+        # 特殊情況加分
+        # 如果崩潰函數、庫都相同，至少給 70 分
+        if (func1 and func2 and lib1 and lib2 and 
+            func1_clean == func2_clean and lib1 == lib2):
+            final_score = max(final_score, 70.0)
+        
+        return final_score
 
     def _calculate_text_similarity(self, text1: str, text2: str) -> float:
         """計算文本相似度 - 使用多種算法"""
