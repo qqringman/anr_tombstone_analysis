@@ -9759,6 +9759,7 @@ class LogAnalyzerSystem:
             /* 控制按鈕的複製狀態 */
             .control-btn.copying {{
                 animation: pulse 0.5s ease-in-out;
+                background: #7c3aed;  /* 深紫色 */
             }}
 
             @keyframes pulse {{
