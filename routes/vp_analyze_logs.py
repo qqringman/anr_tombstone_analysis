@@ -5637,15 +5637,20 @@ class LogAnalyzerSystem:
         root_causes = set()
         
         for report in group_reports:
-            # 收集問題集
+            # 收集問題集 - 改進提取邏輯
             if 'path' in report:
                 path_parts = report['path'].split(os.sep)
                 if self.input_folder:
                     input_parts = self.input_folder.rstrip(os.sep).split(os.sep)
-                    if len(path_parts) > len(input_parts) + 1:
-                        second_dir = path_parts[len(input_parts) + 1]
-                        if second_dir and second_dir not in ['.', '..', '']:
-                            problem_sets.add(second_dir)
+                    # 找到輸入資料夾後的第一個子目錄
+                    if len(path_parts) > len(input_parts):
+                        # 提取相對路徑的第一個目錄作為問題集
+                        relative_parts = path_parts[len(input_parts):]
+                        if relative_parts and relative_parts[0] not in ['.', '..', '', 'anr', 'tombstone', 'tombstones']:
+                            problem_sets.add(relative_parts[0])
+                        elif len(relative_parts) > 1 and relative_parts[1] not in ['.', '..', '']:
+                            # 如果第一層是 anr/tombstone，取第二層
+                            problem_sets.add(relative_parts[1])
             
             # 收集其他信息
             if report.get('severity'):
@@ -7520,13 +7525,36 @@ class LogAnalyzerSystem:
                 # 準備關鍵堆疊資料
                 key_stack_info = self._extract_key_stack_from_group(group['reports'])
 
+                # 判斷群組類型
+                group_type = 'anr' if all(r['type'] == 'anr' for r in group['reports']) else 'tombstone'
+                type_label = 'ANR' if group_type == 'anr' else 'Tombstone'
+                type_class = 'anr-type' if group_type == 'anr' else 'tombstone-type'
+                
+                # 處理問題集標籤 - 統一格式
+                problem_sets_html = ''
+                if group.get('problem_sets'):
+                    # 提取所有唯一的問題集
+                    unique_sets = sorted(set(group['problem_sets']))
+                    if unique_sets:
+                        sets_display = ', '.join(unique_sets)
+                        problem_sets_html = f'''
+                        <span class="problem-set-badge">
+                            <span class="set-label">問題 set:</span>
+                            <span class="set-value">{html.escape(sets_display)}</span>
+                        </span>
+                        '''
+
                 html_str += f'''
-                <div class="similarity-group" id="{group['group_id']}">
+                <div class="similarity-group {group_type}-group" id="{group['group_id']}">
                     <!-- 第一區：標題和功能按鈕 -->
                     <div class="group-header-section" onclick="toggleSimilarityGroup('{group['group_id']}')">
                         <div class="group-header-left">
                             <div class="group-title-wrapper">
-                                <h3 class="group-title">{severity_html} {html.escape(group['title'])}</h3>
+                                <h3 class="group-title">
+                                    {severity_html} 
+                                    <span class="type-badge {type_class}">{type_label}</span>
+                                    {html.escape(group['title'])}
+                                </h3>
                                 <div class="group-subtitle">
                                     <span class="file-count-badge">{group['count']} 個相似檔案</span>
                                     <span class="confidence-badge {confidence_class}">
@@ -9738,6 +9766,126 @@ class LogAnalyzerSystem:
                 50% {{ transform: scale(1.05); }}
                 100% {{ transform: scale(1); }}
             }}
+
+            /* 類型標籤 */
+            .type-badge {{
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-right: 8px;
+            }}
+
+            .type-badge.anr-type {{
+                background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.08) 100%);
+                color: var(--anr-color);
+                border: 1px solid rgba(249, 115, 22, 0.3);
+            }}
+
+            .type-badge.tombstone-type {{
+                background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.08) 100%);
+                color: var(--tombstone-color);
+                border: 1px solid rgba(168, 85, 247, 0.3);
+            }}
+
+            /* 問題集標籤 - 統一樣式 */
+            .problem-set-badge {{
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 14px;
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+                border-radius: 20px;
+                font-size: 12px;
+            }}
+
+            .problem-set-badge .set-label {{
+                color: var(--text-muted);
+                font-weight: 500;
+            }}
+
+            .problem-set-badge .set-value {{
+                color: #10b981;
+                font-weight: 600;
+                font-family: 'Monaco', 'Consolas', monospace;
+                letter-spacing: 0.3px;
+            }}
+
+            /* 群組特定樣式 */
+            .similarity-group.anr-group {{
+                border-color: rgba(249, 115, 22, 0.2);
+            }}
+
+            .similarity-group.anr-group:hover {{
+                box-shadow: 0 8px 30px rgba(249, 115, 22, 0.15);
+            }}
+
+            .similarity-group.tombstone-group {{
+                border-color: rgba(168, 85, 247, 0.2);
+            }}
+
+            .similarity-group.tombstone-group:hover {{
+                box-shadow: 0 8px 30px rgba(168, 85, 247, 0.15);
+            }}
+
+            /* Light theme 調整 */
+            .light-theme .type-badge.anr-type {{
+                background: linear-gradient(135deg, rgba(234, 88, 12, 0.12) 0%, rgba(234, 88, 12, 0.06) 100%);
+                color: #ea580c;
+                border-color: rgba(234, 88, 12, 0.3);
+            }}
+
+            .light-theme .type-badge.tombstone-type {{
+                background: linear-gradient(135deg, rgba(147, 51, 234, 0.12) 0%, rgba(147, 51, 234, 0.06) 100%);
+                color: #9333ea;
+                border-color: rgba(147, 51, 234, 0.3);
+            }}
+
+            .light-theme .problem-set-badge {{
+                background: linear-gradient(135deg, rgba(5, 150, 105, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%);
+                border-color: rgba(5, 150, 105, 0.3);
+            }}
+
+            .light-theme .problem-set-badge .set-value {{
+                color: #059669;
+            }}
+
+            /* 群組標題調整 */
+            .group-title {{
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--text-primary);
+                margin: 0;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }}
+
+            .group-subtitle {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+                margin-top: 8px;
+            }}
+
+            /* 確保各個元素垂直對齊 */
+            .severity-badge,
+            .type-badge,
+            .file-count-badge,
+            .confidence-badge,
+            .problem-set-badge {{
+                display: inline-flex;
+                align-items: center;
+                height: 28px;  /* 統一高度 */
+            }}
+
         </style>
     </head>
     <body>
