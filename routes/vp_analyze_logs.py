@@ -10688,7 +10688,7 @@ class LogAnalyzerSystem:
                             title = title.replace(severity, '').trim();
                         }}
                         
-                        copyTextParts.push(severity + ' ' + title.trim().replace(/\s+/g, ' '));
+                        copyTextParts.push(severity + ' ' + title);
                     }}
                     
                     // 獲取檔案數量
@@ -10907,7 +10907,7 @@ class LogAnalyzerSystem:
                                     title = title.replace(severity, '').trim();
                                 }}
                                 
-                                copyTextParts.push(severity + ' ' + title.trim().replace(/\s+/g, ' '));
+                                copyTextParts.push(severity + ' ' + title);
                             }}
                             
                             // 獲取檔案數量
