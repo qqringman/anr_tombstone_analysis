@@ -598,10 +598,46 @@ function formatStreamingContent(text) {
     return html;
 }
 
+// 智能分段策略
+function createSmartSegments(content, maxTokensPerSegment = 50000) {
+    const segments = [];
+    
+    // 估算每個字元的平均 token 數
+    const avgTokensPerChar = 0.5;  // 中文約 0.5，英文約 0.25
+    const maxCharsPerSegment = Math.floor(maxTokensPerSegment / avgTokensPerChar);
+    
+    // 尋找自然分段點（如空行、特定標記等）
+    const lines = content.split('\n');
+    let currentSegment = '';
+    let currentLength = 0;
+    
+    for (const line of lines) {
+        if (currentLength + line.length > maxCharsPerSegment) {
+            // 當前段落已滿，保存並開始新段落
+            if (currentSegment) {
+                segments.push(currentSegment);
+                currentSegment = '';
+                currentLength = 0;
+            }
+        }
+        
+        currentSegment += line + '\n';
+        currentLength += line.length + 1;
+    }
+    
+    // 保存最後一段
+    if (currentSegment) {
+        segments.push(currentSegment);
+    }
+    
+    return segments;
+}
+
 // 增強的語法高亮函數
 function highlightCode(code, language) {
     if (!language || language === 'text') return escapeHtml(code);
     
+    // 先進行 HTML 轉義，避免標籤干擾
     let highlighted = escapeHtml(code);
     
     // 根據語言類型選擇不同的高亮規則
@@ -692,29 +728,37 @@ function highlightYAML(code) {
 
 // Bash/Shell 高亮
 function highlightBash(code) {
+    // 先進行 HTML 轉義，避免重複處理
+    let highlighted = code;
+    
     // Shell 命令
     const commands = ['adb', 'echo', 'cd', 'ls', 'cat', 'grep', 'sed', 'awk', 
                      'chmod', 'chown', 'rm', 'mv', 'cp', 'mkdir', 'shell', 
-                     'am', 'pm', 'start', 'stop', 'force-stop'];
+                     'am', 'pm', 'start', 'stop', 'force-stop', 'clear'];
     
+    // 使用更精確的正則表達式，避免重複替換
     commands.forEach(cmd => {
-        const regex = new RegExp(`\\b${cmd}\\b`, 'g');
-        code = code.replace(regex, `<span class="bash-command">${cmd}</span>`);
+        // 只在單詞邊界處替換，避免部分匹配
+        const regex = new RegExp(`\\b(${cmd})\\b(?![^<]*>)`, 'g');
+        highlighted = highlighted.replace(regex, `<span class="bash-command">$1</span>`);
     });
     
-    // 參數和選項
-    code = code.replace(/\s(-{1,2}[\w-]+)/g, ' <span class="bash-option">$1</span>');
+    // 參數和選項 - 確保不在標籤內
+    highlighted = highlighted.replace(/(\s)(-{1,2}[\w-]+)(?![^<]*>)/g, 
+        '$1<span class="bash-option">$2</span>');
     
-    // 路徑和包名
-    code = code.replace(/(\/[\w\/.]+|com\.[\w\.]+)/g, '<span class="bash-path">$1</span>');
+    // 路徑和包名 - 更精確的匹配
+    highlighted = highlighted.replace(/(\/[\w\/.]+|com\.[\w\.]+)(?![^<]*>)/g, 
+        '<span class="bash-path">$1</span>');
     
-    // 字符串
-    code = code.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="string">$&</span>');
+    // 字符串 - 避免在標籤內匹配
+    highlighted = highlighted.replace(/(["'])(?:(?=(\\?))\2.)*?\1(?![^<]*>)/g, 
+        '<span class="string">$&</span>');
     
     // 註釋
-    code = code.replace(/#.*$/gm, '<span class="comment">$&</span>');
+    highlighted = highlighted.replace(/(#.*)$/gm, '<span class="comment">$1</span>');
     
-    return code;
+    return highlighted;
 }
 
 // XML/HTML 高亮
@@ -4486,7 +4530,6 @@ async function startSmartAnalysis() {
     
     isAnalyzing = true;
     
-    // 使用選中的模式
     const mode = selectedAnalysisMode;
     const modeConfig = ANALYSIS_MODES[mode];
     
@@ -4499,69 +4542,47 @@ async function startSmartAnalysis() {
     
     responseDiv.classList.add('active');
     
-    // 快速分析模式：跳過檔案大小檢查，直接分析
-    if (mode === 'quick') {
-        // 直接執行快速分析，不檢查檔案大小
-        try {
-            const progressDiv = createQuickAnalysisProgress();
-            responseContent.appendChild(progressDiv);
-            
-            const response = await fetch('/smart-analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    file_path: filePath,
-                    content: fileContent,
-                    mode: 'quick',  // 強制快速模式
-                    file_type: filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR',
-                    force_single_analysis: true,  // 強制單次分析
-                    skip_size_check: true  // 跳過大小檢查
-                })
-            });
-            
-            const data = await response.json();
-            progressDiv.remove();
-            
-            if (response.ok && data.success) {
-                const normalizedData = normalizeAnalysisData(data, mode);
-                displaySmartAnalysisResult(normalizedData, modeConfig);
-            } else {
-                throw new Error(data.error || '分析失敗');
-            }
-			
-        } catch (error) {
-            console.error('Quick analysis error:', error);
-            showAnalysisError(error.message);			
-        } finally {
-            resetAnalyzeButton();
-        }
-        return;
+    // 處理檔案內容，確保不超過 token 限制
+    let contentToAnalyze = fileContent;
+    let isTruncated = false;
+    
+    // 根據模式設定不同的內容限制
+    const contentLimits = {
+        'quick': 50000,      // 快速分析：50KB
+        'auto': 100000,      // 智能分析：100KB
+        'comprehensive': 150000,  // 深度分析：150KB（約 75K tokens）
+    };
+    
+    const maxLength = contentLimits[mode] || 100000;
+    
+    // 檢查並截取內容
+    if (contentToAnalyze.length > maxLength) {
+        console.log(`內容過長 (${contentToAnalyze.length} 字元)，截取至 ${maxLength} 字元`);
+        contentToAnalyze = contentToAnalyze.substring(0, maxLength);
+        isTruncated = true;
+        
+        // 顯示警告
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'ai-warning';
+        warningDiv.innerHTML = `
+            ⚠️ 檔案過大（${(fileContent.length/1024).toFixed(1)}KB），
+            將只分析前 ${(maxLength/1024).toFixed(1)}KB 的內容
+        `;
+        responseContent.appendChild(warningDiv);
     }
     
-    // 其他模式：先檢查檔案大小
     try {
-        // 檢查檔案大小（但傳遞模式信息）
-        const sizeCheck = await checkFileSizeWithMode(mode);
-        
-        // 根據模式決定是否顯示分段對話框
-        if (shouldShowSegmentDialog(mode, sizeCheck)) {
-            const proceed = await showSegmentedAnalysisDialog(sizeCheck);
-            if (!proceed) {
-                resetAnalyzeButton();
-                return;
-            }
-        }
-
-        // 執行分析
+        // 執行分析請求
         const response = await fetch('/smart-analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 file_path: filePath,
-                content: fileContent,
+                content: contentToAnalyze,  // 使用截取後的內容
                 mode: mode,
                 file_type: filePath.toLowerCase().includes('tombstone') ? 'Tombstone' : 'ANR',
-                enable_thinking: document.getElementById('enableDeepThinking')?.checked || false
+                enable_thinking: document.getElementById('enableDeepThinking')?.checked || false,
+                truncated: isTruncated
             })
         });
         
@@ -4569,6 +4590,7 @@ async function startSmartAnalysis() {
 
         if (response.ok && data.success) {
             const normalizedData = normalizeAnalysisData(data, mode);
+            normalizedData.truncated = isTruncated;  // 傳遞截取標記
             displaySmartAnalysisResult(normalizedData, modeConfig);
         } else {
             throw new Error(data.error || '分析失敗');
@@ -4576,6 +4598,7 @@ async function startSmartAnalysis() {
         
     } catch (error) {
         console.error('Analysis error:', error);
+        showAnalysisError(error.message);
     } finally {
         resetAnalyzeButton();
     }
