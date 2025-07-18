@@ -949,6 +949,12 @@ function createAIInfoModal() {
 // 確保快速問題功能正常運作
 async function useQuickQuestion(question) {
 
+    // 立即關閉選單（移到最前面）
+    const menu = document.getElementById('quickQuestionsMenu');
+    if (menu) {
+        menu.classList.remove('show');
+    }
+    
     // 檢查 aiRequestManager 是否可用
     if (!window.aiRequestManager) {
         console.error('AIRequestManager 未初始化');
@@ -1030,10 +1036,10 @@ async function useQuickQuestion(question) {
             menu.classList.remove('show');
         }
         
-		// 使用統一的清理
-		if (window.aiRequestManager) {
-			window.aiRequestManager.cleanup();
-		}
+        // 使用統一的清理
+        if (window.aiRequestManager) {
+            window.aiRequestManager.cleanup();
+        }
     }
 }
 
@@ -1762,7 +1768,6 @@ async function askCustomQuestion() {
     
     const customQuestion = customQuestionElement.value.trim();
     if (!customQuestion) {
-        alert('請輸入您的問題');
         return;
     }
     
@@ -3817,17 +3822,68 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 更新清空對話歷史的功能
 function clearConversationHistory() {
-	if (confirm('確定要清空所有對話記錄嗎？')) {
-		conversationHistory = [];
-		const responseContent = document.getElementById('aiResponseContent');
-		if (responseContent) {
-			// 清空所有內容
-			responseContent.innerHTML = ``;
-		}
-		console.log('對話歷史已清空');
-	}
+    // 創建自定義確認對話框
+    const modal = document.createElement('div');
+    modal.className = 'confirm-modal-backdrop';
+    modal.innerHTML = `
+        <div class="confirm-modal">
+            <div class="confirm-modal-header">
+                <h4>🗑️ 清空對話記錄</h4>
+            </div>
+            <div class="confirm-modal-body">
+                <p>確定要清空所有對話記錄嗎？</p>
+                <p class="confirm-warning">此操作無法復原</p>
+            </div>
+            <div class="confirm-modal-footer">
+                <button class="btn btn-cancel" onclick="this.closest('.confirm-modal-backdrop').remove()">取消</button>
+                <button class="btn btn-danger" onclick="confirmClearHistory()">確定清空</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
 }
-	
+
+window.confirmClearHistory = function() {
+    conversationHistory = [];
+    const responseContent = document.getElementById('aiResponseContent');
+    if (responseContent) {
+        responseContent.innerHTML = '';
+    }
+    
+    // 移除確認對話框
+    const modal = document.querySelector('.confirm-modal-backdrop');
+    if (modal) modal.remove();
+    
+    // 顯示成功提示
+    showToast('對話記錄已清空', 'success');
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#4caf50' : '#2196f3'};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // AI 分析配置
 const AI_ANALYSIS_CONFIG = {
 	enableThinking: true,
@@ -5438,12 +5494,12 @@ askCustomQuestion = async function() {
 };
 
 // 複製 AI 回應
-function copyAIResponse(conversationId) {
+window.copyAIResponse = function(conversationId) {
     const conversation = document.getElementById(conversationId);
     if (!conversation) return;
     
     // 找到 AI 回應內容
-    const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content, .chatgpt-content');
+    const responseElement = conversation.querySelector('.ai-response-text, .ai-analysis-content, .chatgpt-content, .gpt-content');
     if (!responseElement) {
         console.error('找不到回應內容');
         return;
@@ -5452,23 +5508,86 @@ function copyAIResponse(conversationId) {
     // 獲取純文字內容
     const textContent = responseElement.innerText || responseElement.textContent || '';
     
-    // 複製到剪貼板
-    navigator.clipboard.writeText(textContent).then(() => {
-        // 顯示成功提示
+    // 複製到剪貼板（兼容性處理）
+    const copyToClipboard = (text) => {
+        // 優先使用 Clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+        } else {
+            // 降級方案：使用 textarea
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-999999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                return Promise.resolve();
+            } catch (err) {
+                document.body.removeChild(textarea);
+                return Promise.reject(err);
+            }
+        }
+    };
+    
+    // 執行複製
+    copyToClipboard(textContent).then(() => {
+        // 顯示成功動畫
         const copyBtn = conversation.querySelector('.copy-btn');
         if (copyBtn) {
             const originalHTML = copyBtn.innerHTML;
-            copyBtn.innerHTML = '✅ 已複製';
+            
+            // 創建成功動畫
+            copyBtn.innerHTML = `
+                <span class="copy-success-icon">✓</span>
+                <span class="copy-success-text">已複製</span>
+            `;
+            copyBtn.classList.add('copy-success');
             copyBtn.disabled = true;
+            
+            // 創建波紋效果
+            const ripple = document.createElement('div');
+            ripple.className = 'copy-ripple';
+            copyBtn.appendChild(ripple);
+            
             setTimeout(() => {
                 copyBtn.innerHTML = originalHTML;
+                copyBtn.classList.remove('copy-success');
                 copyBtn.disabled = false;
             }, 2000);
         }
+        
+        // 顯示浮動提示
+        showCopyToast('已複製到剪貼板');
+        
     }).catch(err => {
         console.error('複製失敗:', err);
-        alert('複製失敗，請手動選擇文字複製');
+        showCopyToast('複製失敗，請手動選擇文字複製', 'error');
     });
+}
+
+// 顯示複製提示
+function showCopyToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `copy-toast ${type}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${type === 'success' ? '✓' : '✗'}</span>
+        <span class="toast-message">${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // 觸發動畫
+    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // 3秒後消失
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // 匯出單個回應
