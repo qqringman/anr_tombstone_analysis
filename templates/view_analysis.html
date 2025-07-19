@@ -1931,7 +1931,17 @@
                                                 iframeDoc.body;
                                         };
                                         
+                                        // 添加防抖動處理
+                                        let lastTargetLine = null;
+                                        let hoverTimeout = null;
+                                        
                                         iframeDoc.addEventListener('mousemove', function(e) {
+                                            // 清除之前的timeout
+                                            if (hoverTimeout) {
+                                                clearTimeout(hoverTimeout);
+                                            }
+                                            
+                                            hoverTimeout = setTimeout(() => {
                                             const lineData = window[`${panel}LineData`];
                                             if (!lineData || lineData.length === 0) return;
                                             
@@ -2013,10 +2023,16 @@
                                                 window.currentFocusedLine = targetLine;
                                                 window.currentFocusedPanel = panel;
                                             }
+                                            }, 10); // 10ms 的防抖動延遲
                                         });
 
                                         // 滑鼠離開時清除所有 hover
                                         iframeDoc.addEventListener('mouseleave', function() {
+                                            if (hoverTimeout) {
+                                                clearTimeout(hoverTimeout);
+                                            }
+                                            lastTargetLine = null;
+                                            
                                             const lineNumbers = document.getElementById(`${panel}LineNumbers`);
                                             if (lineNumbers) {
                                                 lineNumbers.querySelectorAll('.analysis-line-number').forEach(el => {
@@ -2918,7 +2934,26 @@
         
         // 關閉面板
         function closePanel(panel) {
+            console.log('closePanel 被調用, panel:', panel);
+            
+            const panelEl = document.getElementById(panel + 'Panel');
+            console.log('找到的面板元素:', panelEl);
+            console.log('是否全屏:', panelEl?.classList.contains('fullscreen'));
+            
+            if (!panelEl) {
+                console.error('找不到面板元素:', panel + 'Panel');
+                return;
+            }
+            
+            // 如果面板在全屏模式，先退出全屏
+            if (panelEl.classList.contains('fullscreen')) {
+                console.log('退出全屏模式');
+                panelEl.classList.remove('fullscreen');
+            }
+            
+            // 然後關閉面板
             if (panel === 'right') {
+                console.log('關閉右側面板');
                 toggleOriginalPanel();
             }
         }
