@@ -1817,7 +1817,11 @@
                                         // 如果是F2，確保有正確的行號
                                         if (e.key === 'F2' && window.currentFocusedLine) {
                                             // 直接在這裡處理F2，確保行號正確
-                                            const lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${window.currentFocusedLine}"]`);
+                                            let lineElemen = null;
+                                            if (panel === 'left')
+                                                lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${window.currentFocusedLine - 1}"]`);
+                                            else
+                                                lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${window.currentFocusedLine}"]`);
                                             if (lineElement) {
                                                 toggleBookmark(lineElement);
                                                 updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${window.currentFocusedLine} 行切換書籤`);
@@ -1835,6 +1839,7 @@
                                             metaKey: e.metaKey,
                                             bubbles: true
                                         });
+                                        console.log("3333")
                                         document.dispatchEvent(event);
                                     });
                                     
@@ -3295,10 +3300,13 @@
                 // F2 - 在當前行加書籤
                 if (e.key === 'F2') {
                     e.preventDefault();
-                    
+
                     const panel = window.currentFocusedPanel || 'left';
                     let line = window.currentFocusedLine || 1;
-                    
+
+                    if (panel === 'left')
+                        line = window.currentFocusedLine - 1;
+
                     // 檢查面板是否可見
                     const panelEl = document.getElementById(`${panel}Panel`);
                     if (!panelEl || panelEl.classList.contains('hidden')) {
@@ -3323,7 +3331,7 @@
                                 const middleY = iframe.clientHeight / 2 + scrollTop - 20;
                                 const lineHeight = 20.8; // 1.6em * 13px
                                 line = Math.max(1, Math.floor(middleY / lineHeight) + 1);
-                                
+
                                 // 確保行號在有效範圍內
                                 const maxLine = window[`${panel}LineCount`] || 999;
                                 line = Math.min(line, maxLine);
