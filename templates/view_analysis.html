@@ -1376,6 +1376,7 @@
         // 改為每個面板各自的書籤索引
         let leftBookmarkIndex = -1;
         let rightBookmarkIndex = -1;
+        let currentFocusedLineSource = 'content'; // 'lineNumber' 或 'content'
 
         // 確保全域變數被正確初始化
         if (typeof window.currentFocusedPanel === 'undefined') {
@@ -1614,8 +1615,15 @@
                                         margin: 0;
                                         word-wrap: break-word;
                                         word-break: break-all;
+                                        min-height: 1.6em;  /* 確保空行也有最小高度 */
                                     }
-                                    
+
+                                    /* 確保空的 report-line 也佔據空間 */
+                                    .report-line:empty::before {
+                                        content: '\\00a0';  /* 不可見的空格 */
+                                        display: inline-block;
+                                    }
+                                        
                                     .highlight-1 { background: rgba(255, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-2 { background: rgba(0, 255, 0, 0.4) !important; color: #000 !important; }
                                     .highlight-3 { background: rgba(0, 191, 255, 0.4) !important; color: #000 !important; }
@@ -1650,10 +1658,15 @@
                                                 const rect = element.getBoundingClientRect();
                                                 const y = rect.top + iframeWindow.pageYOffset;
                                                 
+                                                // 設定最小高度，確保行號可見
+                                                const minHeight = 20.8; // 1.6em * 13px
+                                                const actualHeight = rect.height || 0;
+                                                const height = Math.max(actualHeight, minHeight);
+                                                
                                                 lineData.push({
                                                     index: index + 1,
                                                     top: y - paddingTop,
-                                                    height: rect.height || 20.8,
+                                                    height: height,  // 使用計算後的高度
                                                     element: element
                                                 });
                                             });
@@ -1728,6 +1741,12 @@
                                             });
                                         }
                                         
+                                        console.log('Line Data Debug:', {
+                                            總行數: lineData.length,
+                                            最後一行: lineData[lineData.length - 1],
+                                            第一行: lineData[0]
+                                        });
+                                                                              
                                         return lineData;
                                     };
                                     
@@ -1751,7 +1770,8 @@
                                             lineNumberEl.style.lineHeight = data.height + 'px';
                                             lineNumberEl.style.width = '50px';
                                             lineNumberEl.style.display = 'block';
-                                            
+                                            lineNumberEl.style.minHeight = '20.8px';  // 確保最小高度
+
                                             lineNumberEl.addEventListener('click', function(e) {
                                                 e.preventDefault();
                                                 e.stopPropagation();
@@ -1761,6 +1781,7 @@
                                             lineNumberEl.addEventListener('mouseenter', function() {
                                                 window.currentFocusedLine = data.index;
                                                 window.currentFocusedPanel = panel;
+                                                window.currentFocusedLineSource = 'lineNumber';  // 標記來源
                                                 highlightCurrentLineNumber(panel, data.index);
                                             });
                                             
@@ -1846,12 +1867,35 @@
                                         
                                         // 如果是F2，確保有正確的行號
                                         if (e.key === 'F2' && window.currentFocusedLine) {
+
+                                            // 檢查滑鼠是否在行號元素上
+                                            const hoveredElement = document.elementFromPoint(
+                                                window.lastMouseX || 0, 
+                                                window.lastMouseY || 0
+                                            );
+
                                             // 直接在這裡處理F2，確保行號正確
-                                            let lineElemen = null;
-                                            if (panel === 'left')
-                                                lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${window.currentFocusedLine - 1}"]`);
-                                            else
-                                                lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${window.currentFocusedLine}"]`);
+                                            const isOnLineNumber = hoveredElement && (
+                                                hoveredElement.classList.contains('analysis-line-number') ||
+                                                hoveredElement.classList.contains('line-number') ||
+                                                hoveredElement.closest('.line-numbers-container')
+                                            );
+                                            
+                                            console.log('F2 Debug (setupAnalysisEvents) - Hover 檢查:', {
+                                                hoveredElement: hoveredElement,
+                                                isOnLineNumber: isOnLineNumber,
+                                                classes: hoveredElement?.className
+                                            });
+
+                                            let line = window.currentFocusedLine;
+                                            const panelType = (panel === 'left') ? currentLeftType : currentRightType;                   
+                                            // 只有左側的分析報告且滑鼠不在行號上時需要 -1
+                                            if (panel === 'left' && panelType === 'analysis' && !isOnLineNumber) {
+                                                line = window.currentFocusedLine - 1;
+                                                // 防呆：確保行號至少為 1
+                                                line = Math.max(1, line);
+                                            }
+                                            let lineElement = lineNumbersContent.querySelector(`.analysis-line-number[data-line="${line}"]`);                                                                                        
                                             if (lineElement) {
                                                 toggleBookmark(lineElement);
                                                 updateStatus(`已在${panel === 'left' ? '左側' : '右側'}面板第 ${window.currentFocusedLine} 行切換書籤`);
@@ -1905,8 +1949,15 @@
                                         }
                                         
                                         if (targetLine) {
+                                            console.log('Mouse Track Debug:', {
+                                                targetLine: targetLine,
+                                                y: y,
+                                                scrollTop: scrollTop,
+                                                計算的y: `${e.clientY} - ${rect.top} + ${scrollTop} - 20 = ${y}`
+                                            });                                            
                                             window.currentFocusedLine = targetLine;
                                             window.currentFocusedPanel = panel;
+                                            window.currentFocusedLineSource = 'content';  // 標記來源                                            
                                             highlightCurrentLineNumber(panel, targetLine);
                                         }
                                     };
@@ -1976,96 +2027,104 @@
                                             }
                                             
                                             hoverTimeout = setTimeout(() => {
-                                            const lineData = window[`${panel}LineData`];
-                                            if (!lineData || lineData.length === 0) return;
-                                            
-                                            // 獲取當前的滾動位置
-                                            const scrollableElement = getScrollableElement();
-                                            const currentScrollTop = scrollableElement.scrollTop || 0;
-                                            
-                                            // 計算滑鼠相對於視窗的位置，加上滾動偏移
-                                            const mouseYInDocument = e.clientY + currentScrollTop;
-                                            
-                                            // 找出滑鼠所在的行
-                                            let targetLine = null;
-                                            let minDistance = Infinity;
+                                                const lineData = window[`${panel}LineData`];
+                                                if (!lineData || lineData.length === 0) return;
+                                                
+                                                // 獲取當前的滾動位置
+                                                const scrollableElement = getScrollableElement();
+                                                const currentScrollTop = scrollableElement.scrollTop || 0;
+                                                
+                                                // 計算滑鼠相對於視窗的位置，加上滾動偏移
+                                                const mouseYInDocument = e.clientY + currentScrollTop;
+                                                
+                                                // 找出滑鼠所在的行
+                                                let targetLine = null;
+                                                let minDistance = Infinity;
 
-                                            for (let i = 0; i < lineData.length; i++) {
-                                                const data = lineData[i];
-                                                const lineTop = data.top;
-                                                const lineBottom = lineTop + data.height;
-                                                
-                                                // 檢查滑鼠是否在行的範圍內
-                                                if (mouseYInDocument >= lineTop && mouseYInDocument <= lineBottom) {
-                                                    targetLine = data.index;
-                                                    break;
+                                                for (let i = 0; i < lineData.length; i++) {
+                                                    const data = lineData[i];
+                                                    const lineTop = data.top;
+                                                    const lineBottom = lineTop + data.height;
+                                                    
+                                                    // 檢查滑鼠是否在行的範圍內
+                                                    if (mouseYInDocument >= lineTop && mouseYInDocument <= lineBottom) {
+                                                        targetLine = data.index;
+                                                        break;
+                                                    }
+                                                    
+                                                    // 計算到行中心的距離（備用方案）
+                                                    const lineCenter = lineTop + data.height / 2;
+                                                    const distance = Math.abs(mouseYInDocument - lineCenter);
+                                                    
+                                                    if (distance < minDistance) {
+                                                        minDistance = distance;
+                                                        targetLine = data.index;
+                                                    }
                                                 }
                                                 
-                                                // 計算到行中心的距離（備用方案）
-                                                const lineCenter = lineTop + data.height / 2;
-                                                const distance = Math.abs(mouseYInDocument - lineCenter);
-                                                
-                                                if (distance < minDistance) {
-                                                    minDistance = distance;
-                                                    targetLine = data.index;
-                                                }
-                                            }
-                                            
-                                            // 調試輸出
-                                            //console.log('Scroll:', currentScrollTop, 'MouseY:', e.clientY, 'MouseInDoc:', mouseYInDocument, 'Target:', targetLine);
-                                            if (targetLine && targetLine !== window.currentFocusedLine) {
-                                                // 更新行號高亮
-                                                const lineNumbers = document.getElementById(`${panel}LineNumbers`);
-                                                if (lineNumbers) {
-                                                    lineNumbers.querySelectorAll('.analysis-line-number').forEach(el => {
-                                                        if (!el.classList.contains('bookmarked')) {
-                                                            el.style.backgroundColor = '';
+                                                // 調試輸出
+                                                //console.log('Scroll:', currentScrollTop, 'MouseY:', e.clientY, 'MouseInDoc:', mouseYInDocument, 'Target:', targetLine);
+                                                if (targetLine && targetLine !== window.currentFocusedLine) {
+                                                    // 更新行號高亮
+                                                    const lineNumbers = document.getElementById(`${panel}LineNumbers`);
+                                                    if (lineNumbers) {
+                                                        lineNumbers.querySelectorAll('.analysis-line-number').forEach(el => {
+                                                            if (!el.classList.contains('bookmarked')) {
+                                                                el.style.backgroundColor = '';
+                                                            }
+                                                        });
+                                                        
+                                                        const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${targetLine-1}"]`);
+                                                        if (lineElement && !lineElement.classList.contains('bookmarked')) {
+                                                            lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.3)';
+                                                            lineElement.style.color = 'inherit';
                                                         }
+                                                    }
+                                                    
+                                                    // 清除之前的內容行高亮
+                                                    iframeDoc.querySelectorAll('.report-line-hover').forEach(el => {
+                                                        el.classList.remove('report-line-hover');
                                                     });
                                                     
-                                                    const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${targetLine-1}"]`);
-                                                    if (lineElement && !lineElement.classList.contains('bookmarked')) {
-                                                        lineElement.style.backgroundColor = 'rgba(78, 201, 176, 0.3)';
-                                                        lineElement.style.color = 'inherit';
-                                                    }
-                                                }
-                                                
-                                                // 清除之前的內容行高亮
-                                                iframeDoc.querySelectorAll('.report-line-hover').forEach(el => {
-                                                    el.classList.remove('report-line-hover');
-                                                });
-                                                
-                                                // 高亮對應的內容行
-                                                const targetLineData = lineData[targetLine -1];
-                                                if (targetLineData) {
-                                                    // 查找在當前視窗中可見的元素
-                                                    const elements = iframeDoc.body.getElementsByTagName('*');
-                                                    let bestMatch = null;
-                                                    let bestDistance = Infinity;
-                                                    
-                                                    for (let el of elements) {
-                                                        // 跳過不可見的元素
-                                                        if (el.offsetParent === null) continue;
+                                                    // 高亮對應的內容行
+                                                    const targetLineData = lineData[targetLine -1];
+                                                    if (targetLineData) {
+                                                        // 查找在當前視窗中可見的元素
+                                                        const elements = iframeDoc.body.getElementsByTagName('*');
+                                                        let bestMatch = null;
+                                                        let bestDistance = Infinity;
                                                         
-                                                        const rect = el.getBoundingClientRect();
-                                                        // 元素在文檔中的實際位置
-                                                        const elTopInDoc = rect.top + currentScrollTop;
-                                                        const distance = Math.abs(elTopInDoc - targetLineData.top);
+                                                        for (let el of elements) {
+                                                            // 跳過不可見的元素
+                                                            if (el.offsetParent === null) continue;
+                                                            
+                                                            const rect = el.getBoundingClientRect();
+                                                            // 元素在文檔中的實際位置
+                                                            const elTopInDoc = rect.top + currentScrollTop;
+                                                            const distance = Math.abs(elTopInDoc - targetLineData.top);
+                                                            
+                                                            if (distance < bestDistance && distance < 10) {
+                                                                bestDistance = distance;
+                                                                bestMatch = el;
+                                                            }
+                                                        }
                                                         
-                                                        if (distance < bestDistance && distance < 10) {
-                                                            bestDistance = distance;
-                                                            bestMatch = el;
+                                                        if (bestMatch) {
+                                                            bestMatch.classList.add('report-line-hover');
                                                         }
                                                     }
                                                     
-                                                    if (bestMatch) {
-                                                        bestMatch.classList.add('report-line-hover');
-                                                    }
+                                                    window.currentFocusedLine = targetLine;
+                                                    window.currentFocusedPanel = panel;
+                                                    console.log('Hover Debug:', {
+                                                        mouseYInDocument: mouseYInDocument,
+                                                        currentScrollTop: currentScrollTop,
+                                                        clientY: e.clientY,
+                                                        targetLine: targetLine,
+                                                        lineDataLength: lineData.length,
+                                                        最後一行數據: lineData[lineData.length - 1]
+                                                    });                                                    
                                                 }
-                                                
-                                                window.currentFocusedLine = targetLine;
-                                                window.currentFocusedPanel = panel;
-                                            }
                                             }, 10); // 10ms 的防抖動延遲
                                         });
 
@@ -2265,6 +2324,7 @@
                     e.stopPropagation();
                     window.currentFocusedLine = lineNum;
                     window.currentFocusedPanel = panel;
+                    window.currentFocusedLineSource = 'lineNumber';  // 標記來源
                     highlightCurrentLineNumber(panel, lineNum);
                 });
             });
@@ -3209,6 +3269,10 @@
         // 設置鍵盤快捷鍵
         function setupKeyboardShortcuts() {
             document.addEventListener('keydown', function(e) {
+                
+                const panel = window.currentFocusedPanel || 'left';
+                const panelType = (panel === 'left') ? currentLeftType : currentRightType;
+                                    
                 // ESC 退出全屏
                 if (e.key === 'Escape') {
                     document.querySelectorAll('.fullscreen').forEach(el => {
@@ -3222,10 +3286,6 @@
                 // Ctrl+A - 全選
                 if (e.ctrlKey && e.key === 'a') {
                     e.preventDefault();
-                    
-                    const panel = window.currentFocusedPanel || 'left';
-                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
-                    
                     // 創建一個新的 context menu manager 實例方法調用
                     contextMenuManager.currentPanel = panel;
                     contextMenuManager.selectAll();
@@ -3235,44 +3295,53 @@
                 if (e.key === 'F2') {
                     e.preventDefault();
 
-                    const panel = window.currentFocusedPanel || 'left';
                     let line = window.currentFocusedLine || 1;
+                    
+                    console.log('F2 Debug:', {
+                        panel: panel,
+                        line: line,
+                        source: window.currentFocusedLineSource,
+                        panelType: panelType
+                    });
 
-                    if (panel === 'left')
+                    // 檢查滑鼠是否在行號元素上
+                    const hoveredElement = document.elementFromPoint(
+                        window.lastMouseX || 0, 
+                        window.lastMouseY || 0
+                    );
+                    
+                    const isOnLineNumber = hoveredElement && (
+                        hoveredElement.classList.contains('analysis-line-number') ||
+                        hoveredElement.classList.contains('line-number') ||
+                        hoveredElement.closest('.line-numbers-container') ||
+                        hoveredElement.closest('.bookmarked')
+                    );
+                    
+                    console.log('F2 Debug - Hover 檢查:', {
+                        hoveredElement: hoveredElement,
+                        isOnLineNumber: isOnLineNumber,
+                        classes: hoveredElement?.className
+                    });
+                    
+                    // 只有左側的分析報告且焦點來自內容區時需要 -1
+                    if (panel === 'left' && 
+                        panelType === 'analysis' && 
+                        window.currentFocusedLineSource === 'content') {
                         line = window.currentFocusedLine - 1;
+                        // 防呆：確保行號至少為 1
+                        line = Math.max(1, line);
+                    }
+                        
+                    console.log('F2 Debug - 調整後:', {
+                        line: line,
+                        計算: `${window.currentFocusedLine} - 1 = ${line}`
+                    });
 
                     // 檢查面板是否可見
                     const panelEl = document.getElementById(`${panel}Panel`);
                     if (!panelEl || panelEl.classList.contains('hidden')) {
                         console.log('F2: 面板隱藏中');
                         return;
-                    }
-                    
-                    // 判斷面板類型
-                    const panelType = (panel === 'left') ? currentLeftType : currentRightType;
-                    
-                    // 如果是分析報告且沒有明確的行號，嘗試計算當前滑鼠位置的行號
-                    if (panelType === 'analysis' && line === 1) {
-                        const iframe = document.querySelector(`#${panel}Content iframe`);
-                        if (iframe && iframe.contentWindow) {
-                            try {
-                                const iframeWindow = iframe.contentWindow;
-                                const scrollTop = iframeWindow.pageYOffset || 
-                                                iframeWindow.document.documentElement.scrollTop || 
-                                                iframeWindow.document.body.scrollTop || 0;
-                                
-                                // 使用視窗中間位置來計算行號
-                                const middleY = iframe.clientHeight / 2 + scrollTop - 20;
-                                const lineHeight = 20.8; // 1.6em * 13px
-                                line = Math.max(1, Math.floor(middleY / lineHeight) + 1);
-
-                                // 確保行號在有效範圍內
-                                const maxLine = window[`${panel}LineCount`] || 999;
-                                line = Math.min(line, maxLine);
-                            } catch (e) {
-                                console.log('計算行號失敗:', e);
-                            }
-                        }
                     }
                     
                     console.log(`F2 按下: Panel=${panel}, Line=${line}`);
