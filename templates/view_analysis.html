@@ -1643,7 +1643,22 @@
                                         
                                         const lineData = [];
                                         
-                                        if (reportContent.tagName === 'PRE') {
+                                        // 優先使用 .report-line 元素
+                                        const reportLines = reportContent.querySelectorAll('.report-line');
+                                        if (reportLines.length > 0) {
+                                            reportLines.forEach((element, index) => {
+                                                const rect = element.getBoundingClientRect();
+                                                const y = rect.top + iframeWindow.pageYOffset;
+                                                
+                                                lineData.push({
+                                                    index: index + 1,
+                                                    top: y - paddingTop,
+                                                    height: rect.height || 20.8,
+                                                    element: element
+                                                });
+                                            });
+                                        } else if (reportContent.tagName === 'PRE') {
+                                            // PRE 標籤的處理保持不變
                                             const lines = reportContent.textContent.split('\n');
                                             let currentTop = paddingTop;
                                             const lineHeight = 20.8;
@@ -1658,13 +1673,16 @@
                                                 currentTop += lineHeight;
                                             });
                                         } else {
-                                            const allElements = reportContent.querySelectorAll('.report-line');
+                                            // 處理其他元素，但排除容器本身
+                                            const allElements = reportContent.querySelectorAll('*');
                                             let currentLine = 1;
                                             let lastY = -999;
-
+                                            
                                             allElements.forEach(element => {
-                                                // 跳過容器元素本身
-                                                if (element === reportContent) {
+                                                // 重要：跳過容器元素本身和其直接 wrapper
+                                                if (element === reportContent || 
+                                                    element.id === 'reportContent' ||
+                                                    element.classList.contains('panel-content')) {
                                                     return;
                                                 }
                                                 
@@ -1673,9 +1691,15 @@
                                                     return;
                                                 }
                                                 
+                                                // 只處理有實際內容的元素
                                                 const text = element.textContent.trim();
                                                 if (text.length === 0 && element.tagName !== 'BR') {
                                                     return;
+                                                }
+                                                
+                                                // 確保不是父容器的重複內容
+                                                if (element.children.length > 1) {
+                                                    return; // 跳過有多個子元素的容器
                                                 }
                                                 
                                                 const rect = element.getBoundingClientRect();
@@ -1694,6 +1718,7 @@
                                             });
                                         }
                                         
+                                        // 確保至少有一行
                                         if (lineData.length === 0) {
                                             lineData.push({
                                                 index: 1,
@@ -1964,11 +1989,20 @@
                                             // 找出滑鼠所在的行
                                             let targetLine = null;
                                             let minDistance = Infinity;
-                                            
+
                                             for (let i = 0; i < lineData.length; i++) {
                                                 const data = lineData[i];
-                                                // lineData.top 是相對於文檔的，所以直接比較
-                                                const lineCenter = data.top + data.height / 2;
+                                                const lineTop = data.top;
+                                                const lineBottom = lineTop + data.height;
+                                                
+                                                // 檢查滑鼠是否在行的範圍內
+                                                if (mouseYInDocument >= lineTop && mouseYInDocument <= lineBottom) {
+                                                    targetLine = data.index;
+                                                    break;
+                                                }
+                                                
+                                                // 計算到行中心的距離（備用方案）
+                                                const lineCenter = lineTop + data.height / 2;
                                                 const distance = Math.abs(mouseYInDocument - lineCenter);
                                                 
                                                 if (distance < minDistance) {
@@ -3248,6 +3282,12 @@
                         const lineNumbers = document.getElementById(`${panel}LineNumbers`);
                         if (lineNumbers && lineNumbers.className === 'analysis-line-numbers') {
                             const lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="${line}"]`);
+                            // 如果找不到（例如 line 是 0 或無效值），默認使用第一行
+                            if (!lineElement) {
+                                console.log(`F2: 找不到行號 ${line}，使用第一行`);
+                                lineElement = lineNumbers.querySelector(`.analysis-line-number[data-line="1"]`);
+                                line = 1;  // 更新行號為 1
+                            }
                             if (lineElement) {
                                 if (!lineElement.getAttribute('data-panel')) {
                                     lineElement.setAttribute('data-panel', panel);
