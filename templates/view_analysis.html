@@ -1658,11 +1658,16 @@
                                                 currentTop += lineHeight;
                                             });
                                         } else {
-                                            const allElements = reportContent.querySelectorAll('*');
+                                            const allElements = reportContent.querySelectorAll('.report-line');
                                             let currentLine = 1;
                                             let lastY = -999;
-                                            
+
                                             allElements.forEach(element => {
+                                                // 跳過容器元素本身
+                                                if (element === reportContent) {
+                                                    return;
+                                                }
+                                                
                                                 const style = iframeWindow.getComputedStyle(element);
                                                 if (style.display === 'none' || style.visibility === 'hidden') {
                                                     return;
