@@ -1792,6 +1792,13 @@
                                             const lastLine = lineData[lineData.length - 1];
                                             const totalHeight = lastLine.top + lastLine.height + 40;
                                             lineNumbersContent.style.height = totalHeight + 'px';
+                                            lineData.push({
+                                                index: lineData.length + 1,
+                                                top: lastLine.top + lastLine.height,
+                                                height: 20.8,  // 標準行高
+                                                element: null,
+                                                isVirtual: true  // 標記為虛擬行
+                                            });                                            
                                         }
                                         
                                         return lineData.length;
@@ -1949,12 +1956,12 @@
                                         }
                                         
                                         if (targetLine) {
-                                            console.log('Mouse Track Debug:', {
+                                            /*console.log('Mouse Track Debug:', {
                                                 targetLine: targetLine,
                                                 y: y,
                                                 scrollTop: scrollTop,
                                                 計算的y: `${e.clientY} - ${rect.top} + ${scrollTop} - 20 = ${y}`
-                                            });                                            
+                                            });*/                                            
                                             window.currentFocusedLine = targetLine;
                                             window.currentFocusedPanel = panel;
                                             window.currentFocusedLineSource = 'content';  // 標記來源                                            
@@ -2116,14 +2123,14 @@
                                                     
                                                     window.currentFocusedLine = targetLine;
                                                     window.currentFocusedPanel = panel;
-                                                    console.log('Hover Debug:', {
+                                                    /*console.log('Hover Debug:', {
                                                         mouseYInDocument: mouseYInDocument,
                                                         currentScrollTop: currentScrollTop,
                                                         clientY: e.clientY,
                                                         targetLine: targetLine,
                                                         lineDataLength: lineData.length,
                                                         最後一行數據: lineData[lineData.length - 1]
-                                                    });                                                    
+                                                    });*/                                                    
                                                 }
                                             }, 10); // 10ms 的防抖動延遲
                                         });
