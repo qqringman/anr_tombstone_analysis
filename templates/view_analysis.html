@@ -2004,9 +2004,11 @@
                                             }
                                             
                                             /* 只有 report-line 接收滑鼠事件 */
+                                            /* 使用 CSS 確保只有一行有 hover 效果 */
                                             .report-line {
                                                 pointer-events: auto !important;
                                                 position: relative;
+                                                isolation: isolate;
                                             }
                                             
                                             /* report-line 的子元素預設不接收事件 */
@@ -2026,9 +2028,16 @@
                                             }
                                             
                                             /* 只有特定類別有 hover 效果 */
+                                            /* 確保 hover 效果不會疊加 */
                                             .report-line.report-line-hover {
                                                 background-color: rgba(45, 90, 142, 0.3) !important;
+                                                z-index: 1;
                                             }
+
+                                            /* 防止多行同時 hover */
+                                            .report-line-hover ~ .report-line-hover {
+                                                background-color: transparent !important;
+                                            }                                            
                                         `;
                                         iframeDoc.head.appendChild(hoverStyle);
                                         
