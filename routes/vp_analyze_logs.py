@@ -7785,20 +7785,24 @@ class LogAnalyzerSystem:
             }}
             
             :root {{
-                --bg-primary: #0d1117;
-                --bg-secondary: #161b22;
-                --bg-hover: #1f2937;
-                --bg-header: #010409;
-                --bg-item: #1c2128;
-                --text-primary: #f0f6fc;
-                --text-secondary: #8b949e;
-                --text-muted: #6e7681;
-                --border: #30363d;
-                --border-light: #21262d;
-                --accent: #58a6ff;
-                --accent-hover: #79c0ff;
-                --anr-color: #f97316;
-                --tombstone-color: #a855f7;
+                --bg-primary: #1e1e1e;        /* VS Code 風格的深灰 */
+                --bg-secondary: #252525;      
+                --bg-hover: #2d2d2d;          
+                --bg-header: #181818;         /* 低調的深灰 */
+                --bg-item: #232323;           
+                --text-primary: #cccccc;      /* 柔和的灰白 */
+                --text-secondary: #999999;    /* 中性灰 */
+                --text-muted: #666666;        
+                --border: #333333;            /* 簡單的灰色邊框 */
+                --border-light: #404040;      
+                --accent: #4fc3f7;            /* 天藍色 */
+                --accent-hover: #81d4fa;      
+                --anr-color: #ffab91;         /* 柔和的珊瑚色 */
+                --tombstone-color: #ce93d8;   /* 柔和的紫 */
+                
+                /* 額外的層次 */
+                --bg-elevated: #1c1f26;       /* 提升的元素 */
+                --bg-overlay: rgba(22, 27, 34, 0.9);  /* 覆蓋層 */
                 --shadow: 0 0 0 1px rgba(48, 54, 61, 0.5);
                 --shadow-hover: 0 0 0 1px rgba(88, 166, 255, 0.5);
                 --radius: 10px;
@@ -7808,24 +7812,31 @@ class LogAnalyzerSystem:
             
             /* Light theme */
             :root.light-theme {{
-                --bg-primary: #ffffff;
-                --bg-secondary: #f6f8fa;
-                --bg-hover: #f3f4f6;
-                --bg-header: #ffffff;
-                --bg-item: #fafbfc;
-                --text-primary: #24292f;
-                --text-secondary: #57606a;
-                --text-muted: #8c959f;
-                --border: #d0d7de;
-                --border-light: #e2e8f0;
-                --accent: #0969da;
-                --accent-hover: #0860ca;
-                --anr-color: #ea580c;
-                --tombstone-color: #9333ea;
+                --bg-primary: #ffffff;        
+                --bg-secondary: #fafafa;      /* 幾乎看不出的灰 */
+                --bg-hover: #f5f5f5;          
+                --bg-header: #fcfcfc;         /* 極淺 */
+                --bg-item: #ffffff;           
+                --text-primary: #212121;      /* 深灰而非純黑 */
+                --text-secondary: #757575;    
+                --text-muted: #bdbdbd;        
+                --border: #e0e0e0;            /* 優雅的淺灰線 */
+                --border-light: #eeeeee;      
+                --accent: #039be5;            /* 清新藍 */
+                --accent-hover: #0288d1;      
+                --anr-color: #ff8a65;         
+                --tombstone-color: #ab47bc;  
+                
+                /* 額外的層次 */
+                --bg-elevated: #ffffff;       
+                --bg-overlay: rgba(255, 255, 255, 0.95);
                 --shadow: 0 0 0 1px rgba(208, 215, 222, 0.5);
-                --shadow-hover: 0 0 0 1px rgba(9, 105, 218, 0.5);
+                --shadow-hover: 0 0 0 1px rgba(9, 105, 218, 0.3);
+                --radius: 10px;
+                --header-height: 60px;
+                --footer-height: 60px;                
             }}
-            
+                        
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
                 background: var(--bg-primary);
@@ -8141,18 +8152,26 @@ class LogAnalyzerSystem:
             /* Table Header */
             .table-header {{
                 background: var(--bg-header);
-                border-bottom: 2px solid var(--border);
-                padding: 16px 20px;
-                font-weight: 600;
-                font-size: 14px;
+                border-bottom: 1px solid var(--border);
+                padding: 12px 20px;
+                font-weight: 450;  /* 比 500 更細一點 */
+                font-size: 12.5px;
                 color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+                letter-spacing: 0.3px;
                 display: flex;
                 align-items: center;
-                gap: 12px;
+                gap: 10px;
+                backdrop-filter: blur(10px);  /* 添加模糊效果 */
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             }}
-            
+
+            /* 滑鼠懸停效果 */
+            .table-header:hover {{
+                background: var(--bg-hover);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
+
             /* File Item */
             .file-item {{
                 background: var(--bg-item);
