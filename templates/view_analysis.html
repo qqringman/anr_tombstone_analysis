@@ -1638,6 +1638,7 @@
                                     const measureActualLines = function() {
                                         const reportContent = iframeDoc.querySelector('.report-content') || 
                                                             iframeDoc.querySelector('.left-panel') ||
+                                                            iframeDoc.querySelector('#reportContent') ||
                                                             iframeDoc.querySelector('pre') ||
                                                             iframeDoc.body;
                                         
@@ -1995,24 +1996,39 @@
                                         // 注入 hover 樣式
                                         const hoverStyle = iframeDoc.createElement('style');
                                         hoverStyle.textContent = `
-                                            .report-line-hover {
-                                                background-color: rgba(45, 90, 142, 0.3) !important;
+                                            /* 讓容器不接收滑鼠事件 */
+                                            #reportContent,
+                                            .panel-content,
+                                            .left-panel {
+                                                pointer-events: none !important;
+                                            }
+                                            
+                                            /* 只有 report-line 接收滑鼠事件 */
+                                            .report-line {
+                                                pointer-events: auto !important;
                                                 position: relative;
                                             }
-                                            .report-line-hover::before {
-                                                content: '';
-                                                position: absolute;
-                                                left: -1000px;
-                                                right: -1000px;
-                                                top: 0;
-                                                bottom: 0;
-                                                background-color: rgba(45, 90, 142, 0.3);
-                                                z-index: -1;
+                                            
+                                            /* report-line 的子元素預設不接收事件 */
+                                            .report-line * {
+                                                pointer-events: none !important;
                                             }
-                                            .line-hover {
+                                            
+                                            /* 但連結和按鈕可以接收事件 */
+                                            .report-line a,
+                                            .report-line button {
+                                                pointer-events: auto !important;
+                                            }
+                                            
+                                            /* 移除所有預設 hover */
+                                            *:hover {
+                                                background: inherit !important;
+                                            }
+                                            
+                                            /* 只有特定類別有 hover 效果 */
+                                            .report-line.report-line-hover {
                                                 background-color: rgba(45, 90, 142, 0.3) !important;
-                                                transition: background-color 0.2s ease;
-                                            }                                                
+                                            }
                                         `;
                                         iframeDoc.head.appendChild(hoverStyle);
                                         
@@ -2036,7 +2052,24 @@
                                             hoverTimeout = setTimeout(() => {
                                                 const lineData = window[`${panel}LineData`];
                                                 if (!lineData || lineData.length === 0) return;
+
+                                                // 獲取事件目標
+                                                const target = e.target;
                                                 
+                                                // 檢查是否在 report-line 上（包括其子元素）
+                                                let reportLine = null;
+                                                if (target.classList.contains('report-line')) {
+                                                    reportLine = target;
+                                                } else {
+                                                    // 如果 target 不是 report-line，嘗試找最近的 report-line 父元素
+                                                    reportLine = target.closest('.report-line');
+                                                }
+                                                // 如果找到 report-line，添加 hover 效果
+                                                if (reportLine) {
+                                                    // 添加 hover 類
+                                                    reportLine.classList.add('report-line-hover');
+                                                }
+                                                                                                
                                                 // 獲取當前的滾動位置
                                                 const scrollableElement = getScrollableElement();
                                                 const currentScrollTop = scrollableElement.scrollTop || 0;
