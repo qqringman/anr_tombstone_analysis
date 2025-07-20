@@ -932,7 +932,8 @@
         /* iframe 容器的相對定位 */
         .content-container.analysis-container {
             position: relative;
-        }        
+        }
+
     </style>
     <style>
         /* 內容行樣式 */
@@ -1245,7 +1246,7 @@
             <a href="/view-analysis?path={{ file_path }}&download=true&original=true" class="btn" download>
                 <span>📥</span>
                 <span>下載原始</span>
-            </a>
+            </a>           
         </div>
     </div>
     
@@ -4043,6 +4044,7 @@
                 };
                 this.selectedText = '';
                 this.selectedRange = null;
+                this.hideHandler = null;  // 新增這行
                 this.currentPanel = null;
             }
 
@@ -4431,14 +4433,67 @@
                 this.menu.style.top = adjustedY + 'px';
                 this.menu.style.visibility = 'visible'; // 顯示選單
                 
-                // 點擊其他地方關閉選單
+                // 移除之前的事件監聽器（如果存在）
+                if (this.hideHandler) {
+                    document.removeEventListener('click', this.hideHandler);
+                    document.removeEventListener('contextmenu', this.hideHandler);
+                }
+                
+                // 創建新的隱藏處理器
+                this.hideHandler = (e) => {
+                    // 檢查點擊是否在選單內
+                    if (!this.menu.contains(e.target)) {
+                        this.hide();
+                        // 移除事件監聽器
+                        document.removeEventListener('click', this.hideHandler);
+                        document.removeEventListener('contextmenu', this.hideHandler);
+                        this.hideHandler = null;
+                    }
+                };
+                
+                // 延遲添加事件監聽器，避免立即觸發
                 setTimeout(() => {
-                    document.addEventListener('click', () => this.hide(), { once: true });
-                }, 0);
+                    document.addEventListener('click', this.hideHandler);
+                    document.addEventListener('contextmenu', this.hideHandler);
+                    
+                    // 特別處理 iframe 內的點擊事件
+                    const iframes = document.querySelectorAll('iframe');
+                    iframes.forEach(iframe => {
+                        try {
+                            if (iframe.contentDocument) {
+                                iframe.contentDocument.addEventListener('click', this.hideHandler);
+                                iframe.contentDocument.addEventListener('contextmenu', this.hideHandler);
+                            }
+                        } catch (e) {
+                            console.log('無法綁定 iframe 事件');
+                        }
+                    });
+                }, 10);
             }
 
             hide() {
                 this.menu.style.display = 'none';
+                
+                // 清理所有事件監聽器
+                if (this.hideHandler) {
+                    document.removeEventListener('click', this.hideHandler);
+                    document.removeEventListener('contextmenu', this.hideHandler);
+                    
+                    // 清理 iframe 的事件監聽器
+                    const iframes = document.querySelectorAll('iframe');
+                    iframes.forEach(iframe => {
+                        try {
+                            if (iframe.contentDocument) {
+                                iframe.contentDocument.removeEventListener('click', this.hideHandler);
+                                iframe.contentDocument.removeEventListener('contextmenu', this.hideHandler);
+                            }
+                        } catch (e) {
+                            // 忽略錯誤
+                        }
+                    });
+                    
+                    this.hideHandler = null;
+                }
             }
 
             copyText() {
@@ -4797,7 +4852,8 @@
             }
             
             document.body.removeChild(textarea);
-        }        
+        }
+        
     </script>  
 </body>
 </html>
