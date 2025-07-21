@@ -7253,7 +7253,7 @@ class LogAnalyzerSystem:
                 gap: 12px;
                 cursor: pointer;
                 user-select: none;
-                transition: background 0.2s ease;
+                transition: var(--transition);
             }
             
             .folder-header:hover {
@@ -7785,29 +7785,19 @@ class LogAnalyzerSystem:
             }}
             
             :root {{
-                --bg-primary: #1e1e1e;        /* VS Code 風格的深灰 */
-                --bg-secondary: #252525;      
-                --bg-hover: #2d2d2d;          
-                --bg-header: #181818;         /* 低調的深灰 */
-                --bg-item: #232323;           
-                --text-primary: #cccccc;      /* 柔和的灰白 */
-                --text-secondary: #999999;    /* 中性灰 */
-                --text-muted: #666666;        
-                --border: #333333;            /* 簡單的灰色邊框 */
-                --border-light: #404040;      
-                --accent: #4fc3f7;            /* 天藍色 */
-                --accent-hover: #81d4fa;      
-                --anr-color: #ffab91;         /* 柔和的珊瑚色 */
-                --tombstone-color: #ce93d8;   /* 柔和的紫 */
-                
-                /* 額外的層次 */
-                --bg-elevated: #1c1f26;       /* 提升的元素 */
-                --bg-overlay: rgba(22, 27, 34, 0.9);  /* 覆蓋層 */
-                --shadow: 0 0 0 1px rgba(48, 54, 61, 0.5);
-                --shadow-hover: 0 0 0 1px rgba(88, 166, 255, 0.5);
-                --radius: 10px;
-                --header-height: 60px;
-                --footer-height: 60px;
+                --bg-primary: #212121;
+                --bg-secondary: #2a2a2a;
+                --bg-hover: #343434;
+                --text-primary: #ececec;
+                --text-secondary: #a0a0a0;
+                --text-muted: #6e6e6e;
+                --border: #424242;
+                --accent: #10a37f;
+                --accent-hover: #0e8e6f;
+                --anr-color: #ff9800;        /* 改為橘色，更柔和 */
+                --tombstone-color: #ab47bc;
+                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                --radius: 8px;
             }}
             
             /* Light theme */
@@ -8285,11 +8275,10 @@ class LogAnalyzerSystem:
                 padding: 16px 20px;
                 display: flex;
                 align-items: center;
-                gap: 16px;
+                gap: 12px;
                 cursor: pointer;
                 user-select: none;
-                transition: all 0.2s ease;
-                background: var(--bg-secondary);
+                transition: background 0.2s ease;
             }}
             
             .folder-header:hover {{
@@ -8329,7 +8318,7 @@ class LogAnalyzerSystem:
             }}
             
             .folder-content {{
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.2);
             }}
             
             .light-theme .folder-content {{
@@ -8469,7 +8458,7 @@ class LogAnalyzerSystem:
             }}
             
             .group-content {{
-                background: rgba(0, 0, 0, 0.05);
+                background: rgba(0, 0, 0, 0.2);
                 max-height: 2000px;
                 overflow: hidden;
                 transition: max-height 0.3s ease;
@@ -8716,16 +8705,15 @@ class LogAnalyzerSystem:
             .search-box {{
                 position: relative;
                 width: 100%;
-                background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(88, 166, 255, 0.05) 100%);
-                border: 1px solid rgba(88, 166, 255, 0.3);
+                border: 1px solid rgba(16, 163, 127, 0.2);
                 border-radius: 12px;
                 transition: all 0.3s ease;
                 overflow: hidden;
             }}
 
             .search-box:hover {{
-                border-color: rgba(88, 166, 255, 0.5);
-                box-shadow: 0 0 20px rgba(88, 166, 255, 0.1);
+                border-color: rgba(14, 142, 111, 0.5);
+                box-shadow: 0 0 20px rgba(16, 163, 127, 0.1);
             }}
 
             .search-box:focus-within {{
@@ -8938,7 +8926,7 @@ class LogAnalyzerSystem:
                 gap: 16px;
                 cursor: pointer;
                 user-select: none;
-                transition: all 0.2s ease;
+                transition: background 0.2s ease;
                 position: relative;
                 overflow: hidden;
             }}
