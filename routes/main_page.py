@@ -223,7 +223,11 @@ HTML_TEMPLATE = r'''
         cursor: pointer;
         font-size: 16px;
         font-weight: 600;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;  /* 移除 auto margin */
     }
 
     /* 查看已有分析結果的按鈕 */
@@ -287,6 +291,71 @@ HTML_TEMPLATE = r'''
         padding: 2px 6px;
         border-radius: 3px;
         font-size: 13px;
+    }
+
+    .export-all-excel-with-update-btn {
+        background: #ffc107;
+        color: #212529;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;  /* 移除 auto margin */
+    }
+
+    .export-all-excel-with-update-btn:hover {
+        background: #e0a800;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+    }
+
+    /* 強調動畫 */
+    @keyframes highlightPulse {
+        0% {
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+        }
+        50% {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(23, 162, 184, 0.6);
+        }
+        100% {
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+        }
+    }
+
+    .export-all-excel-btn.highlight {
+        animation: highlightPulse 0.6s ease-in-out 2;
+    }
+
+    /* 更新資訊樣式 */
+    .update-info {
+        color: #28a745;
+        font-weight: 600;
+        margin-left: 10px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .update-info.show {
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .export-all-excel-btn,
+        .export-all-excel-with-update-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
     }
 
     .export-csv-btn {
@@ -603,7 +672,8 @@ HTML_TEMPLATE = r'''
         gap: 10px;
         margin-top: 20px;
         margin-bottom: 5px;
-        flex-wrap: wrap;  /* 允許換行 */
+        flex-wrap: wrap;
+        align-items: center;  /* 垂直居中對齊 */
     }
 
     button {
@@ -1588,14 +1658,16 @@ HTML_TEMPLATE = r'''
             </small>                
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
-                <button onclick="exportResults('json')" id="exportJsonBtn" disabled>匯出 JSON</button>
+                <!--<button onclick="exportResults('json')" id="exportJsonBtn" disabled>匯出 JSON</button>-->
                 <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
                 <button onclick="exportAllExcel()" id="exportAllExcelBtn" class="export-all-excel-btn" style="display: none;">📥 匯出全部 (歷史) Excel</button>
+                <button onclick="exportAllExcelWithUpdate()" id="exportAllExcelWithUpdateBtn" class="export-all-excel-with-update-btn" style="display: none;">📥 匯出全部 (歷史) 並更新 Excel</button>
             </div>
             <!-- 顯示找到的 all_anr_tombstone_result.xlsx 路徑 -->
             <div id="allExcelPathInfo" class="file-path-info" style="display: none;">
                 <span style="color: #dc3545;">找不到</span> <code id="allExcelPath"></code>
-            </div>         
+                <span id="updateInfo" class="update-info"></span>
+            </div>       
             <div class="loading" id="loading">
                 正在分析中
             </div>
@@ -2592,23 +2664,25 @@ HTML_TEMPLATE = r'''
             });
         }
 
-        // 匯出全部 Excel
-        async function exportAllExcel() {
+        // 匯出全部 Excel 並更新
+        async function exportAllExcelWithUpdate() {
             if (!window.allExcelPath) {
                 showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
                 return;
             }
             
-            const exportBtn = document.getElementById('exportAllExcelBtn');
+            const exportBtn = document.getElementById('exportAllExcelWithUpdateBtn');
+            const exportAllBtn = document.getElementById('exportAllExcelBtn');
             if (!exportBtn) return;
             
             exportBtn.disabled = true;
-            exportBtn.textContent = '匯出中...';
+            exportBtn.textContent = '匯出並更新中...';
             
             try {
                 // 準備請求數據
                 const requestData = {
-                    all_excel_path: window.allExcelPath
+                    all_excel_path: window.allExcelPath,
+                    include_current: false  // 預設不包含當前
                 };
                 
                 // 如果有當前新的分析結果（且尚未包含在 all_excel 中）
@@ -2653,6 +2727,7 @@ HTML_TEMPLATE = r'''
                     
                     const includesCurrent = response.headers.get('X-Includes-Current') === 'true';
                     const originalUpdated = response.headers.get('X-Original-Updated') === 'true';
+                    const recordsAdded = response.headers.get('X-Records-Added') || '0';
                     
                     let message = '';
                     if (includesCurrent && originalUpdated) {
@@ -2660,14 +2735,119 @@ HTML_TEMPLATE = r'''
                                 `匯出檔案：${filename}<br>` +
                                 `原始 all_anr_tombstone_result.xlsx 也已更新`;
                         window.currentAnalysisExported = true;
+                        
+                        // 淡出並隱藏更新按鈕
+                        exportBtn.style.transition = 'opacity 0.3s ease';
+                        exportBtn.style.opacity = '0';
+                        setTimeout(() => {
+                            exportBtn.style.display = 'none';
+                            exportBtn.style.opacity = '1';  // 重置以便下次使用
+                        }, 300);
+                        
+                        // 為「匯出全部 (歷史) Excel」按鈕添加動畫
+                        if (exportAllBtn) {
+                            exportAllBtn.classList.add('highlight');
+                            setTimeout(() => {
+                                exportAllBtn.classList.remove('highlight');
+                            }, 1200);  // 動畫持續 0.6s * 2 = 1.2s
+                        }
+                        
+                        // 更新資訊欄
+                        const updateInfo = document.getElementById('updateInfo');
+                        if (updateInfo) {
+                            updateInfo.textContent = `已更新 ${recordsAdded} 筆資料到 all_anr_tombstone_result.xlsx`;
+                            updateInfo.classList.add('show');
+                            
+                            // 5秒後淡出
+                            setTimeout(() => {
+                                updateInfo.classList.remove('show');
+                                setTimeout(() => {
+                                    updateInfo.textContent = '';
+                                }, 300);
+                            }, 5000);
+                        }
                     } else if (includesCurrent) {
                         message = '已匯出全部 Excel（包含本次分析結果）';
                         window.currentAnalysisExported = true;
+                        
+                        // 淡出並隱藏更新按鈕
+                        exportBtn.style.transition = 'opacity 0.3s ease';
+                        exportBtn.style.opacity = '0';
+                        setTimeout(() => {
+                            exportBtn.style.display = 'none';
+                            exportBtn.style.opacity = '1';
+                        }, 300);
                     } else {
-                        message = '已匯出歷史 Excel 資料';
+                        message = '已匯出歷史 Excel 資料（無新資料需要更新）';
                     }
                     
                     showMessage(message, 'success');
+                    
+                } else {
+                    const error = await response.text();
+                    try {
+                        const errorData = JSON.parse(error);
+                        showMessage('匯出失敗: ' + (errorData.error || '未知錯誤'), 'error');
+                    } catch {
+                        showMessage('匯出失敗: ' + error, 'error');
+                    }
+                }
+            } catch (error) {
+                showMessage('匯出失敗: ' + error.message, 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '📥 匯出全部 (歷史) 並更新 Excel';
+            }
+        }
+
+        // 匯出全部 Excel
+        async function exportAllExcel() {
+            if (!window.allExcelPath) {
+                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
+                return;
+            }
+            
+            const exportBtn = document.getElementById('exportAllExcelBtn');
+            if (!exportBtn) return;
+            
+            exportBtn.disabled = true;
+            exportBtn.textContent = '匯出中...';
+            
+            try {
+                // 只匯出現有的檔案，不做任何更新
+                const response = await fetch('/export-all-history-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        all_excel_path: window.allExcelPath,
+                        include_current: false  // 不包含當前分析結果
+                    })
+                });
+                
+                if (response.ok) {
+                    // 下載檔案
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 從 header 獲取檔名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'all_anr_tombstone_result.xlsx';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    showMessage('已匯出歷史 Excel 資料', 'success');
                     
                 } else {
                     const error = await response.text();
@@ -2761,6 +2941,12 @@ HTML_TEMPLATE = r'''
                                 exportAllExcelBtn.style.display = 'inline-flex';
                             }
                             
+                            // 如果有新的分析結果，也顯示更新按鈕
+                            const exportAllExcelWithUpdateBtn = document.getElementById('exportAllExcelWithUpdateBtn');
+                            if (exportAllExcelWithUpdateBtn && window.hasCurrentAnalysis && !window.currentAnalysisExported) {
+                                exportAllExcelWithUpdateBtn.style.display = 'inline-flex';
+                            }
+                            
                             // 顯示路徑資訊
                             const allExcelPathInfo = document.getElementById('allExcelPathInfo');
                             if (allExcelPathInfo) {
@@ -2820,6 +3006,10 @@ HTML_TEMPLATE = r'''
             // 先隱藏歷史按鈕，分析完成後再根據結果決定是否顯示
             const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
             if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
+            
+            // 隱藏新的更新按鈕
+            const exportAllExcelWithUpdateBtn = document.getElementById('exportAllExcelWithUpdateBtn');
+            if (exportAllExcelWithUpdateBtn) exportAllExcelWithUpdateBtn.style.display = 'none';
             
             const allExcelPathInfo = document.getElementById('allExcelPathInfo');
             if (allExcelPathInfo) allExcelPathInfo.style.display = 'none';
@@ -2886,6 +3076,12 @@ HTML_TEMPLATE = r'''
                     if (exportAllExcelBtn) {
                         exportAllExcelBtn.style.display = 'inline-flex';
                     }
+                    // 如果有新的分析結果，顯示更新按鈕
+                    if (window.hasCurrentAnalysis && allLogs.length > 0) {
+                        if (exportAllExcelWithUpdateBtn) {
+                            exportAllExcelWithUpdateBtn.style.display = 'inline-flex';
+                        }
+                    }
                     if (allExcelPathInfo) {
                         allExcelPathInfo.style.display = 'block';
                         const allExcelPath = document.getElementById('allExcelPath');
@@ -2898,6 +3094,9 @@ HTML_TEMPLATE = r'''
                 } else {
                     if (exportAllExcelBtn) {
                         exportAllExcelBtn.style.display = 'none';
+                    }
+                    if (exportAllExcelWithUpdateBtn) {
+                        exportAllExcelWithUpdateBtn.style.display = 'none';
                     }
                     if (allExcelPathInfo) {
                         allExcelPathInfo.style.display = 'none';
@@ -5672,6 +5871,7 @@ def export_all_history_excel():
         ws = wb.active
         
         includes_current = False
+        records_added = 0  # 新增的記錄數
         
         # 如果需要包含當前分析結果
         if include_current and data.get('current_data'):
@@ -5758,6 +5958,7 @@ def export_all_history_excel():
                             cell.fill = tombstone_fill
                 
                 sn += 1
+                records_added += 1
             
             includes_current = True
         
@@ -5766,6 +5967,7 @@ def export_all_history_excel():
             try:
                 wb.save(all_excel_path)
                 print(f"Updated original all_anr_tombstone_result.xlsx at: {all_excel_path}")
+                print(f"Added {records_added} new records")
             except Exception as e:
                 print(f"Failed to update original file: {str(e)}")
         
@@ -5787,6 +5989,7 @@ def export_all_history_excel():
         
         response.headers['X-Includes-Current'] = str(includes_current).lower()
         response.headers['X-Original-Updated'] = str(includes_current).lower()
+        response.headers['X-Records-Added'] = str(records_added)
         
         return response
         
