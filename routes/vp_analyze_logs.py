@@ -5646,11 +5646,11 @@ class LogAnalyzerSystem:
                     if len(path_parts) > len(input_parts):
                         # 提取相對路徑的第一個目錄作為問題集
                         relative_parts = path_parts[len(input_parts):]
-                        if relative_parts and relative_parts[0] not in ['.', '..', '', 'anr', 'tombstone', 'tombstones']:
-                            problem_sets.add(relative_parts[0])
+                        if relative_parts and relative_parts[1] not in ['.', '..', '', 'anr', 'tombstone', 'tombstones']:
+                            problem_sets.add(relative_parts[1])
                         elif len(relative_parts) > 1 and relative_parts[1] not in ['.', '..', '']:
                             # 如果第一層是 anr/tombstone，取第二層
-                            problem_sets.add(relative_parts[1])
+                            problem_sets.add(relative_parts[2])
             
             # 收集其他信息
             if report.get('severity'):
