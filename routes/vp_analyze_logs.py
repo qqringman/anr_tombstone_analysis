@@ -7402,7 +7402,7 @@ class LogAnalyzerSystem:
                     
                     # 使用新的查看器，傳遞絕對路徑
                     html_str += f'''
-                    <div class="file-item {file_type}-item">
+                    <div class="file-item {file_type}-item" data-path="{html.escape(analyzed_path)}" title="{html.escape(analyzed_path)}">
                         <a href="/view-analysis?path={html.escape(analyzed_path)}" class="file-link">
                             <div class="file-content">
                                 <span class="file-icon">{icon}</span>
@@ -7417,12 +7417,19 @@ class LogAnalyzerSystem:
                                 </div>
                             </div>
                         </a>
-                        <a href="/view-analysis?path={html.escape(original_path)}.analyzed.html" target="_blank" class="source-link" title="查看原始檔案">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
-                                <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
-                            </svg>
-                        </a>
+                        <div class="file-actions">
+                            <button class="action-icon-btn" onclick="event.stopPropagation(); copyPath(this)" data-path="{html.escape(analyzed_path)}" title="複製檔案路徑">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M6 1.5h7.5a1 1 0 011 1v8.5a1 1 0 01-1 1H6a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                    <path d="M2.5 4.5H3v8.5a1 1 0 001 1h7.5v.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                </svg>
+                            </button>
+                            <a href="/view-analysis?path={html.escape(original_path)}.analyzed.html" target="_blank" class="action-icon-btn" title="查看原始檔案">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M6.5 2.5h-3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M10.5 2.5h3v3M6.5 9.5l7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                                </svg>
+                            </a>
+                        </div>
                     </div>
                     '''
                 elif isinstance(value, dict):
@@ -7730,18 +7737,25 @@ class LogAnalyzerSystem:
                     
                     html_str += f'''
                     <div class="similarity-item">
-                        <div class="report-header" onclick="toggleReport('{report_id}')">
+                        <div class="report-header" onclick="toggleReport('{report_id}')" data-path="{html.escape(report.get('path', ''))}" title="{html.escape(report.get('path', ''))}">
                             <svg class="report-arrow open" id="arrow-{report_id}" width="16" height="16" viewBox="0 0 16 16">
                                 <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                             </svg>
                             <span class="report-icon">📄</span>
                             <span class="report-name">{display_name}</span>
-                            <a href="{view_link}" target="_blank" class="source-link" title="在新視窗開啟" onclick="event.stopPropagation();">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                    <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" fill="currentColor"/>
-                                    <path d="M3.5 6.75v7.5c0 .414.336.75.75.75h7.5a.75.75 0 00.75-.75v-7.5a.75.75 0 00-1.5 0v6.75h-6v-6.75a.75.75 0 00-1.5 0z" fill="currentColor"/>
-                                </svg>
-                            </a>
+                            <div class="file-actions">
+                                <button class="action-icon-btn" onclick="event.stopPropagation(); copyPath(this)" data-path="{html.escape(report.get('path', ''))}" title="複製檔案路徑">
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                            <path d="M5.5 2.5h7a1 1 0 011 1v9a1 1 0 01-1 1h-7a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                            <path d="M2.5 5.5v8a1 1 0 001 1h6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                        </svg>
+                                </button>
+                                <a href="{view_link}" target="_blank" class="action-icon-btn" title="在新視窗開啟" onclick="event.stopPropagation();">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M6.5 2.5h-3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M10.5 2.5h3v3M6.5 9.5l7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                                    </svg>
+                                </a>
+                            </div>
                         </div>
                         <div class="report-content" id="content-{report_id}" style="display: block;">
                             <iframe src="{iframe_src}" 
@@ -8482,7 +8496,7 @@ class LogAnalyzerSystem:
             
             .similarity-item:hover {{
                 background: linear-gradient(135deg, rgba(88, 166, 255, 0.05) 0%, rgba(88, 166, 255, 0.02) 100%);
-                transform: translateX(4px);
+                transform: translateX(4px) translateZ(0);
             }}
             
             .report-header {{
@@ -8686,11 +8700,12 @@ class LogAnalyzerSystem:
 
             .similarity-item:hover .source-link {{
                 opacity: 1;
+                background: transparent;
             }}
 
             .similarity-item .source-link:hover {{
                 color: var(--accent);
-                background: var(--bg-hover);
+                background: var(--bg-primary);
             }}
 
             /* 搜尋框樣式 */
@@ -9892,6 +9907,198 @@ class LogAnalyzerSystem:
                 display: inline-flex;
                 align-items: center;
                 height: 28px;  /* 統一高度 */
+            }}
+
+            /* 複製路徑按鈕樣式 */
+            .copy-path-btn {{
+                position: absolute;
+                right: 50px;  /* 因為有 source-link 在右邊 20px */
+                top: 50%;
+                transform: translateY(-50%);
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 6px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                opacity: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+
+            .file-item:hover .copy-path-btn,
+            .similarity-item:hover .copy-path-btn {{
+                opacity: 1;
+            }}
+
+            .copy-path-btn:hover {{
+                background: var(--bg-hover);
+                color: var(--accent);
+                border-color: var(--accent);
+            }}
+
+            .copy-path-btn.copied {{
+                background: #10b981;
+                color: white;
+                border-color: #10b981;
+            }}
+
+            /* 調整 report-header 的樣式以容納複製按鈕 */
+            .similarity-item .report-header {{
+                padding: 16px 90px 16px 48px; /* 右邊留更多空間 */
+            }}
+
+            /* 複製路徑按鈕在 report-header 中的位置 */
+            .report-header .copy-path-btn {{
+                right: 50px;
+            }}
+
+            /* 原本的查看連結位置 */
+            .similarity-item .source-link {{
+                right: 20px;
+            }}
+
+            /* 檔案操作按鈕容器 */
+            .file-actions {{
+                position: absolute;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                display: flex;
+                gap: 8px;  /* 按鈕之間的間距 */
+                opacity: 0;
+                transition: opacity 0.2s ease;
+            }}
+
+            /* 顯示按鈕 */
+            .file-item:hover .file-actions,
+            .similarity-item:hover .file-actions {{
+                opacity: 1;
+            }}
+
+            /* 統一的按鈕樣式 */
+            .action-icon-btn {{
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 6px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                text-decoration: none;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }}
+
+            /* SVG 圖標樣式 */
+            .action-icon-btn svg {{
+                width: 16px;
+                height: 16px;
+                shape-rendering: geometricPrecision;
+                -webkit-backface-visibility: hidden;
+                backface-visibility: hidden;
+                transform: translateZ(0);                
+            }}
+
+            /* 懸停效果 */
+            .action-icon-btn:hover {{
+                background: var(--bg-hover);
+                color: var(--accent);
+                border-color: var(--accent);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(88, 166, 255, 0.2);
+            }}
+
+            /* 點擊效果 */
+            .action-icon-btn:active {{
+                transform: translateY(0);
+            }}
+
+            /* 複製成功狀態 */
+            .action-icon-btn.copied {{
+                background: #10b981;
+                color: white;
+                border-color: #10b981;
+                box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+            }}
+
+            /* 調整 report-header 的內邊距以容納按鈕 */
+            .similarity-item .report-header {{
+                padding: 16px 120px 16px 48px; /* 右邊留更多空間給兩個按鈕 */
+            }}
+
+            /* 檔案項目調整 */
+            .file-item {{
+                position: relative;
+            }}
+
+            /* 移除舊的樣式 */
+            .copy-path-btn,
+            .source-link {{
+                /* 這些樣式已經不需要了 */
+            }}
+
+            /* Light theme 調整 */
+            .light-theme .action-icon-btn {{
+                background: #ffffff;
+                border-color: #e5e5e5;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }}
+
+            .light-theme .action-icon-btn:hover {{
+                background: #f5f5f5;
+                border-color: var(--accent);
+                box-shadow: 0 2px 4px rgba(9, 105, 218, 0.2);
+            }}
+
+            /* 響應式設計 */
+            @media (max-width: 768px) {{
+                .file-actions {{
+                    opacity: 1; /* 在手機上始終顯示 */
+                    gap: 6px;
+                }}
+                
+                .action-icon-btn {{
+                    padding: 5px;
+                }}
+                
+                .similarity-item .report-header {{
+                    padding: 16px 100px 16px 48px;
+                }}
+            }}
+
+            /* 確保在深色主題下圖標顏色正確 */
+            .action-icon-btn svg {{
+                width: 14px;
+                height: 14px;
+            }}
+
+            .action-icon-btn svg path {{
+                fill: currentColor;
+                stroke: currentColor;
+                fill: none;
+                stroke-width: 1.5;
+                vector-effect: non-scaling-stroke; /* 確保線條粗細一致 */                
+            }}
+
+            /* 加入動畫效果 */
+            @keyframes fadeIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(-50%) scale(0.9);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(-50%) scale(1);
+                }}
+            }}
+
+            .file-actions {{
+                animation: fadeIn 0.2s ease-out;
             }}
 
         </style>
@@ -11096,6 +11303,67 @@ class LogAnalyzerSystem:
                 }} catch (err) {{
                     console.error('Fallback 複製失敗:', err);
                     alert('複製失敗，請手動選擇文字複製');
+                }}
+                
+                document.body.removeChild(textArea);
+            }}
+
+            // 複製路徑函數
+            function copyPath(button) {{
+                const path = button.getAttribute('data-path');
+                if (!path) {{
+                    alert('無法獲取檔案路徑');
+                    return;
+                }}
+                
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(path).then(() => {{
+                        // 顯示複製成功
+                        button.classList.add('copied');
+                        const originalTitle = button.title;
+                        button.title = '已複製!';
+                        
+                        setTimeout(() => {{
+                            button.classList.remove('copied');
+                            button.title = originalTitle;
+                        }}, 2000);
+                    }}).catch(err => {{
+                        console.error('複製失敗:', err);
+                        fallbackCopyPath(path, button);
+                    }});
+                }} else {{
+                    fallbackCopyPath(path, button);
+                }}
+            }}
+
+            // Fallback 複製方法
+            function fallbackCopyPath(text, button) {{
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {{
+                    const successful = document.execCommand('copy');
+                    if (successful) {{
+                        button.classList.add('copied');
+                        const originalTitle = button.title;
+                        button.title = '已複製!';
+                        
+                        setTimeout(() => {{
+                            button.classList.remove('copied');
+                            button.title = originalTitle;
+                        }}, 2000);
+                    }} else {{
+                        alert('複製失敗，請手動選擇路徑：' + text);
+                    }}
+                }} catch (err) {{
+                    console.error('Fallback 複製失敗:', err);
+                    alert('複製失敗，請手動選擇路徑：' + text);
                 }}
                 
                 document.body.removeChild(textArea);
