@@ -5549,8 +5549,8 @@ class LogAnalyzerSystem:
             # 轉換為距離矩陣
             tombstone_distance_matrix = 100 - tombstone_similarity_matrix
             
-            # Tombstone 使用較低的閾值（50分）
-            tombstone_clustering = DBSCAN(eps=50, min_samples=1, metric='precomputed')
+            # Tombstone 使用較低的閾值（75分）
+            tombstone_clustering = DBSCAN(eps=25, min_samples=1, metric='precomputed')
             tombstone_labels = tombstone_clustering.fit_predict(tombstone_distance_matrix)
             
             # 組織 tombstone 聚類結果
