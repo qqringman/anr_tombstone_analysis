@@ -4441,20 +4441,21 @@
                 
                 // 創建新的隱藏處理器
                 this.hideHandler = (e) => {
+                    // 如果是右鍵事件，不處理（讓新的右鍵選單可以正常顯示）
+                    if (e.type === 'contextmenu') {
+                        return;
+                    }
+                    
                     // 檢查點擊是否在選單內
                     if (!this.menu.contains(e.target)) {
                         this.hide();
-                        // 移除事件監聽器
-                        document.removeEventListener('click', this.hideHandler);
-                        document.removeEventListener('contextmenu', this.hideHandler);
-                        this.hideHandler = null;
                     }
                 };
                 
                 // 延遲添加事件監聽器，避免立即觸發
                 setTimeout(() => {
                     document.addEventListener('click', this.hideHandler);
-                    document.addEventListener('contextmenu', this.hideHandler);
+                    // 不要監聽 contextmenu 事件，讓右鍵可以正常工作
                     
                     // 特別處理 iframe 內的點擊事件
                     const iframes = document.querySelectorAll('iframe');
@@ -4462,7 +4463,7 @@
                         try {
                             if (iframe.contentDocument) {
                                 iframe.contentDocument.addEventListener('click', this.hideHandler);
-                                iframe.contentDocument.addEventListener('contextmenu', this.hideHandler);
+                                // 同樣不監聽 iframe 的 contextmenu 事件
                             }
                         } catch (e) {
                             console.log('無法綁定 iframe 事件');
@@ -4477,7 +4478,7 @@
                 // 清理所有事件監聽器
                 if (this.hideHandler) {
                     document.removeEventListener('click', this.hideHandler);
-                    document.removeEventListener('contextmenu', this.hideHandler);
+                    // 移除這行：document.removeEventListener('contextmenu', this.hideHandler);
                     
                     // 清理 iframe 的事件監聽器
                     const iframes = document.querySelectorAll('iframe');
@@ -4485,7 +4486,7 @@
                         try {
                             if (iframe.contentDocument) {
                                 iframe.contentDocument.removeEventListener('click', this.hideHandler);
-                                iframe.contentDocument.removeEventListener('contextmenu', this.hideHandler);
+                                // 移除這行：iframe.contentDocument.removeEventListener('contextmenu', this.hideHandler);
                             }
                         } catch (e) {
                             // 忽略錯誤
