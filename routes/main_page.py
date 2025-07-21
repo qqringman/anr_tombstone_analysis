@@ -1658,7 +1658,6 @@ HTML_TEMPLATE = r'''
             </small>                
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
-                <!--<button onclick="exportResults('json')" id="exportJsonBtn" disabled>匯出 JSON</button>-->
                 <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
                 <button onclick="exportAllExcel()" id="exportAllExcelBtn" class="export-all-excel-btn" style="display: none;">📥 匯出全部 (歷史) Excel</button>
                 <button onclick="exportAllExcelWithUpdate()" id="exportAllExcelWithUpdateBtn" class="export-all-excel-with-update-btn" style="display: none;">📥 匯出全部 (歷史) 並更新 Excel</button>
@@ -3114,7 +3113,6 @@ HTML_TEMPLATE = r'''
                 updateResults(data);
                 
                 // Enable export buttons
-                document.getElementById('exportJsonBtn').disabled = false;
                 document.getElementById('exportHtmlBtn').style.display = 'block';
                 
                 let message = `分析完成！共掃描 ${data.total_files} 個檔案，找到 ${data.anr_subject_count} 個包含 ANR 的檔案，找到 ${data.files_with_cmdline - data.anr_subject_count} 個包含 Tombstone 的檔案`;
@@ -3323,13 +3321,7 @@ HTML_TEMPLATE = r'''
             // 只有在有結果時才顯示全局按鈕
             if (data.files_with_cmdline > 0) {
                 showGlobalToggleButton();
-            }
-
-            // 安全地啟用匯出按鈕
-            const exportJsonBtn = document.getElementById('exportJsonBtn');
-            if (exportJsonBtn) {
-                exportJsonBtn.disabled = false;
-            }            
+            }           
         }
 
         // 顯示全局展開/收合按鈕
@@ -4879,101 +4871,7 @@ def export(format, analysis_id):
     if data is None:
         return jsonify({'error': 'Analysis not found or expired'}), 404
 
-    if format == 'json':
-        # Create JSON file
-        output = io.BytesIO()
-        output.write(json.dumps(data, indent=2).encode('utf-8'))
-        output.seek(0)
-        
-        return send_file(
-            output,
-            mimetype='application/json',
-            as_attachment=True,
-            download_name=f'cmdline_analysis_{analysis_id}.json'
-        )
-    
-    elif format == 'csv':
-        # Create CSV file
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # Write summary
-        writer.writerow(['Summary'])
-        writer.writerow(['Total Files Scanned', data['total_files']])
-        writer.writerow(['Files with Cmdline', data['files_with_cmdline']])
-        writer.writerow(['Unique Processes', data['statistics'].get('total_unique_processes', 0)])
-        writer.writerow(['ANR Folders', data['anr_folders']])
-        writer.writerow(['Tombstone Folders', data['tombstone_folders']])
-        writer.writerow(['Analysis Time (seconds)', data.get('analysis_time', 'N/A')])
-        writer.writerow(['Used grep', 'Yes' if data.get('used_grep', False) else 'No'])
-        writer.writerow(['ZIP Files Extracted', data.get('zip_files_extracted', 0)])
-        writer.writerow([])
-        
-        # Write summary by type and process
-        if 'type_process_summary' in data['statistics']:
-            writer.writerow(['Summary by Type and Process'])
-            writer.writerow(['Rank', 'Type', 'Process', 'Count'])
-            for i, item in enumerate(data['statistics']['type_process_summary'], 1):
-                writer.writerow([i, item['type'], item['process'], item['count']])
-            writer.writerow([])
-        
-        # Write file statistics
-        if 'file_statistics' in data:
-            writer.writerow(['File Statistics'])
-            writer.writerow(['Type', 'Filename', 'Folder Path', 'Cmdline Count', 'Processes', 'Timestamp'])
-            for file_stat in data['file_statistics']:
-                writer.writerow([
-                    file_stat['type'],
-                    file_stat['filename'],
-                    file_stat.get('folder_path', '-'),
-                    file_stat['count'],
-                    ', '.join(file_stat['processes']),
-                    file_stat.get('timestamp', '-')
-                ])
-            writer.writerow([])
-        
-        # Write unique processes list
-        if 'unique_processes' in data['statistics']:
-            writer.writerow(['Unique Process Names'])
-            for proc in data['statistics']['unique_processes']:
-                writer.writerow([proc])
-            writer.writerow([])
-        
-        # Write process statistics
-        writer.writerow(['Process Statistics'])
-        writer.writerow(['Process', 'Count'])
-        for process, count in data['statistics']['by_process'].items():
-            writer.writerow([process, count])
-        writer.writerow([])
-        
-                        # Write log data
-        writer.writerow(['Detailed Logs'])
-        writer.writerow(['Row Number', 'Type', 'Process', 'Command Line', 'Line Number', 'Folder Path', 'Timestamp', 'File'])
-        for i, log in enumerate(data['logs'], 1):
-            writer.writerow([
-                i,
-                log['type'],
-                log['process'] or '',
-                log['cmdline'] or '',
-                log.get('line_number', '-'),
-                log.get('folder_path', '-'),
-                log['timestamp'] or '',
-                log['filename']
-            ])
-        
-        # Convert to bytes
-        output_bytes = io.BytesIO()
-        output_bytes.write(output.getvalue().encode('utf-8'))
-        output_bytes.seek(0)
-        
-        return send_file(
-            output_bytes,
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name=f'cmdline_analysis_{analysis_id}.csv'
-        )
-    
-    elif format == 'html':
+    if format == 'html':
         # 從 URL 參數獲取 base_url
         base_url = request.args.get('base_url', '')
         if not base_url:
@@ -5172,11 +5070,14 @@ def export(format, analysis_id):
         output_bytes.write(html_report.encode('utf-8'))
         output_bytes.seek(0)
         
+        # 生成日期字串
+        date_str = datetime.now().strftime('%Y%m%d')
+        
         return send_file(
             output_bytes,
             mimetype='text/html',
             as_attachment=True,
-            download_name=f'cmdline_analysis_{analysis_id}_full.html'
+            download_name=f'{date_str}_anr_tombstone_result.html'
         )
     
     else:
@@ -5315,7 +5216,7 @@ def export_ai_csv():
             sn += 1
         
         # 生成檔名
-        date_str = datetime.now().strftime('%Y_%m_%d')
+        date_str = datetime.now().strftime('%Y%m%d')
         filename = f"{date_str}_anr_tombstone_result.csv"
         
         # 建立 CSV 內容（使用 UTF-8 with BOM）
@@ -5596,7 +5497,7 @@ def export_ai_excel():
         ws.freeze_panes = 'A2'
         
         # 生成檔名
-        date_str = datetime.now().strftime('%Y_%m_%d')
+        date_str = datetime.now().strftime('%Y%m%d')
         filename = f"{date_str}_anr_tombstone_result.xlsx"
         
         # 檢查並處理 all_anr_tombstone_result.xlsx
@@ -5836,7 +5737,7 @@ def export_all_excel_with_current():
         output.seek(0)
         
         # 生成檔名
-        date_str = datetime.now().strftime('%Y_%m_%d')
+        date_str = datetime.now().strftime('%Y%m%d')
         filename = f"all_anr_tombstone_result_{date_str}.xlsx"
         
         return send_file(
