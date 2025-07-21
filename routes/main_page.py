@@ -214,6 +214,46 @@ HTML_TEMPLATE = r'''
         transform: translateY(-2px);
     }
 
+    .merge-excel-btn {
+        position: absolute;
+        top: 30px;
+        right: 290px;  /* 在匯出 Excel 按鈕左邊 */
+        background: #17a2b8;  /* 藍綠色背景 */
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    .merge-excel-btn:hover {
+        background: rgba(23, 162, 184, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
+    @media (max-width: 768px) {
+        .export-html-btn,
+        .export-excel-btn,
+        .merge-excel-btn,
+        .view-existing-analysis-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+        
+        .header-separator {
+            position: static;
+            width: 100%;
+            margin: 10px 0;
+        }
+    }
+
     .export-all-excel-btn {
         background: #17a2b8;
         color: white;
@@ -629,10 +669,16 @@ HTML_TEMPLATE = r'''
         font-size: 14px;
         color: #333;
         transition: background-color 0.2s;
+        white-space: nowrap;        /* 防止折行 */
+        overflow-x: auto;           /* 水平滾動 */
+        text-overflow: ellipsis;    /* 文字過長時顯示省略號 */        
     }
 
     .path-suggestion:hover {
         background-color: #f8f9fa;
+        overflow-x: visible;
+        position: relative;
+        z-index: 10;               
     }
 
     .path-suggestion.selected {
@@ -1600,7 +1646,262 @@ HTML_TEMPLATE = r'''
         bottom: 100%;
         border-color: transparent transparent rgba(0, 0, 0, 0.95) transparent;
     }
-    
+
+    /* 合併 Excel 彈出視窗樣式 */
+    .merge-dialog-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+
+    .merge-dialog {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .merge-dialog-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 25px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .merge-dialog-header h3 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    .merge-dialog-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        font-size: 28px;
+        cursor: pointer;
+        color: white;
+        padding: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s;
+    }
+
+    .merge-dialog-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+    }
+
+    .merge-dialog-body {
+        padding: 25px;
+        flex: 1;
+        overflow-y: auto;
+        background-color: #f0f2f5;
+    }
+
+    /* 拖曳區域樣式 */
+    .merge-drop-zone {
+        border: 3px dashed #e1e4e8;
+        border-radius: 12px;
+        padding: 25px;  /* 從 40px 改為 25px */
+        text-align: center;
+        transition: all 0.3s;
+        background: white;
+        cursor: pointer;
+    }
+
+    .merge-drop-zone:hover {
+        border-color: #667eea;
+        background: #f8f9ff;
+    }
+
+    .merge-drop-zone.drag-over {
+        border-color: #667eea;
+        background: #e8eaf6;
+        transform: scale(1.02);
+    }
+
+    .drop-zone-content {
+        pointer-events: none;
+    }
+
+    .drop-icon {
+        font-size: 36px;  /* 從 48px 改為 36px */
+        margin-bottom: 8px;  /* 從 10px 改為 8px */
+    }
+
+    .drop-zone-hint {
+        color: #999;
+        font-size: 13px;  /* 從 14px 改為 13px */
+        margin: 8px 0;  /* 從 10px 改為 8px */
+    }
+
+    .btn-select-file {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+        pointer-events: auto;
+    }
+
+    .btn-select-file:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    /* 分隔線 */
+    .merge-separator {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+    }
+
+    .merge-separator span {
+        background: #f0f2f5;
+        padding: 0 15px;
+        color: #999;
+        font-size: 14px;
+    }
+
+    .merge-separator::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #e1e4e8;
+        z-index: -1;
+    }
+
+    /* 路徑輸入樣式（複用主介面樣式） */
+    .merge-input-group {
+        position: relative;
+        margin-bottom: 15px;
+    }
+
+    .merge-input-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .merge-input-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e1e4e8;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: border-color 0.3s;
+        background-color: white;
+    }
+
+    .merge-input-group input:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .merge-input-group input.autocomplete-open {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    /* 檔案資訊顯示 */
+    .merge-file-info {
+        background: #d4edda;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #28a745;
+        margin-top: 15px;
+    }
+
+    .file-info-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .merge-file-info code {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 14px;
+        word-break: break-all;
+    }
+
+    .btn-clear {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .btn-clear:hover {
+        background: #c82333;
+    }
+
+    /* 對話框底部 */
+    .merge-dialog-footer {
+        padding: 20px 25px;
+        border-top: 1px solid #e1e4e8;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        background: white;
+        border-radius: 0 0 12px 12px;
+    }
+
+    /* 修改 merge-path-autocomplete 的樣式 */
+    #mergePathAutocomplete {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 2px solid #e1e4e8;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        height: 180px;  /* 固定高度約 5 行 */
+        overflow-y: auto;
+        overflow-x: auto;           /* 添加水平滾動 */        
+        display: none;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .btn-select-file:focus {
+        outline: 2px solid #667eea;
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
     </style>      
 </head>
 <body>
@@ -1609,6 +1910,7 @@ HTML_TEMPLATE = r'''
             <h1>Android ANR/Tombstone Analyzer</h1>
             <p>分析 anr/ 和 tombstones/ 資料夾中的 Cmd line: / Cmdline: 統計資訊</p>
             <button class="export-excel-btn" id="exportExcelBtn" onclick="exportAIResults()" style="display: none;">匯出 Excel</button>
+            <button class="merge-excel-btn" id="mergeExcelBtn" onclick="openMergeDialog()" style="display: none;">合併 Excel</button>
             <button class="export-html-btn" id="exportHtmlBtn" onclick="exportResults('html')">匯出 HTML</button>
             <div class="header-separator" id="headerSeparator"></div>
         </div>
@@ -1659,14 +1961,7 @@ HTML_TEMPLATE = r'''
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
                 <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
-                <button onclick="exportAllExcel()" id="exportAllExcelBtn" class="export-all-excel-btn" style="display: none;">📥 匯出全部 (歷史) Excel</button>
-                <button onclick="exportAllExcelWithUpdate()" id="exportAllExcelWithUpdateBtn" class="export-all-excel-with-update-btn" style="display: none;">📥 匯出全部 (歷史) 並更新 Excel</button>
-            </div>
-            <!-- 顯示找到的 all_anr_tombstone_result.xlsx 路徑 -->
-            <div id="allExcelPathInfo" class="file-path-info" style="display: none;">
-                <span style="color: #dc3545;">找不到</span> <code id="allExcelPath"></code>
-                <span id="updateInfo" class="update-info"></span>
-            </div>       
+            </div>    
             <div class="loading" id="loading">
                 正在分析中
             </div>
@@ -1992,6 +2287,63 @@ HTML_TEMPLATE = r'''
                 </div>
             </div>
         </div>
+        <!-- 合併 Excel 彈出視窗 -->
+        <div class="merge-dialog-overlay" id="mergeDialogOverlay" style="display: none;">
+            <div class="merge-dialog">
+                <div class="merge-dialog-header">
+                    <h3>📊 合併 Excel 檔案</h3>
+                    <button class="merge-dialog-close" onclick="closeMergeDialog()">×</button>
+                </div>
+                <div class="merge-dialog-body">
+                    <!-- 拖曳區域 -->
+                    <div class="merge-drop-zone" id="mergeDropZone">
+                        <div class="drop-zone-content">
+                            <div class="drop-icon">📁</div>
+                            <p>拖曳 Excel 檔案到這裡</p>
+                            <p class="drop-zone-hint">或</p>
+                            <input type="file" id="mergeFileInput" accept=".xlsx" style="display: none;">
+                            <button class="btn-select-file" onclick="event.stopPropagation(); document.getElementById('mergeFileInput').click()">選擇檔案</button>
+                        </div>
+                    </div>
+                    
+                    <div class="merge-separator">
+                        <span>或輸入伺服器路徑</span>
+                    </div>
+                    
+                    <!-- 路徑輸入區域 -->
+                    <div class="merge-input-group">
+                        <label for="mergePathInput">📁 <span style="margin-left: 5px;">選擇要合併的 Excel 檔案：</span></label>
+                        <input type="text" id="mergePathInput" placeholder="/path/to/excel/file.xlsx" autocomplete="off">
+                        <div id="mergePathAutocomplete" class="path-autocomplete"></div>
+                    </div>
+                    
+                    <!-- 檔案資訊顯示 -->
+                    <div class="merge-file-info" id="mergeFileInfo" style="display: none;">
+                        <div class="file-info-content">
+                            <strong>已選擇檔案：</strong>
+                            <code id="selectedMergeFile"></code>
+                            <button class="btn-clear" onclick="clearMergeSelection()">清除</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 路徑格式提示 -->
+                    <small style="display: block; margin-top: 8px;">
+                        <div class="path-format">
+                            <p><strong>支援格式：</strong></p>
+                            <ul style="margin: 5px 0 0 20px; padding: 0;">
+                                <li>直接拖曳本地 Excel 檔案 (.xlsx)</li>
+                                <li>點擊「選擇檔案」瀏覽本地檔案</li>
+                                <li>輸入伺服器上的 Excel 檔案路徑</li>
+                            </ul>
+                        </div>
+                    </small>
+                </div>
+                <div class="merge-dialog-footer">
+                    <button class="btn-primary" onclick="executeMerge()" id="mergeExecuteBtn">匯出</button>
+                    <button class="btn-secondary" onclick="closeMergeDialog()">取消</button>
+                </div>
+            </div>
+        </div>        
     <footer class="footer">
         <p>&copy; 2025 Copyright by Vince. All rights reserved.</p>
     </footer>
@@ -2381,29 +2733,6 @@ HTML_TEMPLATE = r'''
                     window.existingAnalysisPath = null;
                 }
                 
-                // 檢查是否有 all excel 檔案
-                if (data.has_all_excel && data.all_excel_path) {
-                    if (exportAllExcelBtn) {
-                        exportAllExcelBtn.style.display = 'inline-flex';
-                    }
-                    if (allExcelPathInfo) {
-                        allExcelPathInfo.style.display = 'block';
-                        allExcelPath.textContent = data.all_excel_path;
-                        allExcelPath.style.color = '#28a745';
-                        allExcelPath.previousElementSibling.textContent = '找到';
-                        allExcelPath.previousElementSibling.style.color = '#28a745';
-                    }
-                    window.allExcelPath = data.all_excel_path;
-                } else {
-                    if (exportAllExcelBtn) {
-                        exportAllExcelBtn.style.display = 'none';
-                    }
-                    if (allExcelPathInfo) {
-                        allExcelPathInfo.style.display = 'none';
-                    }
-                    window.allExcelPath = null;
-                }
-                
             } catch (error) {
                 console.error('檢查已有分析結果失敗:', error);
                 // 錯誤時隱藏按鈕
@@ -2663,208 +2992,6 @@ HTML_TEMPLATE = r'''
             });
         }
 
-        // 匯出全部 Excel 並更新
-        async function exportAllExcelWithUpdate() {
-            if (!window.allExcelPath) {
-                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
-                return;
-            }
-            
-            const exportBtn = document.getElementById('exportAllExcelWithUpdateBtn');
-            const exportAllBtn = document.getElementById('exportAllExcelBtn');
-            if (!exportBtn) return;
-            
-            exportBtn.disabled = true;
-            exportBtn.textContent = '匯出並更新中...';
-            
-            try {
-                // 準備請求數據
-                const requestData = {
-                    all_excel_path: window.allExcelPath,
-                    include_current: false  // 預設不包含當前
-                };
-                
-                // 如果有當前新的分析結果（且尚未包含在 all_excel 中）
-                if (window.hasCurrentAnalysis && !window.currentAnalysisExported && 
-                    window.vpAnalyzeOutputPath && allLogs.length > 0) {
-                    requestData.include_current = true;
-                    requestData.current_data = {
-                        path: document.getElementById('pathInput').value,
-                        analysis_output_path: window.vpAnalyzeOutputPath,
-                        logs: allLogs
-                    };
-                }
-                
-                const response = await fetch('/export-all-history-excel', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                if (response.ok) {
-                    // 下載檔案
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    
-                    // 從 header 獲取檔名
-                    const contentDisposition = response.headers.get('content-disposition');
-                    let filename = 'all_anr_tombstone_result.xlsx';
-                    if (contentDisposition) {
-                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
-                        if (filenameMatch) {
-                            filename = filenameMatch[1];
-                        }
-                    }
-                    
-                    a.download = filename;
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    
-                    const includesCurrent = response.headers.get('X-Includes-Current') === 'true';
-                    const originalUpdated = response.headers.get('X-Original-Updated') === 'true';
-                    const recordsAdded = response.headers.get('X-Records-Added') || '0';
-                    
-                    let message = '';
-                    if (includesCurrent && originalUpdated) {
-                        message = `已匯出全部 Excel（包含本次分析結果）<br>` +
-                                `匯出檔案：${filename}<br>` +
-                                `原始 all_anr_tombstone_result.xlsx 也已更新`;
-                        window.currentAnalysisExported = true;
-                        
-                        // 淡出並隱藏更新按鈕
-                        exportBtn.style.transition = 'opacity 0.3s ease';
-                        exportBtn.style.opacity = '0';
-                        setTimeout(() => {
-                            exportBtn.style.display = 'none';
-                            exportBtn.style.opacity = '1';  // 重置以便下次使用
-                        }, 300);
-                        
-                        // 為「匯出全部 (歷史) Excel」按鈕添加動畫
-                        if (exportAllBtn) {
-                            exportAllBtn.classList.add('highlight');
-                            setTimeout(() => {
-                                exportAllBtn.classList.remove('highlight');
-                            }, 1200);  // 動畫持續 0.6s * 2 = 1.2s
-                        }
-                        
-                        // 更新資訊欄
-                        const updateInfo = document.getElementById('updateInfo');
-                        if (updateInfo) {
-                            updateInfo.textContent = `已更新 ${recordsAdded} 筆資料到 all_anr_tombstone_result.xlsx`;
-                            updateInfo.classList.add('show');
-                            
-                            // 5秒後淡出
-                            setTimeout(() => {
-                                updateInfo.classList.remove('show');
-                                setTimeout(() => {
-                                    updateInfo.textContent = '';
-                                }, 300);
-                            }, 5000);
-                        }
-                    } else if (includesCurrent) {
-                        message = '已匯出全部 Excel（包含本次分析結果）';
-                        window.currentAnalysisExported = true;
-                        
-                        // 淡出並隱藏更新按鈕
-                        exportBtn.style.transition = 'opacity 0.3s ease';
-                        exportBtn.style.opacity = '0';
-                        setTimeout(() => {
-                            exportBtn.style.display = 'none';
-                            exportBtn.style.opacity = '1';
-                        }, 300);
-                    } else {
-                        message = '已匯出歷史 Excel 資料（無新資料需要更新）';
-                    }
-                    
-                    showMessage(message, 'success');
-                    
-                } else {
-                    const error = await response.text();
-                    try {
-                        const errorData = JSON.parse(error);
-                        showMessage('匯出失敗: ' + (errorData.error || '未知錯誤'), 'error');
-                    } catch {
-                        showMessage('匯出失敗: ' + error, 'error');
-                    }
-                }
-            } catch (error) {
-                showMessage('匯出失敗: ' + error.message, 'error');
-            } finally {
-                exportBtn.disabled = false;
-                exportBtn.textContent = '📥 匯出全部 (歷史) 並更新 Excel';
-            }
-        }
-
-        // 匯出全部 Excel
-        async function exportAllExcel() {
-            if (!window.allExcelPath) {
-                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
-                return;
-            }
-            
-            const exportBtn = document.getElementById('exportAllExcelBtn');
-            if (!exportBtn) return;
-            
-            exportBtn.disabled = true;
-            exportBtn.textContent = '匯出中...';
-            
-            try {
-                // 只匯出現有的檔案，不做任何更新
-                const response = await fetch('/export-all-history-excel', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        all_excel_path: window.allExcelPath,
-                        include_current: false  // 不包含當前分析結果
-                    })
-                });
-                
-                if (response.ok) {
-                    // 下載檔案
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    
-                    // 從 header 獲取檔名
-                    const contentDisposition = response.headers.get('content-disposition');
-                    let filename = 'all_anr_tombstone_result.xlsx';
-                    if (contentDisposition) {
-                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
-                        if (filenameMatch) {
-                            filename = filenameMatch[1];
-                        }
-                    }
-                    
-                    a.download = filename;
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    
-                    showMessage('已匯出歷史 Excel 資料', 'success');
-                    
-                } else {
-                    const error = await response.text();
-                    try {
-                        const errorData = JSON.parse(error);
-                        showMessage('匯出失敗: ' + (errorData.error || '未知錯誤'), 'error');
-                    } catch {
-                        showMessage('匯出失敗: ' + error, 'error');
-                    }
-                }
-            } catch (error) {
-                showMessage('匯出失敗: ' + error.message, 'error');
-            } finally {
-                exportBtn.disabled = false;
-                exportBtn.textContent = '📥 匯出全部 (歷史) Excel';
-            }
-        }
-
         // 新增 AI 結果匯出函數
         async function exportAIResults() {
             const path = document.getElementById('pathInput').value;
@@ -2927,40 +3054,6 @@ HTML_TEMPLATE = r'''
                     // 標記當前分析已匯出
                     window.currentAnalysisExported = true;
                     
-                    // 如果有 all_excel 檔案（不管是新創建的還是已存在的），顯示歷史按鈕
-                    if (allExcelExists && allExcelPath) {
-                        // 延遲一點時間確保檔案系統更新
-                        setTimeout(() => {
-                            // 更新 window 變數
-                            window.allExcelPath = allExcelPath;
-                            
-                            // 顯示按鈕
-                            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-                            if (exportAllExcelBtn) {
-                                exportAllExcelBtn.style.display = 'inline-flex';
-                            }
-                            
-                            // 如果有新的分析結果，也顯示更新按鈕
-                            const exportAllExcelWithUpdateBtn = document.getElementById('exportAllExcelWithUpdateBtn');
-                            if (exportAllExcelWithUpdateBtn && window.hasCurrentAnalysis && !window.currentAnalysisExported) {
-                                exportAllExcelWithUpdateBtn.style.display = 'inline-flex';
-                            }
-                            
-                            // 顯示路徑資訊
-                            const allExcelPathInfo = document.getElementById('allExcelPathInfo');
-                            if (allExcelPathInfo) {
-                                allExcelPathInfo.style.display = 'block';
-                                const allExcelPathElement = document.getElementById('allExcelPath');
-                                if (allExcelPathElement) {
-                                    allExcelPathElement.textContent = allExcelPath;
-                                    allExcelPathElement.style.color = '#28a745';
-                                    allExcelPathElement.previousElementSibling.textContent = '找到';
-                                    allExcelPathElement.previousElementSibling.style.color = '#28a745';
-                                }
-                            }
-                        }, 1000);
-                    }
-                    
                 } else {
                     const error = await response.text();
                     try {
@@ -3001,14 +3094,6 @@ HTML_TEMPLATE = r'''
             // 隱藏當次分析的匯出按鈕
             const exportExcelBtn = document.getElementById('exportExcelBtn');
             if (exportExcelBtn) exportExcelBtn.style.display = 'none';
-            
-            // 先隱藏歷史按鈕，分析完成後再根據結果決定是否顯示
-            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-            if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
-            
-            // 隱藏新的更新按鈕
-            const exportAllExcelWithUpdateBtn = document.getElementById('exportAllExcelWithUpdateBtn');
-            if (exportAllExcelWithUpdateBtn) exportAllExcelWithUpdateBtn.style.display = 'none';
             
             const allExcelPathInfo = document.getElementById('allExcelPathInfo');
             if (allExcelPathInfo) allExcelPathInfo.style.display = 'none';
@@ -3068,39 +3153,12 @@ HTML_TEMPLATE = r'''
                     if (exportExcelBtn) {
                         exportExcelBtn.style.display = 'block';
                     }
-                }
-                
-                // 檢查是否有 all_anr_tombstone_result.xlsx
-                if (data.has_all_excel && data.all_excel_path) {
-                    if (exportAllExcelBtn) {
-                        exportAllExcelBtn.style.display = 'inline-flex';
-                    }
-                    // 如果有新的分析結果，顯示更新按鈕
-                    if (window.hasCurrentAnalysis && allLogs.length > 0) {
-                        if (exportAllExcelWithUpdateBtn) {
-                            exportAllExcelWithUpdateBtn.style.display = 'inline-flex';
-                        }
-                    }
-                    if (allExcelPathInfo) {
-                        allExcelPathInfo.style.display = 'block';
-                        const allExcelPath = document.getElementById('allExcelPath');
-                        allExcelPath.textContent = data.all_excel_path;
-                        allExcelPath.style.color = '#28a745';
-                        allExcelPath.previousElementSibling.textContent = '找到';
-                        allExcelPath.previousElementSibling.style.color = '#28a745';
-                    }
-                    window.allExcelPath = data.all_excel_path;
-                } else {
-                    if (exportAllExcelBtn) {
-                        exportAllExcelBtn.style.display = 'none';
-                    }
-                    if (exportAllExcelWithUpdateBtn) {
-                        exportAllExcelWithUpdateBtn.style.display = 'none';
-                    }
-                    if (allExcelPathInfo) {
-                        allExcelPathInfo.style.display = 'none';
-                    }
-                    window.allExcelPath = null;
+
+                    // 顯示合併 Excel 按鈕
+                    const mergeExcelBtn = document.getElementById('mergeExcelBtn');
+                    if (mergeExcelBtn) {
+                        mergeExcelBtn.style.display = 'block';
+                    }                    
                 }
                 
                 console.log('vp_analyze 執行結果:', {
@@ -3197,29 +3255,7 @@ HTML_TEMPLATE = r'''
             }
         });
         
-        // 檢查是否有 all_anr_tombstone_result.xlsx
-        async function checkAllExcelFile(outputPath) {
-            try {
-                const response = await fetch('/check-all-excel', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ output_path: outputPath })
-                });
-                
-                const data = await response.json();
-                if (data.exists) {
-                    const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-                    if (exportAllExcelBtn) {
-                        exportAllExcelBtn.style.display = 'block';
-                        window.allExcelPath = data.path;
-                    }
-                }
-            } catch (error) {
-                console.error('檢查 all excel 檔案失敗:', error);
-            }
-        }
+        
 
         function resetFiltersAndPagination() {
             summaryPage = 1;
@@ -4497,6 +4533,398 @@ HTML_TEMPLATE = r'''
         }
         
     </script>
+    <script>
+        // 合併 Excel 相關變數
+        let mergeSelectedSuggestionIndex = -1;
+        let mergeCurrentSuggestions = [];
+        let mergeAutocompleteTimeout = null;
+        let selectedMergeFile = null;
+        let selectedMergeFilePath = null;
+
+        // 打開合併對話框
+        function openMergeDialog() {
+            document.getElementById('mergeDialogOverlay').style.display = 'flex';
+            clearMergeSelection();
+            
+            // 設置初始路徑（使用主介面的路徑）
+            const mainPath = document.getElementById('pathInput').value;
+            if (mainPath) {
+                document.getElementById('mergePathInput').value = mainPath;
+                // 觸發路徑建議
+                fetchMergePathSuggestions(mainPath);
+            }
+            
+            // 設置焦點到選擇檔案按鈕
+            setTimeout(() => {
+                const selectFileBtn = document.querySelector('.btn-select-file');
+                if (selectFileBtn) {
+                    selectFileBtn.focus();
+                }
+            }, 100);
+        }
+
+        // 關閉合併對話框
+        function closeMergeDialog() {
+            document.getElementById('mergeDialogOverlay').style.display = 'none';
+            hideMergeAutocomplete();
+        }
+
+        // 清除選擇
+        function clearMergeSelection() {
+            selectedMergeFile = null;
+            selectedMergeFilePath = null;
+            document.getElementById('mergePathInput').value = '';
+            document.getElementById('mergeFileInfo').style.display = 'none';
+            document.getElementById('mergeFileInput').value = '';
+            hideMergeAutocomplete();
+        }
+
+        // 隱藏自動完成
+        function hideMergeAutocomplete() {
+            document.getElementById('mergePathAutocomplete').style.display = 'none';
+            document.getElementById('mergePathInput').classList.remove('autocomplete-open');
+            mergeSelectedSuggestionIndex = -1;
+            mergeCurrentSuggestions = [];
+        }
+
+        // 顯示自動完成
+        function showMergeAutocomplete() {
+            document.getElementById('mergePathAutocomplete').style.display = 'block';
+            document.getElementById('mergePathInput').classList.add('autocomplete-open');
+        }
+
+        // 獲取路徑建議（專門用於 Excel 檔案）
+        async function fetchMergePathSuggestions(path) {
+            const autocompleteDiv = document.getElementById('mergePathAutocomplete');
+            
+            autocompleteDiv.innerHTML = '<div class="path-loading">載入中...</div>';
+            showMergeAutocomplete();
+            
+            try {
+                const response = await fetch('/suggest-excel-path', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path: path })
+                });
+                
+                const data = await response.json();
+                mergeCurrentSuggestions = data.suggestions || [];
+                mergeSelectedSuggestionIndex = -1;
+                
+                if (mergeCurrentSuggestions.length > 0) {
+                    displayMergeSuggestions(mergeCurrentSuggestions);
+                } else {
+                    autocompleteDiv.innerHTML = '<div class="path-loading">沒有找到 Excel 檔案</div>';
+                }
+            } catch (error) {
+                console.error('Error fetching suggestions:', error);
+                hideMergeAutocomplete();
+            }
+        }
+
+        // 顯示建議
+        function displayMergeSuggestions(suggestions) {
+            const autocompleteDiv = document.getElementById('mergePathAutocomplete');
+            autocompleteDiv.innerHTML = '';
+            
+            suggestions.forEach((suggestion, index) => {
+                const div = document.createElement('div');
+                div.className = 'path-suggestion';
+                div.dataset.index = index;
+                
+                // 處理資料夾標記
+                let displayText = suggestion;
+                let actualPath = suggestion;
+                
+                if (suggestion.endsWith(' 📁')) {
+                    displayText = suggestion;
+                    actualPath = suggestion.replace(' 📁', '');
+                } else if (suggestion.endsWith('.xlsx')) {
+                    displayText = `${suggestion} <span style="color: #28a745;">📊</span>`;
+                }
+                
+                div.innerHTML = displayText;
+                div.dataset.path = actualPath;
+                
+                // 添加 title 屬性顯示完整路徑
+                div.title = actualPath;
+                
+                div.addEventListener('click', function() {
+                    applyMergeSuggestion(actualPath);
+                });
+                
+                div.addEventListener('mouseenter', function() {
+                    selectMergeSuggestion(index);
+                });
+                
+                autocompleteDiv.appendChild(div);
+            });
+            
+            showMergeAutocomplete();
+        }
+
+        // 選擇建議
+        function selectMergeSuggestion(index) {
+            const suggestions = document.querySelectorAll('#mergePathAutocomplete .path-suggestion');
+            
+            suggestions.forEach(s => s.classList.remove('selected'));
+            
+            if (index < 0) index = suggestions.length - 1;
+            if (index >= suggestions.length) index = 0;
+            
+            mergeSelectedSuggestionIndex = index;
+            
+            if (index >= 0 && index < suggestions.length) {
+                suggestions[index].classList.add('selected');
+                suggestions[index].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        // 應用建議
+        function applyMergeSuggestion(suggestion) {
+            const pathInput = document.getElementById('mergePathInput');
+            pathInput.value = suggestion;
+            hideMergeAutocomplete();
+            
+            // 顯示檔案資訊
+            if (suggestion.endsWith('.xlsx')) {
+                selectedMergeFilePath = suggestion;
+                selectedMergeFile = null;
+                document.getElementById('selectedMergeFile').textContent = suggestion;
+                document.getElementById('mergeFileInfo').style.display = 'block';
+            }
+        }
+
+        // 處理檔案選擇
+        function handleFileSelect(file) {
+            if (!file || !file.name.endsWith('.xlsx')) {
+                showMessage('請選擇 .xlsx 格式的 Excel 檔案', 'error');
+                return;
+            }
+            
+            selectedMergeFile = file;
+            selectedMergeFilePath = null;
+            document.getElementById('selectedMergeFile').textContent = file.name;
+            document.getElementById('mergeFileInfo').style.display = 'block';
+            document.getElementById('mergePathInput').value = '';
+            hideMergeAutocomplete();
+        }
+
+        // 執行合併
+        async function executeMerge() {
+            if (!selectedMergeFile && !selectedMergeFilePath) {
+                showMessage('請選擇要合併的 Excel 檔案', 'error');
+                return;
+            }
+            
+            const currentPath = document.getElementById('pathInput').value;
+            if (!currentPath || !window.vpAnalyzeOutputPath) {
+                showMessage('請先執行分析', 'error');
+                return;
+            }
+            
+            // 禁用按鈕
+            const executeBtn = document.getElementById('mergeExecuteBtn');
+            executeBtn.disabled = true;
+            executeBtn.textContent = '合併中...';
+            
+            try {
+                let response;
+                
+                if (selectedMergeFile) {
+                    // 上傳檔案並合併
+                    const formData = new FormData();
+                    formData.append('file', selectedMergeFile);
+                    formData.append('current_path', currentPath);
+                    formData.append('analysis_output_path', window.vpAnalyzeOutputPath);
+                    formData.append('logs', JSON.stringify(allLogs));
+                    
+                    response = await fetch('/merge-excel-upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // 使用伺服器路徑合併
+                    response = await fetch('/merge-excel', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            current_path: currentPath,
+                            merge_file_path: selectedMergeFilePath,
+                            analysis_output_path: window.vpAnalyzeOutputPath,
+                            logs: allLogs
+                        })
+                    });
+                }
+                
+                if (response.ok) {
+                    // 下載合併後的檔案
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 從 header 獲取檔名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'merged_anr_tombstone_result.xlsx';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    showMessage('Excel 檔案合併成功', 'success');
+                    closeMergeDialog();
+                    
+                } else {
+                    const error = await response.text();
+                    try {
+                        const errorData = JSON.parse(error);
+                        showMessage('合併失敗: ' + (errorData.error || '未知錯誤'), 'error');
+                    } catch {
+                        showMessage('合併失敗: ' + error, 'error');
+                    }
+                }
+            } catch (error) {
+                showMessage('合併失敗: ' + error.message, 'error');
+            } finally {
+                executeBtn.disabled = false;
+                executeBtn.textContent = '匯出';
+            }
+        }
+
+        // 在 DOMContentLoaded 事件中添加事件監聽器
+        document.addEventListener('DOMContentLoaded', function() {
+            // 合併 Excel 輸入框事件
+            const mergePathInput = document.getElementById('mergePathInput');
+            if (mergePathInput) {
+                mergePathInput.addEventListener('input', function(e) {
+                    clearTimeout(mergeAutocompleteTimeout);
+                    const value = e.target.value;
+                    
+                    mergeAutocompleteTimeout = setTimeout(() => {
+                        fetchMergePathSuggestions(value);
+                    }, 300);
+                });
+                
+                mergePathInput.addEventListener('keydown', function(e) {
+                    switch(e.key) {
+                        case 'ArrowDown':
+                            if (mergeCurrentSuggestions.length > 0) {
+                                e.preventDefault();
+                                selectMergeSuggestion(mergeSelectedSuggestionIndex + 1);
+                            }
+                            break;
+                        case 'ArrowUp':
+                            if (mergeCurrentSuggestions.length > 0) {
+                                e.preventDefault();
+                                selectMergeSuggestion(mergeSelectedSuggestionIndex - 1);
+                            }
+                            break;
+                        case 'Enter':
+                            if (mergeCurrentSuggestions.length > 0 && mergeSelectedSuggestionIndex >= 0) {
+                                e.preventDefault();
+                                applyMergeSuggestion(mergeCurrentSuggestions[mergeSelectedSuggestionIndex]);
+                            } else if (mergeCurrentSuggestions.length === 0 || mergeSelectedSuggestionIndex === -1) {
+                                hideMergeAutocomplete();
+                            }
+                            break;
+                        case 'Tab':
+                            if (mergeCurrentSuggestions.length > 0) {
+                                e.preventDefault();
+                                const index = mergeSelectedSuggestionIndex >= 0 ? mergeSelectedSuggestionIndex : 0;
+                                applyMergeSuggestion(mergeCurrentSuggestions[index]);
+                            }
+                            break;
+                        case 'Escape':
+                            hideMergeAutocomplete();
+                            break;
+                    }
+                });
+                
+                mergePathInput.addEventListener('focus', function() {
+                    if (mergeCurrentSuggestions.length > 0) {
+                        showMergeAutocomplete();
+                    } else if (this.value) {
+                        fetchMergePathSuggestions(this.value);
+                    }
+                });
+                
+                mergePathInput.addEventListener('blur', function(e) {
+                    setTimeout(() => {
+                        if (!document.activeElement.closest('#mergePathAutocomplete')) {
+                            hideMergeAutocomplete();
+                        }
+                    }, 200);
+                });
+            }
+            
+            // 檔案輸入事件
+            const mergeFileInput = document.getElementById('mergeFileInput');
+            if (mergeFileInput) {
+                mergeFileInput.addEventListener('change', function(e) {
+                    if (e.target.files && e.target.files[0]) {
+                        handleFileSelect(e.target.files[0]);
+                    }
+                });
+            }
+            
+            // 拖曳功能
+            // 在 DOMContentLoaded 事件中的拖曳功能部分
+            const dropZone = document.getElementById('mergeDropZone');
+            if (dropZone) {
+                dropZone.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.add('drag-over');
+                });
+                
+                dropZone.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.remove('drag-over');
+                });
+                
+                dropZone.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.remove('drag-over');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        handleFileSelect(files[0]);
+                    }
+                });
+                
+                // 只在點擊非按鈕區域時觸發檔案選擇
+                dropZone.addEventListener('click', function(e) {
+                    // 如果點擊的是按鈕或按鈕內的元素，不處理
+                    if (e.target.classList.contains('btn-select-file') || 
+                        e.target.closest('.btn-select-file')) {
+                        return;
+                    }
+                    // 否則觸發檔案選擇
+                    document.getElementById('mergeFileInput').click();
+                });
+            }
+            
+            // 點擊對話框外部關閉
+            document.getElementById('mergeDialogOverlay').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeMergeDialog();
+                }
+            });
+        });        
+    </script>
 </body>
 </html>
 '''
@@ -5500,27 +5928,6 @@ def export_ai_excel():
         date_str = datetime.now().strftime('%Y%m%d')
         filename = f"{date_str}_anr_tombstone_result.xlsx"
         
-        # 檢查並處理 all_anr_tombstone_result.xlsx
-        all_excel_path = os.path.join(analysis_output_path, 'all_anr_tombstone_result.xlsx')
-        all_excel_created = False
-        
-        # 只有在不存在時才創建
-        if not os.path.exists(all_excel_path):
-            try:
-                wb.save(all_excel_path)
-                # 再次確認檔案真的存在
-                if os.path.exists(all_excel_path):
-                    all_excel_created = True
-                    print(f"Created new all_anr_tombstone_result.xlsx at: {all_excel_path}")
-                else:
-                    print("Failed to create all_anr_tombstone_result.xlsx - file not found after save")
-                    all_excel_created = False
-            except Exception as e:
-                print(f"Failed to create all_anr_tombstone_result.xlsx: {str(e)}")
-                all_excel_created = False
-        else:
-            print(f"all_anr_tombstone_result.xlsx already exists at: {all_excel_path}")
-        
         # 儲存到記憶體並回傳
         output = io.BytesIO()
         wb.save(output)
@@ -5532,11 +5939,6 @@ def export_ai_excel():
             as_attachment=True,
             download_name=filename
         )
-        
-        # 在 response header 中加入狀態
-        response.headers['X-All-Excel-Created'] = str(all_excel_created).lower()
-        response.headers['X-All-Excel-Path'] = all_excel_path if os.path.exists(all_excel_path) else ''
-        response.headers['X-All-Excel-Exists'] = str(os.path.exists(all_excel_path)).lower()
         
         return response
         
@@ -5899,4 +6301,347 @@ def export_all_history_excel():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-    
+
+@main_page_bp.route('/suggest-excel-path', methods=['POST'])
+def suggest_excel_path():
+    """Suggest Excel file paths based on user input"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'suggestions': []})
+        
+        current_path = data.get('path', '')
+        
+        # 如果沒有輸入，使用當前目錄
+        if not current_path:
+            current_path = '.'
+        
+        # 展開用戶路徑
+        if current_path.startswith('~'):
+            current_path = os.path.expanduser(current_path)
+        
+        suggestions = []
+        
+        # 決定要列出的目錄和前綴
+        if current_path.endswith(os.sep) or current_path.endswith('/'):
+            list_dir = current_path
+            prefix = ''
+        else:
+            list_dir = os.path.dirname(current_path)
+            prefix = os.path.basename(current_path).lower()
+        
+        try:
+            # 檢查目錄是否存在
+            if os.path.exists(list_dir) and os.path.isdir(list_dir):
+                items = os.listdir(list_dir)
+                
+                for item in items:
+                    # 跳過隱藏檔案
+                    if item.startswith('.') and not prefix.startswith('.'):
+                        continue
+                    
+                    # 檢查是否符合前綴
+                    if item.lower().startswith(prefix):
+                        full_path = os.path.join(list_dir, item)
+                        
+                        # 如果是目錄，添加路徑分隔符並標記
+                        if os.path.isdir(full_path):
+                            if not full_path.endswith(os.sep):
+                                full_path += os.sep
+                            suggestions.append(full_path + ' 📁')
+                        # 如果是 Excel 檔案
+                        elif item.endswith('.xlsx'):
+                            suggestions.append(full_path)
+            
+            # 特別處理：如果是目錄，也搜尋子目錄中的 Excel 檔案
+            if os.path.isdir(list_dir) and (not prefix or prefix == ''):
+                try:
+                    # 限制搜尋深度為 2 層
+                    for root, dirs, files in os.walk(list_dir):
+                        depth = root[len(list_dir):].count(os.sep)
+                        if depth > 2:
+                            dirs.clear()  # 不再深入
+                            continue
+                        
+                        for file in files:
+                            if file.endswith('.xlsx'):
+                                full_path = os.path.join(root, file)
+                                suggestions.append(full_path)
+                        
+                        # 限制結果數量
+                        if len(suggestions) > 50:
+                            break
+                except PermissionError:
+                    pass
+            
+            # 排序：目錄優先，然後是檔案
+            dirs = [s for s in suggestions if s.endswith(' 📁')]
+            files = [s for s in suggestions if not s.endswith(' 📁')]
+            
+            suggestions = sorted(dirs) + sorted(files)
+            suggestions = suggestions[:30]  # 限制顯示 30 個
+            
+        except PermissionError:
+            pass
+        except Exception as e:
+            print(f"Error listing directory: {e}")
+        
+        return jsonify({'suggestions': suggestions})
+        
+    except Exception as e:
+        print(f"Error in suggest_excel_path: {e}")
+        return jsonify({'suggestions': []})
+
+@main_page_bp.route('/merge-excel', methods=['POST'])
+def merge_excel():
+    """Merge current analysis results with another Excel file"""
+    try:
+        from openpyxl import load_workbook, Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
+        data = request.json
+        merge_file_path = data.get('merge_file_path')
+        current_path = data.get('current_path')
+        analysis_output_path = data.get('analysis_output_path')
+        logs = data.get('logs', [])
+        
+        if not merge_file_path or not os.path.exists(merge_file_path):
+            return jsonify({'error': '找不到要合併的 Excel 檔案'}), 404
+        
+        if not merge_file_path.endswith('.xlsx'):
+            return jsonify({'error': '只支援 .xlsx 格式的 Excel 檔案'}), 400
+        
+        # 讀取要合併的 Excel 檔案
+        merge_wb = load_workbook(merge_file_path)
+        merge_ws = merge_wb.active
+        
+        # 準備當前分析的資料
+        current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        new_rows = []
+        
+        # 獲取現有資料的最大 SN
+        max_sn = 0
+        for row in merge_ws.iter_rows(min_row=2, values_only=True):
+            if row[0] is not None:
+                try:
+                    max_sn = max(max_sn, int(row[0]))
+                except:
+                    pass
+        
+        # 處理當前分析結果
+        sn = max_sn + 1
+        for log in logs:
+            ai_result = ""
+            if log.get('file') and analysis_output_path:
+                try:
+                    file_path = log['file']
+                    if file_path.startswith(current_path):
+                        relative_path = os.path.relpath(file_path, current_path)
+                    else:
+                        relative_path = file_path
+                    
+                    analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                    
+                    if os.path.exists(analyzed_file):
+                        with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            ai_result = extract_ai_summary(content)
+                    else:
+                        ai_result = "找不到分析結果"
+                except Exception as e:
+                    ai_result = f"讀取錯誤: {str(e)}"
+            
+            new_rows.append([
+                sn,
+                current_time,
+                log.get('type', ''),
+                log.get('process', ''),
+                ai_result,
+                log.get('filename', ''),
+                log.get('file', '')
+            ])
+            sn += 1
+        
+        # 定義樣式
+        data_font = Font(size=11)
+        data_alignment = Alignment(vertical="top", wrap_text=True)
+        data_border = Border(
+            left=Side(style='thin', color='D3D3D3'),
+            right=Side(style='thin', color='D3D3D3'),
+            top=Side(style='thin', color='D3D3D3'),
+            bottom=Side(style='thin', color='D3D3D3')
+        )
+        anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+        tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+        
+        # 將新資料加入工作表
+        for row_data in new_rows:
+            row_idx = merge_ws.max_row + 1
+            for col_idx, value in enumerate(row_data, 1):
+                cell = merge_ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = data_font
+                cell.border = data_border
+                
+                # SN 欄位置中
+                if col_idx == 1:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    cell.alignment = data_alignment
+                
+                # Type 欄位背景色
+                if col_idx == 3:
+                    if value == 'ANR':
+                        cell.fill = anr_fill
+                    elif value == 'Tombstone':
+                        cell.fill = tombstone_fill
+        
+        # 儲存到記憶體並回傳
+        output = io.BytesIO()
+        merge_wb.save(output)
+        output.seek(0)
+        
+        # 生成檔名
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f"{date_str}_merged_anr_tombstone_result.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"Error in merge_excel: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/merge-excel-upload', methods=['POST'])
+def merge_excel_upload():
+    """Merge current analysis results with uploaded Excel file"""
+    try:
+        from openpyxl import load_workbook, Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
+        # 獲取上傳的檔案
+        if 'file' not in request.files:
+            return jsonify({'error': '沒有上傳檔案'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '沒有選擇檔案'}), 400
+        
+        if not file.filename.endswith('.xlsx'):
+            return jsonify({'error': '只支援 .xlsx 格式的 Excel 檔案'}), 400
+        
+        # 獲取其他參數
+        current_path = request.form.get('current_path')
+        analysis_output_path = request.form.get('analysis_output_path')
+        logs = json.loads(request.form.get('logs', '[]'))
+        
+        # 讀取上傳的 Excel 檔案
+        merge_wb = load_workbook(file)
+        merge_ws = merge_wb.active
+        
+        # 準備當前分析的資料
+        current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        
+        # 獲取現有資料的最大 SN
+        max_sn = 0
+        for row in merge_ws.iter_rows(min_row=2, values_only=True):
+            if row[0] is not None:
+                try:
+                    max_sn = max(max_sn, int(row[0]))
+                except:
+                    pass
+        
+        # 定義樣式
+        data_font = Font(size=11)
+        data_alignment = Alignment(vertical="top", wrap_text=True)
+        data_border = Border(
+            left=Side(style='thin', color='D3D3D3'),
+            right=Side(style='thin', color='D3D3D3'),
+            top=Side(style='thin', color='D3D3D3'),
+            bottom=Side(style='thin', color='D3D3D3')
+        )
+        anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+        tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+        
+        # 處理當前分析結果
+        sn = max_sn + 1
+        for log in logs:
+            ai_result = ""
+            if log.get('file') and analysis_output_path:
+                try:
+                    file_path = log['file']
+                    if file_path.startswith(current_path):
+                        relative_path = os.path.relpath(file_path, current_path)
+                    else:
+                        relative_path = file_path
+                    
+                    analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                    
+                    if os.path.exists(analyzed_file):
+                        with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            ai_result = extract_ai_summary(content)
+                    else:
+                        ai_result = "找不到分析結果"
+                except Exception as e:
+                    ai_result = f"讀取錯誤: {str(e)}"
+            
+            # 寫入新資料
+            row_idx = merge_ws.max_row + 1
+            row_data = [
+                sn,
+                current_time,
+                log.get('type', ''),
+                log.get('process', ''),
+                ai_result,
+                log.get('filename', ''),
+                log.get('file', '')
+            ]
+            
+            for col_idx, value in enumerate(row_data, 1):
+                cell = merge_ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = data_font
+                cell.border = data_border
+                
+                # SN 欄位置中
+                if col_idx == 1:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    cell.alignment = data_alignment
+                
+                # Type 欄位背景色
+                if col_idx == 3:
+                    if value == 'ANR':
+                        cell.fill = anr_fill
+                    elif value == 'Tombstone':
+                        cell.fill = tombstone_fill
+            
+            sn += 1
+        
+        # 儲存到記憶體並回傳
+        output = io.BytesIO()
+        merge_wb.save(output)
+        output.seek(0)
+        
+        # 生成檔名
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f"{date_str}_merged_anr_tombstone_result.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"Error in merge_excel_upload: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+                
