@@ -1674,12 +1674,13 @@ HTML_TEMPLATE = r'''
     .merge-dialog {
         background: white;
         border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         width: 90%;
         max-width: 700px;
         max-height: 90vh;
         display: flex;
         flex-direction: column;
+        overflow: hidden;  /* 防止內容溢出 */
     }
 
     .merge-dialog-header {
@@ -2017,6 +2018,152 @@ HTML_TEMPLATE = r'''
         background: #555;
     }
 
+    /* 支援格式容器 */
+    .merge-dialog-body h2 {
+        font-size: 16px;
+        color: #333;
+        margin-bottom: 10px;
+        font-weight: 600;
+    }
+
+    /* 只針對支援格式的框 */
+    .support-format-box {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #667eea;
+    }
+
+    /* 確保拖曳區域內容沒有邊框 */
+    .drop-zone-content {
+        border: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    /* 統一字體樣式 */
+    .merge-dialog-body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 14px;
+        color: #333;
+    }
+
+    .merge-dialog-body strong {
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* 統一列表項目樣式 */
+    .support-format-section ul li {
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+        padding: 5px 0;
+    }
+
+    /* 圖示統一大小 */
+    .icon {
+        display: inline-block;
+        width: 24px;
+        text-align: center;
+        font-size: 16px;
+    }
+
+    /* 列表項目樣式 */
+    .merge-dialog-body ul {
+        list-style: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .merge-dialog-body ul li {
+        list-style-type: none !important;
+        padding: 5px 0;
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+    }
+
+    .merge-dialog-body ul li strong {
+        color: #333;
+        font-weight: 600;
+    }
+
+    /* 圖示樣式 */
+    .merge-dialog-body .icon {
+        display: inline-block;
+        width: 24px;
+        margin-right: 5px;
+        text-align: center;
+        font-size: 16px;
+        vertical-align: middle;
+    }
+
+    /* 確保合併對話框內的所有列表都沒有項目符號 */
+    .merge-dialog-body ul li::before {
+        content: none !important;
+    }
+
+    .merge-dialog-body ul li::marker {
+        content: none !important;
+    }
+
+    /* 調整支援格式的樣式 */
+    .support-format-section {
+        margin-top: 20px;
+        padding: 0;
+    }
+
+    .support-format-section h2 {
+        font-size: 16px;
+        color: #333;
+        margin-bottom: 10px;
+        font-weight: 600;
+    }
+
+    .support-format-list {
+        background: transparent;
+        padding: 0;
+        border: none;
+    }
+
+    .support-format-list ul {
+        list-style: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .support-format-list ul li {
+        list-style-type: none !important;
+        padding: 8px 0;
+        font-size: 14px;
+        color: #555;
+        line-height: 1.6;
+        display: flex;
+        align-items: center;
+    }
+
+    .support-format-list .icon {
+        display: inline-flex;
+        min-width: 24px;
+        margin-right: 8px;
+        font-size: 16px;
+        justify-content: center;
+    }
+
+    #mergePathInput {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border: 2px solid #e1e4e8;
+        border-left: 5px solid #28a745;
+        border-radius: 8px;
+        margin-top: 5px;
+        display: flex;
+        align-items: flex-start;
+        font-family: monospace;
+        font-size: 90%;        
+    }
+    
     </style>      
 </head>
 <body>
@@ -2406,28 +2553,30 @@ HTML_TEMPLATE = r'''
         <div class="merge-dialog-overlay" id="mergeDialogOverlay" style="display: none;">
             <div class="merge-dialog">
                 <div class="merge-dialog-header">
-                    <h3>📊 合併 Excel 檔案</h3>
+                    <h3>💹 合併 Excel 檔案</h3>
                     <button class="merge-dialog-close" onclick="closeMergeDialog()">×</button>
                 </div>
+                <!-- 合併 Excel 彈出視窗的 HTML -->
                 <div class="merge-dialog-body">
                     <!-- 拖曳區域 -->
                     <div class="merge-drop-zone" id="mergeDropZone">
                         <div class="drop-zone-content">
-                            <div class="drop-icon">📁</div>
+                            <div class="drop-icon">💹</div>
                             <p>拖曳 Excel 檔案到這裡</p>
                             <p class="drop-zone-hint">或</p>
                             <input type="file" id="mergeFileInput" accept=".xlsx" style="display: none;">
-                            <button class="btn-select-file" onclick="event.stopPropagation(); document.getElementById('mergeFileInput').click()">選擇檔案</button>
+                            <button class="btn-select-file" id="selectFileBtn">選擇檔案</button>
                         </div>
                     </div>
                     
+                    <!-- 分隔線 -->
                     <div class="merge-separator">
                         <span>或輸入伺服器路徑</span>
                     </div>
                     
                     <!-- 路徑輸入區域 -->
                     <div class="merge-input-group">
-                        <label for="mergePathInput">📁 <span style="margin-left: 5px;">選擇要合併的 Excel 檔案：</span></label>
+                        <label for="mergePathInput">💹 <span style="margin-left: 5px;">選擇要合併的 Excel 檔案：</span></label>
                         <input type="text" id="mergePathInput" placeholder="/path/to/excel/file.xlsx" autocomplete="off">
                         <div id="mergePathAutocomplete" class="path-autocomplete"></div>
                     </div>
@@ -2441,17 +2590,17 @@ HTML_TEMPLATE = r'''
                         </div>
                     </div>
                     
-                    <!-- 路徑格式提示 -->
-                    <small style="display: block; margin-top: 15px;">
-                        <div class="path-format">
-                            <p style="margin: 0 0 8px 0;"><strong>支援格式：</strong></p>
-                            <ul style="margin: 0 0 0 20px; padding: 0; list-style-type: disc;">
-                                <li style="margin-bottom: 5px;">直接拖曳本地 Excel 檔案 (.xlsx)</li>
-                                <li style="margin-bottom: 5px;">點擊「選擇檔案」瀏覽本地檔案</li>
-                                <li>輸入伺服器上的 Excel 檔案路徑</li>
+                    <!-- 支援格式 -->
+                    <div class="support-format-section">
+                        <h2>✨ 支援格式</h2>
+                        <div class="support-format-box">
+                              <ul>
+                                <li><span class="icon">🔍</span><strong>選擇檔案：</strong>點擊「選擇檔案」按鈕瀏覽本地檔案</li>
+                                <li><span class="icon">💹</span><strong>拖曳上傳：</strong>拖曳本地 Excel 檔案到上方區域</li>
+                                <li><span class="icon">💹</span><strong>伺服器路徑：</strong>輸入伺服器上的 Excel 檔案路徑</li>
                             </ul>
                         </div>
-                    </small>
+                    </div>
                 </div>
                 <div class="merge-dialog-footer">
                     <button class="btn-primary" onclick="executeMerge()" id="mergeExecuteBtn">匯出</button>
@@ -4975,11 +5124,11 @@ HTML_TEMPLATE = r'''
             const mergeDialogOverlay = document.getElementById('mergeDialogOverlay');
             if (mergeDialogOverlay) {
                 // 點擊遮罩層關閉對話框
-                mergeDialogOverlay.addEventListener('click', function(e) {
-                    if (e.target === this) {
-                        closeMergeDialog();
-                    }
-                });
+                // mergeDialogOverlay.addEventListener('click', function(e) {
+                //    if (e.target === this) {
+                //        closeMergeDialog();
+                //    }
+                //});
                 
                 // 防止對話框內的點擊事件冒泡
                 const mergeDialog = mergeDialogOverlay.querySelector('.merge-dialog');
@@ -5065,9 +5214,30 @@ HTML_TEMPLATE = r'''
             }
             
             // 拖曳功能
-            // 在 DOMContentLoaded 事件中的拖曳功能部分
             const dropZone = document.getElementById('mergeDropZone');
             if (dropZone) {
+                // 為選擇檔案按鈕綁定事件
+                const selectFileBtn = dropZone.querySelector('.btn-select-file');
+                if (selectFileBtn) {
+                    selectFileBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        document.getElementById('mergeFileInput').click();
+                    });
+                }
+                
+                // 拖曳區域的點擊事件（只綁定一次）
+                dropZone.addEventListener('click', function(e) {
+                    // 如果點擊的是按鈕或按鈕內的元素，不處理
+                    if (e.target.classList.contains('btn-select-file') || 
+                        e.target.closest('.btn-select-file')) {
+                        return;
+                    }
+                    // 點擊其他區域時觸發檔案選擇
+                    document.getElementById('mergeFileInput').click();
+                });
+                
+                // 拖曳相關事件
                 dropZone.addEventListener('dragover', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -5090,25 +5260,14 @@ HTML_TEMPLATE = r'''
                         handleFileSelect(files[0]);
                     }
                 });
-                
-                // 只在點擊非按鈕區域時觸發檔案選擇
-                dropZone.addEventListener('click', function(e) {
-                    // 如果點擊的是按鈕或按鈕內的元素，不處理
-                    if (e.target.classList.contains('btn-select-file') || 
-                        e.target.closest('.btn-select-file')) {
-                        return;
-                    }
-                    // 否則觸發檔案選擇
-                    document.getElementById('mergeFileInput').click();
-                });
             }
             
             // 點擊對話框外部關閉
-            document.getElementById('mergeDialogOverlay').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeMergeDialog();
-                }
-            });
+            //document.getElementById('mergeDialogOverlay').addEventListener('click', function(e) {
+            //    if (e.target === this) {
+            //        closeMergeDialog();
+            //    }
+            //});
         });
 
     </script>
