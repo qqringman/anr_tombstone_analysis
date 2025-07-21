@@ -2594,6 +2594,11 @@ HTML_TEMPLATE = r'''
 
         // 匯出全部 Excel
         async function exportAllExcel() {
+            if (!window.allExcelPath) {
+                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
+                return;
+            }
+            
             const exportBtn = document.getElementById('exportAllExcelBtn');
             if (!exportBtn) return;
             
@@ -2606,8 +2611,9 @@ HTML_TEMPLATE = r'''
                     all_excel_path: window.allExcelPath
                 };
                 
-                // 如果有當前分析結果且尚未匯出，則包含當前結果
-                if (window.hasCurrentAnalysis && window.vpAnalyzeOutputPath && allLogs.length > 0) {
+                // 如果有當前新的分析結果（且尚未包含在 all_excel 中）
+                if (window.hasCurrentAnalysis && !window.currentAnalysisExported && 
+                    window.vpAnalyzeOutputPath && allLogs.length > 0) {
                     requestData.include_current = true;
                     requestData.current_data = {
                         path: document.getElementById('pathInput').value,
@@ -2616,7 +2622,7 @@ HTML_TEMPLATE = r'''
                     };
                 }
                 
-                const response = await fetch('/export-all-excel-with-current', {
+                const response = await fetch('/export-all-history-excel', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2645,11 +2651,24 @@ HTML_TEMPLATE = r'''
                     a.click();
                     window.URL.revokeObjectURL(url);
                     
-                    if (window.hasCurrentAnalysis) {
-                        showMessage('已匯出全部 Excel（包含本次分析結果）', 'success');
+                    const includesCurrent = response.headers.get('X-Includes-Current') === 'true';
+                    const originalUpdated = response.headers.get('X-Original-Updated') === 'true';
+                    
+                    let message = '';
+                    if (includesCurrent && originalUpdated) {
+                        message = `已匯出全部 Excel（包含本次分析結果）<br>` +
+                                `匯出檔案：${filename}<br>` +
+                                `原始 all_anr_tombstone_result.xlsx 也已更新`;
+                        window.currentAnalysisExported = true;
+                    } else if (includesCurrent) {
+                        message = '已匯出全部 Excel（包含本次分析結果）';
+                        window.currentAnalysisExported = true;
                     } else {
-                        showMessage('已匯出歷史 Excel 資料', 'success');
+                        message = '已匯出歷史 Excel 資料';
                     }
+                    
+                    showMessage(message, 'success');
+                    
                 } else {
                     const error = await response.text();
                     try {
@@ -2715,36 +2734,48 @@ HTML_TEMPLATE = r'''
                     a.click();
                     window.URL.revokeObjectURL(url);
                     
-                    // 檢查是否更新了 all_excel
-                    const allExcelUpdated = response.headers.get('X-All-Excel-Updated') === 'true';
+                    // 檢查是否創建了新的 all_excel 或檔案已存在
+                    const allExcelCreated = response.headers.get('X-All-Excel-Created') === 'true';
+                    const allExcelExists = response.headers.get('X-All-Excel-Exists') === 'true';
                     const allExcelPath = response.headers.get('X-All-Excel-Path');
                     
-                    if (allExcelUpdated) {
-                        showMessage('Excel 匯出成功，並已更新 all_anr_tombstone_result.xlsx', 'success');
-                        // 顯示「匯出全部 Excel」按鈕
-                        const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-                        if (exportAllExcelBtn && allExcelPath) {
-                            exportAllExcelBtn.style.display = 'block';
-                            window.allExcelPath = allExcelPath;
-                        }
-                        // 重新檢查狀態以顯示匯出歷史按鈕
-                        const path = document.getElementById('pathInput').value;
-                        if (path) {
-                            setTimeout(() => {
-                                checkExistingAnalysis(path);
-                            }, 500);
-                        }                        
+                    if (allExcelCreated) {
+                        showMessage('Excel 匯出成功，並已創建 all_anr_tombstone_result.xlsx', 'success');
                     } else {
                         showMessage('Excel 匯出成功', 'success');
                     }
-                    // 標記當前分析已包含在歷史中
+                    
+                    // 標記當前分析已匯出
                     window.currentAnalysisExported = true;
                     
-                    // 顯示歷史按鈕（如果之前沒有顯示）
-                    const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-                    if (exportAllExcelBtn && window.allExcelPath) {
-                        exportAllExcelBtn.style.display = 'inline-flex';
-                    }                    
+                    // 如果有 all_excel 檔案（不管是新創建的還是已存在的），顯示歷史按鈕
+                    if (allExcelExists && allExcelPath) {
+                        // 延遲一點時間確保檔案系統更新
+                        setTimeout(() => {
+                            // 更新 window 變數
+                            window.allExcelPath = allExcelPath;
+                            
+                            // 顯示按鈕
+                            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+                            if (exportAllExcelBtn) {
+                                exportAllExcelBtn.style.display = 'inline-flex';
+                            }
+                            
+                            // 顯示路徑資訊
+                            const allExcelPathInfo = document.getElementById('allExcelPathInfo');
+                            if (allExcelPathInfo) {
+                                allExcelPathInfo.style.display = 'block';
+                                const allExcelPathElement = document.getElementById('allExcelPath');
+                                if (allExcelPathElement) {
+                                    allExcelPathElement.textContent = allExcelPath;
+                                    allExcelPathElement.style.color = '#28a745';
+                                    allExcelPathElement.previousElementSibling.textContent = '找到';
+                                    allExcelPathElement.previousElementSibling.style.color = '#28a745';
+                                }
+                            }
+                        }, 1000);
+                    }
+                    
                 } else {
                     const error = await response.text();
                     try {
@@ -2768,7 +2799,11 @@ HTML_TEMPLATE = r'''
                 showMessage('請輸入路徑', 'error');
                 return;
             }
-            
+
+            // 重置匯出狀態
+            window.currentAnalysisExported = false;
+            window.hasCurrentAnalysis = false;
+
             document.getElementById('analysisResultBtn').classList.remove('show');
             analysisIndexPath = null;
             
@@ -2778,13 +2813,16 @@ HTML_TEMPLATE = r'''
             document.getElementById('results').style.display = 'none';
             document.getElementById('exportHtmlBtn').style.display = 'none';
             
-            // 隱藏當次分析的匯出按鈕，但保留歷史按鈕的狀態
+            // 隱藏當次分析的匯出按鈕
             const exportExcelBtn = document.getElementById('exportExcelBtn');
             if (exportExcelBtn) exportExcelBtn.style.display = 'none';
             
-            // 不要隱藏歷史按鈕，保持原本的狀態
+            // 先隱藏歷史按鈕，分析完成後再根據結果決定是否顯示
             const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
             if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
+            
+            const allExcelPathInfo = document.getElementById('allExcelPathInfo');
+            if (allExcelPathInfo) allExcelPathInfo.style.display = 'none';
             
             clearMessage();
             
@@ -2841,6 +2879,30 @@ HTML_TEMPLATE = r'''
                     if (exportExcelBtn) {
                         exportExcelBtn.style.display = 'block';
                     }
+                }
+                
+                // 檢查是否有 all_anr_tombstone_result.xlsx
+                if (data.has_all_excel && data.all_excel_path) {
+                    if (exportAllExcelBtn) {
+                        exportAllExcelBtn.style.display = 'inline-flex';
+                    }
+                    if (allExcelPathInfo) {
+                        allExcelPathInfo.style.display = 'block';
+                        const allExcelPath = document.getElementById('allExcelPath');
+                        allExcelPath.textContent = data.all_excel_path;
+                        allExcelPath.style.color = '#28a745';
+                        allExcelPath.previousElementSibling.textContent = '找到';
+                        allExcelPath.previousElementSibling.style.color = '#28a745';
+                    }
+                    window.allExcelPath = data.all_excel_path;
+                } else {
+                    if (exportAllExcelBtn) {
+                        exportAllExcelBtn.style.display = 'none';
+                    }
+                    if (allExcelPathInfo) {
+                        allExcelPathInfo.style.display = 'none';
+                    }
+                    window.allExcelPath = null;
                 }
                 
                 console.log('vp_analyze 執行結果:', {
@@ -4430,24 +4492,43 @@ def analyze():
         output_dir_name = f".{last_folder_name}_anr_tombstones_analyze"
         output_path = os.path.join(path, output_dir_name)
 
-        # 檢查輸出目錄是否已存在，如果存在則刪除
+        # 修改：備份 all_anr_tombstone_result.xlsx 到上一層目錄
+        all_excel_exists = False
+        all_excel_path_in_output = os.path.join(output_path, 'all_anr_tombstone_result.xlsx')
+        all_excel_backup_path = os.path.join(path, 'all_anr_tombstone_result.xlsx.backup')
+        
+        # 如果輸出目錄存在
         if os.path.exists(output_path):
             print(f"發現已存在的輸出目錄: {output_path}")
+            
+            # 備份 all_anr_tombstone_result.xlsx 到上一層目錄
+            if os.path.exists(all_excel_path_in_output):
+                try:
+                    # 備份到上一層目錄（使用 .backup 後綴避免衝突）
+                    shutil.copy2(all_excel_path_in_output, all_excel_backup_path)
+                    all_excel_exists = True
+                    print(f"已備份 all_anr_tombstone_result.xlsx 到: {all_excel_backup_path}")
+                except Exception as e:
+                    print(f"備份 all_anr_tombstone_result.xlsx 失敗: {e}")
+                    all_excel_exists = False
+            
+            # 刪除輸出目錄
             try:
                 shutil.rmtree(output_path)
                 print(f"已刪除舊的輸出目錄: {output_path}")
             except Exception as e:
                 print(f"刪除輸出目錄失敗: {e}")
-                # 可以選擇是否要繼續執行或返回錯誤
-                vp_analyze_error = f"無法刪除現有的輸出目錄: {output_path}, 錯誤: {str(e)}"
-                # 如果刪除失敗，您可以選擇：
-                # 選項1: 繼續執行（可能會有問題）
-                # 選項2: 停止執行並返回錯誤（建議）
-                vp_analyze_success = False
+                # 如果刪除失敗，清理備份
+                if all_excel_exists and os.path.exists(all_excel_backup_path):
+                    try:
+                        os.unlink(all_excel_backup_path)
+                    except:
+                        pass
+                return jsonify({'error': f'無法刪除現有的輸出目錄: {output_path}, 錯誤: {str(e)}'}), 500
         else:
             print(f"輸出目錄不存在，將建立新的: {output_path}")
 
-        # 執行分析 - 這裡是關鍵，確保 results 被定義
+        # 執行分析
         results = analyzer.analyze_logs(path)
             
         # 執行 vp_analyze_logs.py
@@ -4483,13 +4564,32 @@ def analyze():
                     print("vp_analyze_logs.py 執行成功")
                     print(f"分析結果輸出到: {output_path}")
                     
-                    # 檢查輸出目錄是否存在
+                    # 確保輸出目錄存在
                     if os.path.exists(output_path):
                         print(f"確認輸出目錄已建立: {output_path}")
+                        
+                        # 還原備份的 all_anr_tombstone_result.xlsx
+                        if all_excel_exists and os.path.exists(all_excel_backup_path):
+                            try:
+                                # 將備份檔案移回輸出目錄
+                                shutil.move(all_excel_backup_path, all_excel_path_in_output)
+                                print(f"已還原 all_anr_tombstone_result.xlsx 到: {all_excel_path_in_output}")
+                            except Exception as e:
+                                print(f"還原 all_anr_tombstone_result.xlsx 失敗: {e}")
+                                # 如果移動失敗，嘗試複製
+                                try:
+                                    shutil.copy2(all_excel_backup_path, all_excel_path_in_output)
+                                    os.unlink(all_excel_backup_path)
+                                    print(f"已複製並還原 all_anr_tombstone_result.xlsx")
+                                except Exception as e2:
+                                    print(f"複製 all_anr_tombstone_result.xlsx 也失敗: {e2}")
+                        
                         # 列出目錄內容
                         try:
                             files = os.listdir(output_path)
                             print(f"輸出目錄包含 {len(files)} 個檔案")
+                            if 'all_anr_tombstone_result.xlsx' in files:
+                                print("確認 all_anr_tombstone_result.xlsx 已在輸出目錄中")
                         except:
                             pass
                     else:
@@ -4514,6 +4614,14 @@ def analyze():
             print(vp_analyze_error)
             import traceback
             traceback.print_exc()
+        finally:
+            # 清理備份檔案（如果還存在）
+            if os.path.exists(all_excel_backup_path):
+                try:
+                    os.unlink(all_excel_backup_path)
+                    print(f"已清理備份檔案: {all_excel_backup_path}")
+                except Exception as e:
+                    print(f"清理備份檔案失敗: {e}")
 
         # 在每個 log 中添加完整路徑
         for log in results['logs']:
@@ -4527,6 +4635,12 @@ def analyze():
         results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
         results['vp_analyze_success'] = vp_analyze_success
         results['vp_analyze_error'] = vp_analyze_error
+        
+        # 檢查 all_anr_tombstone_result.xlsx 是否存在
+        results['has_all_excel'] = os.path.exists(all_excel_path_in_output)
+        results['all_excel_path'] = all_excel_path_in_output if results['has_all_excel'] else None
+        
+        print(f"最終檢查 all_anr_tombstone_result.xlsx: {results['has_all_excel']}")
         
         # 使用新的 cache
         analysis_cache.set(analysis_id, results)
@@ -4547,7 +4661,9 @@ def analyze():
             'anr_subject_count': results.get('anr_subject_count', 0),
             'vp_analyze_output_path': results.get('vp_analyze_output_path'),
             'vp_analyze_success': results.get('vp_analyze_success', False),
-            'vp_analyze_error': results.get('vp_analyze_error')
+            'vp_analyze_error': results.get('vp_analyze_error'),
+            'has_all_excel': results.get('has_all_excel', False),
+            'all_excel_path': results.get('all_excel_path')
         })
         
     except Exception as e:
@@ -4555,7 +4671,7 @@ def analyze():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-        
+    
 @main_page_bp.route('/export/<format>/<analysis_id>')
 def export(format, analysis_id):
     # 使用 LimitedCache 的 get 方法
@@ -5151,11 +5267,10 @@ def extract_ai_summary(content):
 
 @main_page_bp.route('/export-ai-excel', methods=['POST'])
 def export_ai_excel():
-    """Export AI analysis results to Excel with formatting"""
+    """Export current AI analysis results to Excel"""
     try:
         from openpyxl import Workbook
         from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
         
         data = request.json
         if not data:
@@ -5178,7 +5293,6 @@ def export_ai_excel():
             ai_result = ""
             if log.get('file'):
                 try:
-                    # 計算分析檔案路徑
                     file_path = log['file']
                     if file_path.startswith(base_path):
                         relative_path = os.path.relpath(file_path, base_path)
@@ -5188,10 +5302,8 @@ def export_ai_excel():
                     analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
                     
                     if os.path.exists(analyzed_file):
-                        # 使用 UTF-8 編碼讀取
                         with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
-                            # 提取可能原因和關鍵堆疊
                             ai_result = extract_ai_summary(content)
                     else:
                         ai_result = "找不到分析結果"
@@ -5244,11 +5356,10 @@ def export_ai_excel():
             bottom=Side(style='thin', color='D3D3D3')
         )
         
-        # ANR 和 Tombstone 的不同顏色
         anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
         tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
         
-        # 在寫入資料的迴圈中修改
+        # 寫入資料
         for row_idx, row_data in enumerate(excel_data, 2):
             for col_idx, header in enumerate(headers, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
@@ -5256,7 +5367,7 @@ def export_ai_excel():
                 cell.border = data_border
                 
                 # SN 欄位置中對齊
-                if col_idx == 1:  # SN 欄位
+                if col_idx == 1:
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     cell.alignment = data_alignment
@@ -5289,122 +5400,26 @@ def export_ai_excel():
         date_str = datetime.now().strftime('%Y_%m_%d')
         filename = f"{date_str}_anr_tombstone_result.xlsx"
         
-        # 處理 all_anr_tombstone_result.xlsx（改為儲存在分析資料夾）
+        # 檢查並處理 all_anr_tombstone_result.xlsx
         all_excel_path = os.path.join(analysis_output_path, 'all_anr_tombstone_result.xlsx')
-        all_excel_updated = False
+        all_excel_created = False
         
-        try:
-            if os.path.exists(all_excel_path):
-                # 讀取現有的 Excel 檔案
-                from openpyxl import load_workbook
-                existing_wb = load_workbook(all_excel_path)
-                existing_ws = existing_wb.active
-                
-                # 獲取現有資料
-                existing_data = []
-                for row in existing_ws.iter_rows(min_row=2, values_only=True):
-                    if row[0] is not None:  # 確保 SN 不是空的
-                        existing_data.append({
-                            'SN': row[0],
-                            'Date': row[1],
-                            'Type': row[2],
-                            'Process': row[3],
-                            'AI result': row[4],
-                            'Filename': row[5],
-                            'Folder Path': row[6]
-                        })
-                
-                # 更新 SN
-                max_sn = max([int(row.get('SN', 0)) for row in existing_data] + [0])
-                for row in excel_data:
-                    row['SN'] = max_sn + row['SN']
-                
-                # 合併資料
-                all_data = existing_data + excel_data
-                
-                # 建立新的工作簿
-                new_wb = Workbook()
-                new_ws = new_wb.active
-                new_ws.title = "All ANR Tombstone Results"
-                
-                # 寫入標題（使用相同樣式）
-                for col, header in enumerate(headers, 1):
-                    cell = new_ws.cell(row=1, column=col, value=header)
-                    cell.fill = header_fill
-                    cell.font = header_font
-                    cell.alignment = header_alignment
-                    cell.border = header_border
-                
-                # 寫入所有資料
-                for row_idx, row_data in enumerate(all_data, 2):
-                    for col_idx, header in enumerate(headers, 1):
-                        cell = new_ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
-                        cell.font = data_font
-                        cell.alignment = data_alignment
-                        cell.border = data_border
-                        
-                        # 根據類型設定背景色
-                        if col_idx == 3 and row_data.get('Type'):
-                            if row_data.get('Type') == 'ANR':
-                                cell.fill = anr_fill
-                            elif row_data.get('Type') == 'Tombstone':
-                                cell.fill = tombstone_fill
-                
-                # 設定欄寬
-                for col, width in column_widths.items():
-                    new_ws.column_dimensions[col].width = width
-                
-                # 凍結標題列
-                new_ws.freeze_panes = 'A2'
-                
-                # 儲存
-                new_wb.save(all_excel_path)
-                all_excel_updated = True
-                
-            else:
-                # 建立新的 all_anr_tombstone_result.xlsx
-                # 使用與單次匯出相同的格式
-                wb_copy = Workbook()
-                ws_copy = wb_copy.active
-                ws_copy.title = "All ANR Tombstone Results"
-                
-                # 複製標題
-                for col, header in enumerate(headers, 1):
-                    cell = ws_copy.cell(row=1, column=col, value=header)
-                    cell.fill = header_fill
-                    cell.font = header_font
-                    cell.alignment = header_alignment
-                    cell.border = header_border
-                
-                # 複製資料
-                for row_idx, row_data in enumerate(excel_data, 2):
-                    for col_idx, header in enumerate(headers, 1):
-                        cell = ws_copy.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
-                        cell.font = data_font
-                        cell.alignment = data_alignment
-                        cell.border = data_border
-                        
-                        if col_idx == 3 and row_data.get('Type'):
-                            if row_data.get('Type') == 'ANR':
-                                cell.fill = anr_fill
-                            elif row_data.get('Type') == 'Tombstone':
-                                cell.fill = tombstone_fill
-                
-                # 設定欄寬
-                for col, width in column_widths.items():
-                    ws_copy.column_dimensions[col].width = width
-                
-                # 凍結標題列
-                ws_copy.freeze_panes = 'A2'
-                
-                # 儲存
-                wb_copy.save(all_excel_path)
-                all_excel_updated = True
-                
-        except Exception as e:
-            print(f"處理 all_excel 時發生錯誤: {str(e)}")
-            import traceback
-            traceback.print_exc()
+        # 只有在不存在時才創建
+        if not os.path.exists(all_excel_path):
+            try:
+                wb.save(all_excel_path)
+                # 再次確認檔案真的存在
+                if os.path.exists(all_excel_path):
+                    all_excel_created = True
+                    print(f"Created new all_anr_tombstone_result.xlsx at: {all_excel_path}")
+                else:
+                    print("Failed to create all_anr_tombstone_result.xlsx - file not found after save")
+                    all_excel_created = False
+            except Exception as e:
+                print(f"Failed to create all_anr_tombstone_result.xlsx: {str(e)}")
+                all_excel_created = False
+        else:
+            print(f"all_anr_tombstone_result.xlsx already exists at: {all_excel_path}")
         
         # 儲存到記憶體並回傳
         output = io.BytesIO()
@@ -5418,9 +5433,10 @@ def export_ai_excel():
             download_name=filename
         )
         
-        # 在 response header 中加入更新狀態和檔案路徑
-        response.headers['X-All-Excel-Updated'] = str(all_excel_updated).lower()
-        response.headers['X-All-Excel-Path'] = all_excel_path if all_excel_updated else ''
+        # 在 response header 中加入狀態
+        response.headers['X-All-Excel-Created'] = str(all_excel_created).lower()
+        response.headers['X-All-Excel-Path'] = all_excel_path if os.path.exists(all_excel_path) else ''
+        response.headers['X-All-Excel-Exists'] = str(os.path.exists(all_excel_path)).lower()
         
         return response
         
@@ -5429,7 +5445,7 @@ def export_ai_excel():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-    
+
 @main_page_bp.route('/check-all-excel', methods=['POST'])
 def check_all_excel():
     """檢查是否存在 all_anr_tombstone_result.xlsx"""
@@ -5633,6 +5649,149 @@ def export_all_excel_with_current():
         
     except Exception as e:
         print(f"Error in export_all_excel_with_current: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/export-all-history-excel', methods=['POST'])
+def export_all_history_excel():
+    """匯出歷史 Excel，包含當前新的分析結果，並更新原始檔案"""
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
+        data = request.json
+        all_excel_path = data.get('all_excel_path')
+        include_current = data.get('include_current', False)
+        
+        if not all_excel_path or not os.path.exists(all_excel_path):
+            return jsonify({'error': '找不到歷史 Excel 檔案'}), 404
+        
+        # 讀取現有的 Excel 檔案
+        wb = load_workbook(all_excel_path)
+        ws = wb.active
+        
+        includes_current = False
+        
+        # 如果需要包含當前分析結果
+        if include_current and data.get('current_data'):
+            current_data = data['current_data']
+            base_path = current_data.get('path')
+            analysis_output_path = current_data.get('analysis_output_path')
+            logs = current_data.get('logs', [])
+            
+            # 準備當前分析的資料
+            current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+            
+            # 獲取現有資料的最大 SN
+            max_sn = 0
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if row[0] is not None:
+                    try:
+                        max_sn = max(max_sn, int(row[0]))
+                    except:
+                        pass
+            
+            # 定義樣式
+            data_font = Font(size=11)
+            data_alignment = Alignment(vertical="top", wrap_text=True)
+            data_border = Border(
+                left=Side(style='thin', color='D3D3D3'),
+                right=Side(style='thin', color='D3D3D3'),
+                top=Side(style='thin', color='D3D3D3'),
+                bottom=Side(style='thin', color='D3D3D3')
+            )
+            anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+            
+            # 處理當前分析結果
+            sn = max_sn + 1
+            for log in logs:
+                ai_result = ""
+                if log.get('file') and analysis_output_path:
+                    try:
+                        file_path = log['file']
+                        if file_path.startswith(base_path):
+                            relative_path = os.path.relpath(file_path, base_path)
+                        else:
+                            relative_path = file_path
+                        
+                        analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                        
+                        if os.path.exists(analyzed_file):
+                            with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                ai_result = extract_ai_summary(content)
+                        else:
+                            ai_result = "找不到分析結果"
+                    except Exception as e:
+                        ai_result = f"讀取錯誤: {str(e)}"
+                
+                # 寫入新資料
+                row_idx = ws.max_row + 1
+                row_data = [
+                    sn,
+                    current_time,
+                    log.get('type', ''),
+                    log.get('process', ''),
+                    ai_result,
+                    log.get('filename', ''),
+                    log.get('file', '')
+                ]
+                
+                for col_idx, value in enumerate(row_data, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                    cell.font = data_font
+                    cell.border = data_border
+                    
+                    # SN 欄位置中
+                    if col_idx == 1:
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    else:
+                        cell.alignment = data_alignment
+                    
+                    # Type 欄位背景色
+                    if col_idx == 3:
+                        if value == 'ANR':
+                            cell.fill = anr_fill
+                        elif value == 'Tombstone':
+                            cell.fill = tombstone_fill
+                
+                sn += 1
+            
+            includes_current = True
+        
+        # 重要：先保存更新後的原始檔案
+        if includes_current:
+            try:
+                wb.save(all_excel_path)
+                print(f"Updated original all_anr_tombstone_result.xlsx at: {all_excel_path}")
+            except Exception as e:
+                print(f"Failed to update original file: {str(e)}")
+        
+        # 準備匯出的檔案（帶日期的版本）
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # 生成檔名（加上日期）
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f"{date_str}_all_anr_tombstone_result.xlsx"
+        
+        response = send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+        response.headers['X-Includes-Current'] = str(includes_current).lower()
+        response.headers['X-Original-Updated'] = str(includes_current).lower()
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error in export_all_history_excel: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
