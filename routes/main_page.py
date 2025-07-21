@@ -112,6 +112,220 @@ HTML_TEMPLATE = r'''
         }
     }
 
+    .export-excel-btn {
+        position: absolute;
+        top: 30px;
+        right: 160px;
+        background: #28a745;
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    /* 查看分析結果區塊 */
+    .analysis-result-section {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f0f8ff;
+        border-radius: 8px;
+        border: 2px solid #4a90e2;
+    }
+
+    .view-analysis-btn {
+        background: #6f42c1;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .view-analysis-btn:hover {
+        background: #5a32a3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(111, 66, 193, 0.4);
+    }
+
+    /* 匯出歷史區塊 */
+    .export-history-section {
+        margin-top: 20px;
+        padding: 15px;
+        background: #e8f4f8;
+        border-radius: 8px;
+        border: 2px solid #17a2b8;
+    }
+
+    .export-all-btn {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 auto;
+    }
+
+    .export-all-btn:hover {
+        background: #138496;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+    }
+
+    @media (max-width: 768px) {
+        .export-html-btn,
+        .export-excel-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+    }
+
+    /* 分隔線樣式 */
+    .header-separator {
+        position: absolute;
+        top: 75px;
+        right: 30px;
+        left: auto;
+        width: 260px;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.3);
+        display: none;
+    }
+
+    .export-excel-btn:hover {
+        background: rgba(40, 167, 69, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
+    .export-all-excel-btn {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    /* 查看已有分析結果的按鈕 */
+    .view-existing-analysis-btn {
+        position: absolute;
+        top: 30px;
+        right: 300px;  /* 在其他按鈕左邊 */
+        background: #6f42c1;
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    .view-existing-analysis-btn:hover {
+        background: rgba(111, 66, 193, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
+    @media (max-width: 768px) {
+        .export-html-btn,
+        .export-excel-btn,
+        .export-all-excel-btn,
+        .view-existing-analysis-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+        
+        .header-separator {
+            position: static;
+            width: 100%;
+            margin: 10px 0;
+        }
+    }
+    
+    .export-all-excel-btn:hover {
+        background: #138496;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+    }
+
+    /* 檔案路徑資訊 */
+    .file-path-info {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .file-path-info code {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 13px;
+    }
+
+    .export-csv-btn {
+        position: absolute;
+        top: 70px;  /* 在 HTML 按鈕下方 */
+        right: 30px;
+        background: #28a745;  /* 綠色背景 */
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    .export-csv-btn:hover {
+        background: rgba(40, 167, 69, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
+    .export-csv-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    @media (max-width: 768px) {
+        .export-csv-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+    }
+
     /* ===== 導航欄樣式 ===== */
     .nav-bar {
         position: fixed;
@@ -389,6 +603,7 @@ HTML_TEMPLATE = r'''
         gap: 10px;
         margin-top: 20px;
         margin-bottom: 5px;
+        flex-wrap: wrap;  /* 允許換行 */
     }
 
     button {
@@ -1323,7 +1538,9 @@ HTML_TEMPLATE = r'''
         <div class="header" id="top">
             <h1>Android ANR/Tombstone Analyzer</h1>
             <p>分析 anr/ 和 tombstones/ 資料夾中的 Cmd line: / Cmdline: 統計資訊</p>
+            <button class="export-excel-btn" id="exportExcelBtn" onclick="exportAIResults()" style="display: none;">匯出 Excel</button>
             <button class="export-html-btn" id="exportHtmlBtn" onclick="exportResults('html')">匯出 HTML</button>
+            <div class="header-separator" id="headerSeparator"></div>
         </div>
         
         <!-- Navigation Bar -->
@@ -1372,9 +1589,13 @@ HTML_TEMPLATE = r'''
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
                 <button onclick="exportResults('json')" id="exportJsonBtn" disabled>匯出 JSON</button>
-                <button onclick="exportResults('csv')" id="exportCsvBtn" disabled>匯出 CSV</button>
+                <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
+                <button onclick="exportAllExcel()" id="exportAllExcelBtn" class="export-all-excel-btn" style="display: none;">📥 匯出全部 (歷史) Excel</button>
             </div>
-            
+            <!-- 顯示找到的 all_anr_tombstone_result.xlsx 路徑 -->
+            <div id="allExcelPathInfo" class="file-path-info" style="display: none;">
+                <span style="color: #dc3545;">找不到</span> <code id="allExcelPath"></code>
+            </div>         
             <div class="loading" id="loading">
                 正在分析中
             </div>
@@ -1846,7 +2067,25 @@ HTML_TEMPLATE = r'''
         document.addEventListener('DOMContentLoaded', function() {
             const pathInput = document.getElementById('pathInput');
             const autocompleteDiv = document.getElementById('pathAutocomplete');
+
+            // 輸入框失去焦點時檢查
+            pathInput.addEventListener('blur', function() {
+                checkExistingAnalysis(this.value);
+            });
             
+            // 按下 Enter 時也檢查
+            pathInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    checkExistingAnalysis(this.value);
+                }
+            });
+            
+            // 初始檢查
+            if (pathInput.value) {
+                checkExistingAnalysis(pathInput.value);
+            }
+                                    
             // Handle input events
             pathInput.addEventListener('input', function(e) {
                 clearTimeout(autocompleteTimeout);
@@ -2036,6 +2275,81 @@ HTML_TEMPLATE = r'''
             updateToggleTooltips();            
             
         });
+
+        // 檢查是否有已存在的分析結果
+        async function checkExistingAnalysis(path) {
+            if (!path) return;
+            
+            // 顯示檢查中的狀態
+            const viewAnalysisBtn = document.getElementById('viewAnalysisBtn');
+            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+            const allExcelPathInfo = document.getElementById('allExcelPathInfo');
+            const allExcelPath = document.getElementById('allExcelPath');
+            
+            try {
+                const response = await fetch('/check-existing-analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path: path })
+                });
+                
+                const data = await response.json();
+                
+                // 檢查是否有分析結果
+                if (data.exists && data.analysis_path) {
+                    window.existingAnalysisPath = data.analysis_path;
+                    if (viewAnalysisBtn) {
+                        viewAnalysisBtn.style.display = 'inline-flex';
+                    }
+                } else {
+                    if (viewAnalysisBtn) {
+                        viewAnalysisBtn.style.display = 'none';
+                    }
+                    window.existingAnalysisPath = null;
+                }
+                
+                // 檢查是否有 all excel 檔案
+                if (data.has_all_excel && data.all_excel_path) {
+                    if (exportAllExcelBtn) {
+                        exportAllExcelBtn.style.display = 'inline-flex';
+                    }
+                    if (allExcelPathInfo) {
+                        allExcelPathInfo.style.display = 'block';
+                        allExcelPath.textContent = data.all_excel_path;
+                        allExcelPath.style.color = '#28a745';
+                        allExcelPath.previousElementSibling.textContent = '找到';
+                        allExcelPath.previousElementSibling.style.color = '#28a745';
+                    }
+                    window.allExcelPath = data.all_excel_path;
+                } else {
+                    if (exportAllExcelBtn) {
+                        exportAllExcelBtn.style.display = 'none';
+                    }
+                    if (allExcelPathInfo) {
+                        allExcelPathInfo.style.display = 'none';
+                    }
+                    window.allExcelPath = null;
+                }
+                
+            } catch (error) {
+                console.error('檢查已有分析結果失敗:', error);
+                // 錯誤時隱藏按鈕
+                if (viewAnalysisBtn) viewAnalysisBtn.style.display = 'none';
+                if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
+                if (allExcelPathInfo) allExcelPathInfo.style.display = 'none';
+            }
+        }
+
+        // 查看已有分析結果
+        function viewExistingAnalysis() {
+            if (window.existingAnalysisPath) {
+                window.open('/view-analysis-report?path=' + encodeURIComponent(window.existingAnalysisPath), '_blank');
+            } else {
+                showMessage('找不到分析結果', 'error');
+            }
+        }
 
         // 新增函數：設置浮動按鈕的 tooltip
         function setupFloatingTooltips() {
@@ -2241,7 +2555,10 @@ HTML_TEMPLATE = r'''
             // Use the clean path from dataset
             pathInput.value = suggestion;
             hideAutocomplete();
-            
+
+            // 選擇路徑後立即檢查是否有分析結果
+            checkExistingAnalysis(suggestion);
+
             // Trigger another suggestion fetch if path ends with separator
             if (suggestion.endsWith('/') || suggestion.endsWith('\\')) {
                 fetchPathSuggestions(suggestion);
@@ -2274,7 +2591,105 @@ HTML_TEMPLATE = r'''
                 behavior: 'smooth'
             });
         }
-        
+
+        // 匯出全部 Excel
+        async function exportAllExcel() {
+            if (!window.allExcelPath) {
+                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
+                return;
+            }
+            
+            // 直接下載檔案
+            window.location.href = `/download-file?path=${encodeURIComponent(window.allExcelPath)}`;
+        }
+
+        // 新增 AI 結果匯出函數
+        async function exportAIResults() {
+            const path = document.getElementById('pathInput').value;
+            if (!path || !window.vpAnalyzeOutputPath) {
+                showMessage('無法匯出：找不到分析結果', 'error');
+                return;
+            }
+            
+            const exportBtn = document.getElementById('exportExcelBtn');
+            if (!exportBtn) return;
+            
+            exportBtn.disabled = true;
+            exportBtn.textContent = '匯出中...';
+            
+            try {
+                const response = await fetch('/export-ai-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: path,
+                        analysis_output_path: window.vpAnalyzeOutputPath,
+                        logs: allLogs
+                    })
+                });
+                
+                if (response.ok) {
+                    // 下載檔案
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 從 header 獲取檔名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'anr_tombstone_result.xlsx';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    // 檢查是否更新了 all_excel
+                    const allExcelUpdated = response.headers.get('X-All-Excel-Updated') === 'true';
+                    const allExcelPath = response.headers.get('X-All-Excel-Path');
+                    
+                    if (allExcelUpdated) {
+                        showMessage('Excel 匯出成功，並已更新 all_anr_tombstone_result.xlsx', 'success');
+                        // 顯示「匯出全部 Excel」按鈕
+                        const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+                        if (exportAllExcelBtn && allExcelPath) {
+                            exportAllExcelBtn.style.display = 'block';
+                            window.allExcelPath = allExcelPath;
+                        }
+                        // 重新檢查狀態以顯示匯出歷史按鈕
+                        const path = document.getElementById('pathInput').value;
+                        if (path) {
+                            setTimeout(() => {
+                                checkExistingAnalysis(path);
+                            }, 500);
+                        }                        
+                    } else {
+                        showMessage('Excel 匯出成功', 'success');
+                    }
+                } else {
+                    const error = await response.text();
+                    try {
+                        const errorData = JSON.parse(error);
+                        showMessage('匯出失敗: ' + (errorData.error || '未知錯誤'), 'error');
+                    } catch {
+                        showMessage('匯出失敗: ' + error, 'error');
+                    }
+                }
+            } catch (error) {
+                showMessage('匯出失敗: ' + error.message, 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '匯出 Excel';
+            }
+        }
+
         async function analyzeLogs() {
             const path = document.getElementById('pathInput').value;
             if (!path) {
@@ -2282,14 +2697,22 @@ HTML_TEMPLATE = r'''
                 return;
             }
             
+            // 清理狀態
             document.getElementById('analysisResultBtn').classList.remove('show');
-            analysisIndexPath = null;            
+            analysisIndexPath = null;
             
             // Disable analyze button
             document.getElementById('analyzeBtn').disabled = true;
             document.getElementById('loading').style.display = 'block';
             document.getElementById('results').style.display = 'none';
             document.getElementById('exportHtmlBtn').style.display = 'none';
+            
+            // 隱藏匯出按鈕
+            const exportExcelBtn = document.getElementById('exportExcelBtn');
+            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+            if (exportExcelBtn) exportExcelBtn.style.display = 'none';
+            if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
+            
             clearMessage();
             
             try {
@@ -2330,21 +2753,30 @@ HTML_TEMPLATE = r'''
                 // Reset filters and pagination
                 resetFiltersAndPagination();
                 
-                // === 新增：保存分析輸出路徑和狀態 ===
+                // 保存分析輸出路徑和狀態
                 window.vpAnalyzeOutputPath = data.vp_analyze_output_path;
                 window.vpAnalyzeSuccess = data.vp_analyze_success;
-
+                
                 // 設定分析結果按鈕
                 if (data.vp_analyze_success && data.vp_analyze_output_path) {
-                    // 將路徑轉換為 file:// 格式
-                    let filePath = data.vp_analyze_output_path + '/index.html';
-                    
-                    // 新程式碼：使用新的路由
                     analysisIndexPath = '/view-analysis-report?path=' + encodeURIComponent(data.vp_analyze_output_path);
                     const analysisBtn = document.getElementById('analysisResultBtn');
                     analysisBtn.href = analysisIndexPath;
+                    
+                    // 顯示 Excel 匯出按鈕
+                    if (exportExcelBtn) {
+                        exportExcelBtn.style.display = 'block';
+                    }
+                    
+                    // 檢查是否有 all_anr_tombstone_result.xlsx
+                    checkAllExcelFile(data.vp_analyze_output_path);
+
+                    // 分析成功後重新檢查狀態
+                    setTimeout(() => {
+                        checkExistingAnalysis(path);
+                    }, 500);                    
                 }
-                                
+                
                 console.log('vp_analyze 執行結果:', {
                     success: data.vp_analyze_success,
                     outputPath: data.vp_analyze_output_path,
@@ -2356,7 +2788,6 @@ HTML_TEMPLATE = r'''
                 
                 // Enable export buttons
                 document.getElementById('exportJsonBtn').disabled = false;
-                document.getElementById('exportCsvBtn').disabled = false;
                 document.getElementById('exportHtmlBtn').style.display = 'block';
                 
                 let message = `分析完成！共掃描 ${data.total_files} 個檔案，找到 ${data.anr_subject_count} 個包含 ANR 的檔案，找到 ${data.files_with_cmdline - data.anr_subject_count} 個包含 Tombstone 的檔案`;
@@ -2440,6 +2871,30 @@ HTML_TEMPLATE = r'''
             }
         });
         
+        // 檢查是否有 all_anr_tombstone_result.xlsx
+        async function checkAllExcelFile(outputPath) {
+            try {
+                const response = await fetch('/check-all-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ output_path: outputPath })
+                });
+                
+                const data = await response.json();
+                if (data.exists) {
+                    const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+                    if (exportAllExcelBtn) {
+                        exportAllExcelBtn.style.display = 'block';
+                        window.allExcelPath = data.path;
+                    }
+                }
+            } catch (error) {
+                console.error('檢查 all excel 檔案失敗:', error);
+            }
+        }
+
         function resetFiltersAndPagination() {
             summaryPage = 1;
             logsPage = 1;
@@ -2541,6 +2996,12 @@ HTML_TEMPLATE = r'''
             if (data.files_with_cmdline > 0) {
                 showGlobalToggleButton();
             }
+
+            // 安全地啟用匯出按鈕
+            const exportJsonBtn = document.getElementById('exportJsonBtn');
+            if (exportJsonBtn) {
+                exportJsonBtn.disabled = false;
+            }            
         }
 
         // 顯示全局展開/收合按鈕
@@ -4414,3 +4875,568 @@ def view_analysis_report():
 def index():
     """Main page"""
     return HTML_TEMPLATE
+
+@main_page_bp.route('/export-ai-csv', methods=['POST'])
+def export_ai_csv():
+    """Export AI analysis results to CSV with proper encoding"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        base_path = data.get('path')
+        analysis_output_path = data.get('analysis_output_path')
+        logs = data.get('logs', [])
+        
+        if not base_path or not analysis_output_path:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # 準備 CSV 資料
+        csv_data = []
+        sn = 1
+        current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        
+        for log in logs:
+            # 讀取對應的 AI 分析結果
+            ai_result = ""
+            if log.get('file'):
+                try:
+                    # 計算分析檔案路徑
+                    file_path = log['file']
+                    if file_path.startswith(base_path):
+                        relative_path = os.path.relpath(file_path, base_path)
+                    else:
+                        relative_path = file_path
+                    
+                    analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                    
+                    if os.path.exists(analyzed_file):
+                        # 使用 UTF-8 編碼讀取
+                        with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            # 提取可能原因和關鍵堆疊
+                            ai_result = extract_ai_summary(content)
+                    else:
+                        ai_result = "找不到分析結果"
+                except Exception as e:
+                    ai_result = f"讀取錯誤: {str(e)}"
+            
+            csv_data.append({
+                'SN': sn,
+                'Date': current_time,
+                'Type': log.get('type', ''),
+                'Process': log.get('process', ''),
+                'AI result': ai_result,
+                'Filename': log.get('filename', ''),
+                'Folder Path': log.get('file', '')
+            })
+            sn += 1
+        
+        # 生成檔名
+        date_str = datetime.now().strftime('%Y_%m_%d')
+        filename = f"{date_str}_anr_tombstone_result.csv"
+        
+        # 建立 CSV 內容（使用 UTF-8 with BOM）
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=['SN', 'Date', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path'])
+        writer.writeheader()
+        writer.writerows(csv_data)
+        
+        # 處理 all_anr_tombstone_result.csv
+        all_csv_path = os.path.join(os.path.dirname(base_path), 'all_anr_tombstone_result.csv')
+        all_csv_updated = False
+        
+        try:
+            if os.path.exists(all_csv_path):
+                # 讀取現有的 all_anr_tombstone_result.csv
+                existing_data = []
+                with open(all_csv_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                    reader = csv.DictReader(f)
+                    existing_data = list(reader)
+                
+                # 更新 SN
+                max_sn = max([int(row.get('SN', 0)) for row in existing_data] + [0])
+                for row in csv_data:
+                    row['SN'] = max_sn + row['SN']
+                
+                # 合併資料
+                all_data = existing_data + csv_data
+                
+                # 寫入更新後的檔案
+                with open(all_csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=['SN', 'Date', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path'])
+                    writer.writeheader()
+                    writer.writerows(all_data)
+                
+                all_csv_updated = True
+            else:
+                # 建立新的 all_anr_tombstone_result.csv
+                with open(all_csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=['SN', 'Date', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path'])
+                    writer.writeheader()
+                    writer.writerows(csv_data)
+                
+                all_csv_updated = True
+        except Exception as e:
+            print(f"處理 all_csv 時發生錯誤: {str(e)}")
+        
+        # 準備下載（加入 BOM 以確保 Excel 正確識別 UTF-8）
+        output_bytes = io.BytesIO()
+        # 加入 UTF-8 BOM
+        output_bytes.write(b'\xef\xbb\xbf')
+        output_bytes.write(output.getvalue().encode('utf-8'))
+        output_bytes.seek(0)
+        
+        response = send_file(
+            output_bytes,
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+        # 在 response header 中加入更新狀態
+        response.headers['X-All-CSV-Updated'] = str(all_csv_updated).lower()
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error in export_ai_csv: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+def extract_ai_summary(content):
+    """從 AI 分析內容中提取摘要（可能原因和關鍵堆疊）"""
+    if not content:
+        return "無分析內容"
+    
+    summary_parts = []
+    
+    # 提取可能原因
+    patterns = ['可能原因', '可能的原因', '問題原因', 'Possible cause']
+    for pattern in patterns:
+        if pattern in content:
+            start_idx = content.find(pattern)
+            if start_idx != -1:
+                # 找到下一個段落或結束
+                end_markers = ['\n\n', '\n建議', '\n詳細分析', '\n堆疊分析', '\n##']
+                end_idx = len(content)
+                for marker in end_markers:
+                    idx = content.find(marker, start_idx)
+                    if idx != -1 and idx < end_idx:
+                        end_idx = idx
+                
+                reason = content[start_idx:end_idx].strip()
+                # 清理並簡化內容
+                lines = reason.split('\n')
+                clean_lines = []
+                for line in lines[:4]:  # 只取前4行
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        clean_lines.append(line)
+                if clean_lines:
+                    summary_parts.append(' '.join(clean_lines))
+                break
+    
+    # 提取關鍵堆疊
+    patterns = ['關鍵堆疊', '問題堆疊', '重要堆疊', 'Key stack']
+    for pattern in patterns:
+        if pattern in content:
+            start_idx = content.find(pattern)
+            if start_idx != -1:
+                # 找到下一個段落或結束
+                end_markers = ['\n\n', '\n建議', '\n其他', '\n##']
+                end_idx = len(content)
+                for marker in end_markers:
+                    idx = content.find(marker, start_idx)
+                    if idx != -1 and idx < end_idx:
+                        end_idx = idx
+                
+                stack = content[start_idx:end_idx].strip()
+                # 清理並簡化內容
+                lines = stack.split('\n')
+                clean_lines = []
+                for line in lines[:3]:  # 只取前3行
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        clean_lines.append(line)
+                if clean_lines:
+                    summary_parts.append(' '.join(clean_lines))
+                break
+    
+    # 如果沒有找到特定段落，嘗試提取前幾行有意義的內容
+    if not summary_parts:
+        lines = content.strip().split('\n')
+        meaningful_lines = []
+        for line in lines[:10]:  # 檢查前10行
+            line = line.strip()
+            if line and not line.startswith('#') and len(line) > 10:
+                meaningful_lines.append(line)
+            if len(meaningful_lines) >= 3:
+                break
+        if meaningful_lines:
+            return ' '.join(meaningful_lines)[:500]
+    
+    result = ' | '.join(summary_parts)
+    # 移除多餘的空白和換行
+    result = ' '.join(result.split())
+    return result[:500] if result else "無法提取摘要"  # 限制總長度
+
+@main_page_bp.route('/export-ai-excel', methods=['POST'])
+def export_ai_excel():
+    """Export AI analysis results to Excel with formatting"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        base_path = data.get('path')
+        analysis_output_path = data.get('analysis_output_path')
+        logs = data.get('logs', [])
+        
+        if not base_path or not analysis_output_path:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # 準備 Excel 資料
+        excel_data = []
+        sn = 1
+        current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        
+        for log in logs:
+            # 讀取對應的 AI 分析結果
+            ai_result = ""
+            if log.get('file'):
+                try:
+                    # 計算分析檔案路徑
+                    file_path = log['file']
+                    if file_path.startswith(base_path):
+                        relative_path = os.path.relpath(file_path, base_path)
+                    else:
+                        relative_path = file_path
+                    
+                    analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                    
+                    if os.path.exists(analyzed_file):
+                        # 使用 UTF-8 編碼讀取
+                        with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            # 提取可能原因和關鍵堆疊
+                            ai_result = extract_ai_summary(content)
+                    else:
+                        ai_result = "找不到分析結果"
+                except Exception as e:
+                    ai_result = f"讀取錯誤: {str(e)}"
+            
+            excel_data.append({
+                'SN': sn,
+                'Date': current_time,
+                'Type': log.get('type', ''),
+                'Process': log.get('process', ''),
+                'AI result': ai_result,
+                'Filename': log.get('filename', ''),
+                'Folder Path': log.get('file', '')
+            })
+            sn += 1
+        
+        # 建立 Excel 工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ANR Tombstone Analysis"
+        
+        # 設定標題樣式
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        header_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 寫入標題
+        headers = ['SN', 'Date', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = header_border
+        
+        # 設定資料樣式
+        data_font = Font(size=11)
+        data_alignment = Alignment(vertical="top", wrap_text=True)
+        data_border = Border(
+            left=Side(style='thin', color='D3D3D3'),
+            right=Side(style='thin', color='D3D3D3'),
+            top=Side(style='thin', color='D3D3D3'),
+            bottom=Side(style='thin', color='D3D3D3')
+        )
+        
+        # ANR 和 Tombstone 的不同顏色
+        anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+        tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+        
+        # 在寫入資料的迴圈中修改
+        for row_idx, row_data in enumerate(excel_data, 2):
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
+                cell.font = data_font
+                cell.border = data_border
+                
+                # SN 欄位置中對齊
+                if col_idx == 1:  # SN 欄位
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    cell.alignment = data_alignment
+                
+                # 根據類型設定背景色
+                if col_idx == 3:  # Type 欄位
+                    if row_data.get('Type') == 'ANR':
+                        cell.fill = anr_fill
+                    elif row_data.get('Type') == 'Tombstone':
+                        cell.fill = tombstone_fill
+        
+        # 調整欄寬
+        column_widths = {
+            'A': 8,   # SN
+            'B': 20,  # Date
+            'C': 12,  # Type
+            'D': 30,  # Process
+            'E': 60,  # AI result
+            'F': 40,  # Filename
+            'G': 80   # Folder Path
+        }
+        
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # 凍結標題列
+        ws.freeze_panes = 'A2'
+        
+        # 生成檔名
+        date_str = datetime.now().strftime('%Y_%m_%d')
+        filename = f"{date_str}_anr_tombstone_result.xlsx"
+        
+        # 處理 all_anr_tombstone_result.xlsx（改為儲存在分析資料夾）
+        all_excel_path = os.path.join(analysis_output_path, 'all_anr_tombstone_result.xlsx')
+        all_excel_updated = False
+        
+        try:
+            if os.path.exists(all_excel_path):
+                # 讀取現有的 Excel 檔案
+                from openpyxl import load_workbook
+                existing_wb = load_workbook(all_excel_path)
+                existing_ws = existing_wb.active
+                
+                # 獲取現有資料
+                existing_data = []
+                for row in existing_ws.iter_rows(min_row=2, values_only=True):
+                    if row[0] is not None:  # 確保 SN 不是空的
+                        existing_data.append({
+                            'SN': row[0],
+                            'Date': row[1],
+                            'Type': row[2],
+                            'Process': row[3],
+                            'AI result': row[4],
+                            'Filename': row[5],
+                            'Folder Path': row[6]
+                        })
+                
+                # 更新 SN
+                max_sn = max([int(row.get('SN', 0)) for row in existing_data] + [0])
+                for row in excel_data:
+                    row['SN'] = max_sn + row['SN']
+                
+                # 合併資料
+                all_data = existing_data + excel_data
+                
+                # 建立新的工作簿
+                new_wb = Workbook()
+                new_ws = new_wb.active
+                new_ws.title = "All ANR Tombstone Results"
+                
+                # 寫入標題（使用相同樣式）
+                for col, header in enumerate(headers, 1):
+                    cell = new_ws.cell(row=1, column=col, value=header)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = header_alignment
+                    cell.border = header_border
+                
+                # 寫入所有資料
+                for row_idx, row_data in enumerate(all_data, 2):
+                    for col_idx, header in enumerate(headers, 1):
+                        cell = new_ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
+                        cell.font = data_font
+                        cell.alignment = data_alignment
+                        cell.border = data_border
+                        
+                        # 根據類型設定背景色
+                        if col_idx == 3 and row_data.get('Type'):
+                            if row_data.get('Type') == 'ANR':
+                                cell.fill = anr_fill
+                            elif row_data.get('Type') == 'Tombstone':
+                                cell.fill = tombstone_fill
+                
+                # 設定欄寬
+                for col, width in column_widths.items():
+                    new_ws.column_dimensions[col].width = width
+                
+                # 凍結標題列
+                new_ws.freeze_panes = 'A2'
+                
+                # 儲存
+                new_wb.save(all_excel_path)
+                all_excel_updated = True
+                
+            else:
+                # 建立新的 all_anr_tombstone_result.xlsx
+                # 使用與單次匯出相同的格式
+                wb_copy = Workbook()
+                ws_copy = wb_copy.active
+                ws_copy.title = "All ANR Tombstone Results"
+                
+                # 複製標題
+                for col, header in enumerate(headers, 1):
+                    cell = ws_copy.cell(row=1, column=col, value=header)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = header_alignment
+                    cell.border = header_border
+                
+                # 複製資料
+                for row_idx, row_data in enumerate(excel_data, 2):
+                    for col_idx, header in enumerate(headers, 1):
+                        cell = ws_copy.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
+                        cell.font = data_font
+                        cell.alignment = data_alignment
+                        cell.border = data_border
+                        
+                        if col_idx == 3 and row_data.get('Type'):
+                            if row_data.get('Type') == 'ANR':
+                                cell.fill = anr_fill
+                            elif row_data.get('Type') == 'Tombstone':
+                                cell.fill = tombstone_fill
+                
+                # 設定欄寬
+                for col, width in column_widths.items():
+                    ws_copy.column_dimensions[col].width = width
+                
+                # 凍結標題列
+                ws_copy.freeze_panes = 'A2'
+                
+                # 儲存
+                wb_copy.save(all_excel_path)
+                all_excel_updated = True
+                
+        except Exception as e:
+            print(f"處理 all_excel 時發生錯誤: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        # 儲存到記憶體並回傳
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+        # 在 response header 中加入更新狀態和檔案路徑
+        response.headers['X-All-Excel-Updated'] = str(all_excel_updated).lower()
+        response.headers['X-All-Excel-Path'] = all_excel_path if all_excel_updated else ''
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error in export_ai_excel: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    
+@main_page_bp.route('/check-all-excel', methods=['POST'])
+def check_all_excel():
+    """檢查是否存在 all_anr_tombstone_result.xlsx"""
+    try:
+        data = request.json
+        output_path = data.get('output_path')
+        
+        if not output_path:
+            return jsonify({'exists': False})
+        
+        all_excel_path = os.path.join(output_path, 'all_anr_tombstone_result.xlsx')
+        exists = os.path.exists(all_excel_path)
+        
+        return jsonify({
+            'exists': exists,
+            'path': all_excel_path if exists else None
+        })
+        
+    except Exception as e:
+        return jsonify({'exists': False, 'error': str(e)})
+
+@main_page_bp.route('/download-file')
+def download_file():
+    """下載檔案"""
+    file_path = request.args.get('path')
+    
+    if not file_path or not os.path.exists(file_path):
+        return "File not found", 404
+    
+    # 安全檢查
+    if '..' in file_path:
+        return "Invalid path", 403
+    
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=os.path.basename(file_path)
+    )
+
+@main_page_bp.route('/check-existing-analysis', methods=['POST'])
+def check_existing_analysis():
+    """檢查是否有已存在的分析結果"""
+    try:
+        data = request.json
+        base_path = data.get('path')
+        
+        if not base_path or not os.path.exists(base_path):
+            return jsonify({'exists': False})
+        
+        # 尋找分析資料夾
+        # 使用與 vp_analyze_logs.py 相同的命名規則
+        last_folder_name = os.path.basename(base_path.rstrip(os.sep))
+        analysis_folder_name = f".{last_folder_name}_anr_tombstones_analyze"
+        analysis_path = os.path.join(base_path, analysis_folder_name)
+        
+        if os.path.exists(analysis_path) and os.path.isdir(analysis_path):
+            # 檢查是否有 index.html
+            index_path = os.path.join(analysis_path, 'index.html')
+            has_index = os.path.exists(index_path)
+            
+            # 檢查是否有 all_anr_tombstone_result.xlsx
+            all_excel_path = os.path.join(analysis_path, 'all_anr_tombstone_result.xlsx')
+            has_all_excel = os.path.exists(all_excel_path)
+            
+            return jsonify({
+                'exists': has_index,
+                'analysis_path': analysis_path,
+                'has_all_excel': has_all_excel,
+                'all_excel_path': all_excel_path if has_all_excel else None
+            })
+        
+        return jsonify({'exists': False})
+        
+    except Exception as e:
+        print(f"Error checking existing analysis: {str(e)}")
+        return jsonify({'exists': False, 'error': str(e)})
+    
