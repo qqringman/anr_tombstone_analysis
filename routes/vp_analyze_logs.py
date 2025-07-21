@@ -7402,7 +7402,7 @@ class LogAnalyzerSystem:
                     
                     # 使用新的查看器，傳遞絕對路徑
                     html_str += f'''
-                    <div class="file-item {file_type}-item" data-path="{html.escape(analyzed_path)}" title="{html.escape(analyzed_path)}">
+                    <div class="file-item {file_type}-item" data-path="{html.escape(analyzed_path)}">
                         <a href="/view-analysis?path={html.escape(analyzed_path)}" class="file-link">
                             <div class="file-content">
                                 <span class="file-icon">{icon}</span>
@@ -7737,7 +7737,7 @@ class LogAnalyzerSystem:
                     
                     html_str += f'''
                     <div class="similarity-item">
-                        <div class="report-header" onclick="toggleReport('{report_id}')" data-path="{html.escape(report.get('path', ''))}" title="{html.escape(report.get('path', ''))}">
+                        <div class="report-header" onclick="toggleReport('{report_id}')" data-path="{html.escape(report.get('path', ''))}">
                             <svg class="report-arrow open" id="arrow-{report_id}" width="16" height="16" viewBox="0 0 16 16">
                                 <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/>
                             </svg>
@@ -10101,6 +10101,150 @@ class LogAnalyzerSystem:
                 animation: fadeIn 0.2s ease-out;
             }}
 
+            /* 自定義路徑 Tooltip */
+            .path-tooltip {{
+                position: fixed;
+                background: rgba(20, 20, 20, 0.95);
+                color: #e0e0e0;
+                padding: 10px 40px 10px 14px;
+                border-radius: 8px;
+                font-size: 12px;
+                font-family: 'Monaco', 'Consolas', monospace;
+                z-index: 10000;
+                pointer-events: auto;
+                opacity: 0;
+                visibility: hidden;
+                transition: all 0.2s ease;
+                max-width: 600px;
+                word-break: break-all;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }}
+
+            .path-tooltip.show {{
+                opacity: 1;
+                visibility: visible;
+            }}
+
+            .tooltip-content {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                position: relative;
+            }}
+
+            .tooltip-text {{
+                user-select: text;
+                cursor: text;
+                line-height: 1.4;
+            }}
+
+            /* 複製按鈕 */
+            .tooltip-copy-btn {{
+                position: absolute;
+                right: -30px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(88, 166, 255, 0.2);
+                border: 1px solid rgba(88, 166, 255, 0.4);
+                color: #79c0ff;
+                padding: 4px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+
+            .tooltip-copy-btn:hover {{
+                background: rgba(88, 166, 255, 0.3);
+                border-color: #79c0ff;
+                transform: translateY(-50%) scale(1.1);
+            }}
+
+            .tooltip-copy-btn.copied {{
+                background: rgba(16, 185, 129, 0.3);
+                border-color: #10b981;
+                color: #10b981;
+            }}
+
+            /* Tooltip 箭頭 */
+            .tooltip-arrow {{
+                position: absolute;
+                bottom: -6px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 12px;
+                height: 12px;
+                background: rgba(20, 20, 20, 0.95);
+                border-right: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                transform: translateX(-50%) rotate(45deg);
+            }}
+
+            /* Light theme tooltip */
+            .light-theme .path-tooltip {{
+                background: rgba(255, 255, 255, 0.98);
+                color: #2d2d2d;
+                border: 1px solid rgba(0, 0, 0, 0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            }}
+
+            .light-theme .tooltip-arrow {{
+                background: rgba(255, 255, 255, 0.98);
+                border-color: rgba(0, 0, 0, 0.1);
+            }}
+
+            .light-theme .tooltip-copy-btn {{
+                background: rgba(9, 105, 218, 0.1);
+                border-color: rgba(9, 105, 218, 0.3);
+                color: #0969da;
+            }}
+
+            .light-theme .tooltip-copy-btn:hover {{
+                background: rgba(9, 105, 218, 0.2);
+                border-color: #0969da;
+            }}
+
+            /* 確保 tooltip 在小螢幕上也能正常顯示 */
+            @media (max-width: 768px) {{
+                .path-tooltip {{
+                    max-width: calc(100vw - 40px);
+                    font-size: 11px;
+                    padding: 8px 35px 8px 12px;
+                }}
+                
+                .tooltip-copy-btn {{
+                    right: -28px;
+                    padding: 3px;
+                }}
+            }}
+
+            /* Tooltip 在底部顯示時的樣式 */
+            .path-tooltip.bottom .tooltip-arrow {{
+                top: -6px;
+                bottom: auto;
+                transform: translateX(-50%) rotate(-135deg);
+            }}
+
+            /* 讓 tooltip 文字更容易選取 */
+            .tooltip-text::selection {{
+                background: rgba(88, 166, 255, 0.3);
+                color: #ffffff;
+            }}
+
+            .light-theme .tooltip-text::selection {{
+                background: rgba(9, 105, 218, 0.3);
+                color: #000000;
+            }}
+
+            /* 當選取文字時，暫時隱藏複製按鈕避免干擾 */
+            .tooltip-text:focus-within ~ .tooltip-copy-btn {{
+                opacity: 0.5;
+            }}
+
         </style>
     </head>
     <body>
@@ -10228,7 +10372,20 @@ class LogAnalyzerSystem:
                     <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
-        </div>     
+        </div>
+        <!-- 自定義 Tooltip -->
+        <div id="pathTooltip" class="path-tooltip">
+            <div class="tooltip-content">
+                <span class="tooltip-text"></span>
+                <button class="tooltip-copy-btn" onclick="copyTooltipText()">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M5.5 2.5h7a1 1 0 011 1v9a1 1 0 01-1 1h-7a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                        <path d="M2.5 5.5v8a1 1 0 001 1h6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="tooltip-arrow"></div>
+        </div>           
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-content">
@@ -11368,6 +11525,173 @@ class LogAnalyzerSystem:
                 
                 document.body.removeChild(textArea);
             }}
+
+            // Tooltip 系統
+            let currentTooltipTarget = null;
+            let tooltipTimeout = null;
+            let isTooltipHovered = false;
+
+            // 初始化 Tooltip
+            function initTooltip() {{
+                const tooltip = document.getElementById('pathTooltip');
+                
+                // 防止 tooltip 消失當滑鼠在 tooltip 上
+                tooltip.addEventListener('mouseenter', () => {{
+                    isTooltipHovered = true;
+                }});
+                
+                tooltip.addEventListener('mouseleave', () => {{
+                    isTooltipHovered = false;
+                    hideTooltip();
+                }});
+                
+                // 為所有需要 tooltip 的元素添加事件
+                document.addEventListener('mouseover', handleMouseOver);
+                document.addEventListener('mouseout', handleMouseOut);
+            }}
+
+            // 處理滑鼠移入
+            function handleMouseOver(e) {{
+                const target = e.target.closest('.file-item, .similarity-item');
+                if (!target) return;
+                
+                // 獲取路徑
+                const path = target.getAttribute('data-path') || 
+                            target.querySelector('[data-path]')?.getAttribute('data-path');
+                
+                if (!path) return;
+                
+                currentTooltipTarget = target;
+                
+                // 延遲顯示 tooltip
+                tooltipTimeout = setTimeout(() => {{
+                    showTooltip(target, path);
+                }}, 100); // 100ms 延遲
+            }}
+
+            // 處理滑鼠移出
+            function handleMouseOut(e) {{
+                const target = e.target.closest('.file-item, .similarity-item');
+                if (!target || target !== currentTooltipTarget) return;
+                
+                clearTimeout(tooltipTimeout);
+                
+                // 延遲隱藏，讓用戶有時間移到 tooltip 上
+                setTimeout(() => {{
+                    if (!isTooltipHovered) {{
+                        hideTooltip();
+                    }}
+                }}, 100);
+            }}
+
+            // 顯示 Tooltip
+            function showTooltip(element, path) {{
+                const tooltip = document.getElementById('pathTooltip');
+                const tooltipText = tooltip.querySelector('.tooltip-text');
+                
+                // 設置內容
+                tooltipText.textContent = path;
+                tooltipText.setAttribute('data-path', path);
+                
+                // 計算位置
+                const rect = element.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+                
+                let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+                let top = rect.top - tooltipRect.height - 15;
+                
+                // 防止超出視窗
+                if (left < 10) left = 10;
+                if (left + tooltipRect.width > window.innerWidth - 10) {{
+                    left = window.innerWidth - tooltipRect.width - 10;
+                }}
+                
+                // 如果上方空間不夠，顯示在下方
+                if (top < 10) {{
+                    top = rect.bottom + 15;
+                    tooltip.classList.add('bottom');
+                }} else {{
+                    tooltip.classList.remove('bottom');
+                }}
+                
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+                
+                // 顯示
+                requestAnimationFrame(() => {{
+                    tooltip.classList.add('show');
+                }});
+            }}
+
+            // 隱藏 Tooltip
+            function hideTooltip() {{
+                const tooltip = document.getElementById('pathTooltip');
+                tooltip.classList.remove('show');
+                currentTooltipTarget = null;
+            }}
+
+            // 複製 Tooltip 文字
+            function copyTooltipText() {{
+                const tooltip = document.getElementById('pathTooltip');
+                const tooltipText = tooltip.querySelector('.tooltip-text');
+                const copyBtn = tooltip.querySelector('.tooltip-copy-btn');
+                const path = tooltipText.getAttribute('data-path');
+                
+                if (!path) return;
+                
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(path).then(() => {{
+                        // 更新按鈕狀態
+                        copyBtn.classList.add('copied');
+                        const originalHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = `
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                                <path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            </svg>
+                        `;
+                        
+                        setTimeout(() => {{
+                            copyBtn.classList.remove('copied');
+                            copyBtn.innerHTML = originalHTML;
+                        }}, 2000);
+                    }}).catch(err => {{
+                        fallbackCopyTooltipText(path);
+                    }});
+                }} else {{
+                    fallbackCopyTooltipText(path);
+                }}
+            }}
+
+            // Fallback 複製方法
+            function fallbackCopyTooltipText(text) {{
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                
+                try {{
+                    document.execCommand('copy');
+                    // 顯示複製成功
+                    const copyBtn = document.querySelector('.tooltip-copy-btn');
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => {{
+                        copyBtn.classList.remove('copied');
+                    }}, 2000);
+                }} catch (err) {{
+                    console.error('複製失敗:', err);
+                }}
+                
+                document.body.removeChild(textArea);
+            }}
+
+            // 在 DOMContentLoaded 時初始化
+            document.addEventListener('DOMContentLoaded', function() {{
+                initTooltip();
+                
+                // 其他初始化代碼...
+            }});
 
         </script>
     </body>
