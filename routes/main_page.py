@@ -699,13 +699,20 @@ HTML_TEMPLATE = r'''
 
     .path-format {
         background-color: #f8f9fa;
-        padding: 15px;
+        padding: 12px 15px;
         border: 2px solid #e1e4e8;
         border-left: 5px solid #3498db;
         border-radius: 8px;
         margin-top: 5px;
-        display: flex;
-        align-items: flex-start;
+    }
+
+    .path-format ul {
+        line-height: 1.6;
+    }
+
+    .path-format ul li {
+        color: #555;
+        font-size: 14px;
     }
 
     .path-format strong {
@@ -1654,11 +1661,14 @@ HTML_TEMPLATE = r'''
         left: 0;
         right: 0;
         bottom: 0;
+        width: 100%;
+        height: 100%;
         background: rgba(0, 0, 0, 0.5);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 10000;
+        overflow: hidden;  /* 防止滾動 */
     }
 
     .merge-dialog {
@@ -1717,10 +1727,10 @@ HTML_TEMPLATE = r'''
     }
 
     /* 拖曳區域樣式 */
-    .merge-drop-zone {
+        .merge-drop-zone {
         border: 3px dashed #e1e4e8;
         border-radius: 12px;
-        padding: 25px;  /* 從 40px 改為 25px */
+        padding: 15px;  /* 從 25px 改為 15px */
         text-align: center;
         transition: all 0.3s;
         background: white;
@@ -1743,14 +1753,14 @@ HTML_TEMPLATE = r'''
     }
 
     .drop-icon {
-        font-size: 36px;  /* 從 48px 改為 36px */
-        margin-bottom: 8px;  /* 從 10px 改為 8px */
+        font-size: 28px;  /* 從 36px 改為 28px */
+        margin-bottom: 5px;  /* 從 8px 改為 5px */
     }
 
     .drop-zone-hint {
         color: #999;
-        font-size: 13px;  /* 從 14px 改為 13px */
-        margin: 8px 0;  /* 從 10px 改為 8px */
+        font-size: 12px;  /* 從 13px 改為 12px */
+        margin: 5px 0;  /* 從 8px 改為 5px */
     }
 
     .btn-select-file {
@@ -1878,6 +1888,32 @@ HTML_TEMPLATE = r'''
         border-radius: 0 0 12px 12px;
     }
 
+    /* 修改路徑建議項目樣式 - 允許橫向捲動 */
+    .merge-path-autocomplete .path-suggestion {
+        padding: 10px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        font-family: monospace;
+        font-size: 13px;
+        color: #333;
+        transition: background-color 0.2s;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        position: relative;  /* 重要：設定相對定位 */
+    }
+
+    /* 確保最後一個項目沒有底部邊框 */
+    .merge-path-autocomplete .path-suggestion:last-child {
+        border-bottom: none;
+    }
+
+    /* 為路徑建議添加內部容器 */
+    .merge-path-autocomplete-inner {
+        min-width: 100%;
+        width: max-content;
+    }
+
     /* 修改 merge-path-autocomplete 的樣式 */
     #mergePathAutocomplete {
         position: absolute;
@@ -1888,18 +1924,97 @@ HTML_TEMPLATE = r'''
         border: 2px solid #e1e4e8;
         border-top: none;
         border-radius: 0 0 8px 8px;
-        height: 180px;  /* 固定高度約 5 行 */
+        max-height: 150px;
         overflow-y: auto;
-        overflow-x: auto;           /* 添加水平滾動 */        
+        overflow-x: auto;
         display: none;
         z-index: 1000;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    /* 懸停時的樣式 - 不改變大小 */
+    .merge-path-autocomplete .path-suggestion:hover {
+        background-color: #f8f9fa;
+    }
+
+    /* 顯示完整路徑的 tooltip */
+    .merge-path-autocomplete .path-suggestion::after {
+        content: attr(title);
+        position: absolute;
+        left: 0;
+        top: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+        z-index: 1001;
+        display: none;
+    }
+
+    .merge-path-autocomplete .path-suggestion:hover::after {
+        opacity: 1;
+        display: block;
+    }
+
+    /* 捲軸樣式 */
+    #mergePathAutocomplete::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-thumb {
+        background: #999;
+        border-radius: 3px;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-thumb:hover {
+        background: #666;
+    }
+
+    /* 防止選中時的跳動 */
+    .merge-path-autocomplete .path-suggestion.selected {
+        background-color: #e8eaf6;
     }
 
     .btn-select-file:focus {
         outline: 2px solid #667eea;
         outline-offset: 2px;
         box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    /* 選中項目的樣式 */
+    .merge-path-autocomplete .path-suggestion.selected {
+        background-color: #e8eaf6;
+        position: relative;  /* 確保選中項目顯示在上層 */
+    }
+
+    /* 讓捲軸更明顯 */
+    #mergePathAutocomplete::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+    }
+
+    #mergePathAutocomplete::-webkit-scrollbar-thumb:hover {
+        background: #555;
     }
 
     </style>      
@@ -2327,12 +2442,12 @@ HTML_TEMPLATE = r'''
                     </div>
                     
                     <!-- 路徑格式提示 -->
-                    <small style="display: block; margin-top: 8px;">
+                    <small style="display: block; margin-top: 15px;">
                         <div class="path-format">
-                            <p><strong>支援格式：</strong></p>
-                            <ul style="margin: 5px 0 0 20px; padding: 0;">
-                                <li>直接拖曳本地 Excel 檔案 (.xlsx)</li>
-                                <li>點擊「選擇檔案」瀏覽本地檔案</li>
+                            <p style="margin: 0 0 8px 0;"><strong>支援格式：</strong></p>
+                            <ul style="margin: 0 0 0 20px; padding: 0; list-style-type: disc;">
+                                <li style="margin-bottom: 5px;">直接拖曳本地 Excel 檔案 (.xlsx)</li>
+                                <li style="margin-bottom: 5px;">點擊「選擇檔案」瀏覽本地檔案</li>
                                 <li>輸入伺服器上的 Excel 檔案路徑</li>
                             </ul>
                         </div>
@@ -4543,6 +4658,11 @@ HTML_TEMPLATE = r'''
 
         // 打開合併對話框
         function openMergeDialog() {
+            // 防止背景滾動
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+            
             document.getElementById('mergeDialogOverlay').style.display = 'flex';
             clearMergeSelection();
             
@@ -4550,8 +4670,6 @@ HTML_TEMPLATE = r'''
             const mainPath = document.getElementById('pathInput').value;
             if (mainPath) {
                 document.getElementById('mergePathInput').value = mainPath;
-                // 觸發路徑建議
-                fetchMergePathSuggestions(mainPath);
             }
             
             // 設置焦點到選擇檔案按鈕
@@ -4565,6 +4683,11 @@ HTML_TEMPLATE = r'''
 
         // 關閉合併對話框
         function closeMergeDialog() {
+            // 恢復背景滾動
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.width = '';
+            
             document.getElementById('mergeDialogOverlay').style.display = 'none';
             hideMergeAutocomplete();
         }
@@ -4629,29 +4752,37 @@ HTML_TEMPLATE = r'''
             const autocompleteDiv = document.getElementById('mergePathAutocomplete');
             autocompleteDiv.innerHTML = '';
             
+            // 創建內部容器
+            const innerDiv = document.createElement('div');
+            innerDiv.className = 'merge-path-autocomplete-inner';
+            
             suggestions.forEach((suggestion, index) => {
                 const div = document.createElement('div');
                 div.className = 'path-suggestion';
                 div.dataset.index = index;
                 
                 // 處理資料夾標記
-                let displayText = suggestion;
                 let actualPath = suggestion;
+                let displayPath = suggestion;
                 
                 if (suggestion.endsWith(' 📁')) {
-                    displayText = suggestion;
                     actualPath = suggestion.replace(' 📁', '');
+                    displayPath = actualPath;
+                    // 在路徑後添加圖示
+                    div.innerHTML = `<span>${escapeHtml(displayPath)}</span> <span style="color: #ffc107;">📁</span>`;
                 } else if (suggestion.endsWith('.xlsx')) {
-                    displayText = `${suggestion} <span style="color: #28a745;">📊</span>`;
+                    div.innerHTML = `<span>${escapeHtml(suggestion)}</span> <span style="color: #28a745;">📊</span>`;
+                } else {
+                    div.textContent = suggestion;
                 }
                 
-                div.innerHTML = displayText;
                 div.dataset.path = actualPath;
                 
-                // 添加 title 屬性顯示完整路徑
-                div.title = actualPath;
+                // 添加 title 屬性但不顯示瀏覽器預設 tooltip
+                div.setAttribute('data-full-path', actualPath);
                 
-                div.addEventListener('click', function() {
+                div.addEventListener('click', function(e) {
+                    e.stopPropagation();
                     applyMergeSuggestion(actualPath);
                 });
                 
@@ -4659,9 +4790,10 @@ HTML_TEMPLATE = r'''
                     selectMergeSuggestion(index);
                 });
                 
-                autocompleteDiv.appendChild(div);
+                innerDiv.appendChild(div);
             });
             
+            autocompleteDiv.appendChild(innerDiv);
             showMergeAutocomplete();
         }
 
@@ -4677,8 +4809,21 @@ HTML_TEMPLATE = r'''
             mergeSelectedSuggestionIndex = index;
             
             if (index >= 0 && index < suggestions.length) {
-                suggestions[index].classList.add('selected');
-                suggestions[index].scrollIntoView({ block: 'nearest' });
+                const selectedElement = suggestions[index];
+                selectedElement.classList.add('selected');
+                
+                // 確保選中的項目在視窗中可見（只處理垂直捲動）
+                const container = document.getElementById('mergePathAutocomplete');
+                const elementTop = selectedElement.offsetTop;
+                const elementBottom = elementTop + selectedElement.offsetHeight;
+                const containerTop = container.scrollTop;
+                const containerBottom = containerTop + container.clientHeight;
+                
+                if (elementTop < containerTop) {
+                    container.scrollTop = elementTop;
+                } else if (elementBottom > containerBottom) {
+                    container.scrollTop = elementBottom - container.clientHeight;
+                }
             }
         }
 
@@ -4804,6 +4949,47 @@ HTML_TEMPLATE = r'''
 
         // 在 DOMContentLoaded 事件中添加事件監聽器
         document.addEventListener('DOMContentLoaded', function() {
+
+            const mergeAutocomplete = document.getElementById('mergePathAutocomplete');
+            if (mergeAutocomplete) {
+                // 防止點擊自動完成框時關閉
+                mergeAutocomplete.addEventListener('mousedown', function(e) {
+                    e.stopPropagation();
+                });
+                
+                // 處理捲軸事件
+                mergeAutocomplete.addEventListener('scroll', function(e) {
+                    e.stopPropagation();
+                });
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const mergeDialog = document.getElementById('mergeDialogOverlay');
+                    if (mergeDialog && mergeDialog.style.display === 'flex') {
+                        closeMergeDialog();
+                    }
+                }
+            });
+
+            const mergeDialogOverlay = document.getElementById('mergeDialogOverlay');
+            if (mergeDialogOverlay) {
+                // 點擊遮罩層關閉對話框
+                mergeDialogOverlay.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeMergeDialog();
+                    }
+                });
+                
+                // 防止對話框內的點擊事件冒泡
+                const mergeDialog = mergeDialogOverlay.querySelector('.merge-dialog');
+                if (mergeDialog) {
+                    mergeDialog.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                    });
+                }
+            }
+                    
             // 合併 Excel 輸入框事件
             const mergePathInput = document.getElementById('mergePathInput');
             if (mergePathInput) {
@@ -4923,7 +5109,8 @@ HTML_TEMPLATE = r'''
                     closeMergeDialog();
                 }
             });
-        });        
+        });
+
     </script>
 </body>
 </html>
