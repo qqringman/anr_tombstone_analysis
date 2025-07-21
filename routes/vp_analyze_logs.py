@@ -7785,18 +7785,18 @@ class LogAnalyzerSystem:
             }}
             
             :root {{
-                --bg-primary: #212121;
-                --bg-secondary: #2a2a2a;
-                --bg-hover: #343434;
-                --text-primary: #ececec;
-                --text-secondary: #a0a0a0;
-                --text-muted: #6e6e6e;
-                --border: #424242;
-                --accent: #10a37f;
-                --accent-hover: #0e8e6f;
-                --anr-color: #ff9800;        /* 改為橘色，更柔和 */
-                --tombstone-color: #ab47bc;
-                --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                --bg-primary: #0d1117;        /* GitHub 深色背景 */
+                --bg-secondary: #161b22;      /* 稍亮的深色 */
+                --bg-hover: #21262d;          /* 懸停色 */
+                --text-primary: #c9d1d9;      /* 柔和的白色 */
+                --text-secondary: #8b949e;    /* 次要文字 */
+                --text-muted: #6e7681;        /* 靜音文字 */
+                --border: #30363d;            /* 邊框色 */
+                --accent: #58a6ff;            /* 科技藍 */
+                --accent-hover: #79c0ff;      /* 亮藍 */
+                --anr-color: #f85149;         /* 警告紅 */
+                --tombstone-color: #a371f7;   /* 優雅紫 */
+                --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
                 --radius: 8px;
             }}
             
@@ -8705,14 +8705,14 @@ class LogAnalyzerSystem:
             .search-box {{
                 position: relative;
                 width: 100%;
-                border: 1px solid rgba(16, 163, 127, 0.2);
+                border: 1px solid rgba(88, 166, 255, 0.2);
                 border-radius: 12px;
                 transition: all 0.3s ease;
                 overflow: hidden;
             }}
 
             .search-box:hover {{
-                border-color: rgba(14, 142, 111, 0.5);
+                border-color: rgba(88, 166, 255, 0.5);
                 box-shadow: 0 0 20px rgba(16, 163, 127, 0.1);
             }}
 
