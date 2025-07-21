@@ -2594,13 +2594,77 @@ HTML_TEMPLATE = r'''
 
         // 匯出全部 Excel
         async function exportAllExcel() {
-            if (!window.allExcelPath) {
-                showMessage('找不到 all_anr_tombstone_result.xlsx', 'error');
-                return;
-            }
+            const exportBtn = document.getElementById('exportAllExcelBtn');
+            if (!exportBtn) return;
             
-            // 直接下載檔案
-            window.location.href = `/download-file?path=${encodeURIComponent(window.allExcelPath)}`;
+            exportBtn.disabled = true;
+            exportBtn.textContent = '匯出中...';
+            
+            try {
+                // 準備請求數據
+                const requestData = {
+                    all_excel_path: window.allExcelPath
+                };
+                
+                // 如果有當前分析結果且尚未匯出，則包含當前結果
+                if (window.hasCurrentAnalysis && window.vpAnalyzeOutputPath && allLogs.length > 0) {
+                    requestData.include_current = true;
+                    requestData.current_data = {
+                        path: document.getElementById('pathInput').value,
+                        analysis_output_path: window.vpAnalyzeOutputPath,
+                        logs: allLogs
+                    };
+                }
+                
+                const response = await fetch('/export-all-excel-with-current', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (response.ok) {
+                    // 下載檔案
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 從 header 獲取檔名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'all_anr_tombstone_result.xlsx';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    if (window.hasCurrentAnalysis) {
+                        showMessage('已匯出全部 Excel（包含本次分析結果）', 'success');
+                    } else {
+                        showMessage('已匯出歷史 Excel 資料', 'success');
+                    }
+                } else {
+                    const error = await response.text();
+                    try {
+                        const errorData = JSON.parse(error);
+                        showMessage('匯出失敗: ' + (errorData.error || '未知錯誤'), 'error');
+                    } catch {
+                        showMessage('匯出失敗: ' + error, 'error');
+                    }
+                }
+            } catch (error) {
+                showMessage('匯出失敗: ' + error.message, 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '📥 匯出全部 (歷史) Excel';
+            }
         }
 
         // 新增 AI 結果匯出函數
@@ -2673,6 +2737,14 @@ HTML_TEMPLATE = r'''
                     } else {
                         showMessage('Excel 匯出成功', 'success');
                     }
+                    // 標記當前分析已包含在歷史中
+                    window.currentAnalysisExported = true;
+                    
+                    // 顯示歷史按鈕（如果之前沒有顯示）
+                    const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
+                    if (exportAllExcelBtn && window.allExcelPath) {
+                        exportAllExcelBtn.style.display = 'inline-flex';
+                    }                    
                 } else {
                     const error = await response.text();
                     try {
@@ -2697,7 +2769,6 @@ HTML_TEMPLATE = r'''
                 return;
             }
             
-            // 清理狀態
             document.getElementById('analysisResultBtn').classList.remove('show');
             analysisIndexPath = null;
             
@@ -2707,10 +2778,12 @@ HTML_TEMPLATE = r'''
             document.getElementById('results').style.display = 'none';
             document.getElementById('exportHtmlBtn').style.display = 'none';
             
-            // 隱藏匯出按鈕
+            // 隱藏當次分析的匯出按鈕，但保留歷史按鈕的狀態
             const exportExcelBtn = document.getElementById('exportExcelBtn');
-            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
             if (exportExcelBtn) exportExcelBtn.style.display = 'none';
+            
+            // 不要隱藏歷史按鈕，保持原本的狀態
+            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
             if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
             
             clearMessage();
@@ -2756,6 +2829,7 @@ HTML_TEMPLATE = r'''
                 // 保存分析輸出路徑和狀態
                 window.vpAnalyzeOutputPath = data.vp_analyze_output_path;
                 window.vpAnalyzeSuccess = data.vp_analyze_success;
+                window.hasCurrentAnalysis = true; // 標記有當前分析結果
                 
                 // 設定分析結果按鈕
                 if (data.vp_analyze_success && data.vp_analyze_output_path) {
@@ -2767,14 +2841,6 @@ HTML_TEMPLATE = r'''
                     if (exportExcelBtn) {
                         exportExcelBtn.style.display = 'block';
                     }
-                    
-                    // 檢查是否有 all_anr_tombstone_result.xlsx
-                    checkAllExcelFile(data.vp_analyze_output_path);
-
-                    // 分析成功後重新檢查狀態
-                    setTimeout(() => {
-                        checkExistingAnalysis(path);
-                    }, 500);                    
                 }
                 
                 console.log('vp_analyze 執行結果:', {
@@ -2809,6 +2875,7 @@ HTML_TEMPLATE = r'''
                 
             } catch (error) {
                 showMessage('錯誤: ' + error.message, 'error');
+                window.hasCurrentAnalysis = false;
             } finally {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('analyzeBtn').disabled = false;
@@ -5439,4 +5506,134 @@ def check_existing_analysis():
     except Exception as e:
         print(f"Error checking existing analysis: {str(e)}")
         return jsonify({'exists': False, 'error': str(e)})
+
+@main_page_bp.route('/export-all-excel-with-current', methods=['POST'])
+def export_all_excel_with_current():
+    """匯出全部 Excel，可選擇性包含當前分析結果"""
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
+        data = request.json
+        all_excel_path = data.get('all_excel_path')
+        include_current = data.get('include_current', False)
+        
+        if not all_excel_path or not os.path.exists(all_excel_path):
+            return jsonify({'error': '找不到歷史 Excel 檔案'}), 404
+        
+        # 讀取現有的 Excel 檔案
+        existing_wb = load_workbook(all_excel_path)
+        existing_ws = existing_wb.active
+        
+        # 如果需要包含當前分析結果
+        if include_current and data.get('current_data'):
+            current_data = data['current_data']
+            base_path = current_data.get('path')
+            analysis_output_path = current_data.get('analysis_output_path')
+            logs = current_data.get('logs', [])
+            
+            # 準備當前分析的資料
+            current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+            new_rows = []
+            
+            # 獲取現有資料的最大 SN
+            max_sn = 0
+            for row in existing_ws.iter_rows(min_row=2, values_only=True):
+                if row[0] is not None:
+                    try:
+                        max_sn = max(max_sn, int(row[0]))
+                    except:
+                        pass
+            
+            # 處理當前分析結果
+            sn = max_sn + 1
+            for log in logs:
+                ai_result = ""
+                if log.get('file') and analysis_output_path:
+                    try:
+                        file_path = log['file']
+                        if file_path.startswith(base_path):
+                            relative_path = os.path.relpath(file_path, base_path)
+                        else:
+                            relative_path = file_path
+                        
+                        analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                        
+                        if os.path.exists(analyzed_file):
+                            with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                ai_result = extract_ai_summary(content)
+                        else:
+                            ai_result = "找不到分析結果"
+                    except Exception as e:
+                        ai_result = f"讀取錯誤: {str(e)}"
+                
+                new_rows.append([
+                    sn,
+                    current_time,
+                    log.get('type', ''),
+                    log.get('process', ''),
+                    ai_result,
+                    log.get('filename', ''),
+                    log.get('file', '')
+                ])
+                sn += 1
+            
+            # 定義樣式
+            data_font = Font(size=11)
+            data_alignment = Alignment(vertical="top", wrap_text=True)
+            data_border = Border(
+                left=Side(style='thin', color='D3D3D3'),
+                right=Side(style='thin', color='D3D3D3'),
+                top=Side(style='thin', color='D3D3D3'),
+                bottom=Side(style='thin', color='D3D3D3')
+            )
+            anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+            
+            # 將新資料加入工作表
+            for row_data in new_rows:
+                row_idx = existing_ws.max_row + 1
+                for col_idx, value in enumerate(row_data, 1):
+                    cell = existing_ws.cell(row=row_idx, column=col_idx, value=value)
+                    cell.font = data_font
+                    cell.border = data_border
+                    
+                    # SN 欄位置中
+                    if col_idx == 1:
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    else:
+                        cell.alignment = data_alignment
+                    
+                    # Type 欄位背景色
+                    if col_idx == 3:
+                        if value == 'ANR':
+                            cell.fill = anr_fill
+                        elif value == 'Tombstone':
+                            cell.fill = tombstone_fill
+            
+            # 保存更新後的檔案
+            existing_wb.save(all_excel_path)
+        
+        # 準備下載
+        output = io.BytesIO()
+        existing_wb.save(output)
+        output.seek(0)
+        
+        # 生成檔名
+        date_str = datetime.now().strftime('%Y_%m_%d')
+        filename = f"all_anr_tombstone_result_{date_str}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"Error in export_all_excel_with_current: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
     
