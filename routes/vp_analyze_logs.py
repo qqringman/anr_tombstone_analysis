@@ -7746,8 +7746,8 @@ class LogAnalyzerSystem:
                             <div class="file-actions">
                                 <button class="action-icon-btn" onclick="event.stopPropagation(); copyPath(this)" data-path="{html.escape(report.get('path', ''))}" title="複製檔案路徑">
                                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                            <path d="M5.5 2.5h7a1 1 0 011 1v9a1 1 0 01-1 1h-7a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                                            <path d="M2.5 5.5v8a1 1 0 001 1h6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                            <path d="M6 1.5h7.5a1 1 0 011 1v8.5a1 1 0 01-1 1H6a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                            <path d="M2.5 4.5H3v8.5a1 1 0 001 1h7.5v.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
                                         </svg>
                                 </button>
                                 <a href="{view_link}" target="_blank" class="action-icon-btn" title="在新視窗開啟" onclick="event.stopPropagation();">
