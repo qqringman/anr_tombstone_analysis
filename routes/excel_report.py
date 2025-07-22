@@ -45,11 +45,12 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: #ffffff;  /* 白色背景 */
+            color: #2d3748;  /* 深灰色文字 */
+            padding: 30px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
             position: relative;
+            border-bottom: 1px solid #e2e8f0;
         }
         
         .header-container {
@@ -59,20 +60,20 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .header h1 {
-            font-size: 2rem;
-            margin: 0 0 15px 0;
-            font-weight: 600;
+            font-size: 2.2rem;
+            margin: 0 0 20px 0;
+            font-weight: 700;
+            color: #1a202c;  /* 更深的灰色 */
         }
         
         .header-info {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
+            background: #f7f9fc;  /* 淺灰藍色背景 */
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             padding: 20px 25px;
             margin-top: 20px;
-            backdrop-filter: blur(10px);
             display: inline-block;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: none;  /* 移除陰影 */
         }
         
         .header-info p {
@@ -81,6 +82,7 @@ EXCEL_REPORT_TEMPLATE = '''
             align-items: center;
             gap: 15px;
             font-size: 0.95rem;
+            color: #4a5568;  /* 中灰色文字 */
         }
         
         .header-info p:last-child {
@@ -95,31 +97,32 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .header-info .info-label {
-            font-weight: 500;
-            opacity: 0.85;
+            font-weight: 600;
+            opacity: 1;  /* 移除透明度 */
             min-width: 80px;
+            color: #2d3748;
         }
 
         .header-info code {
-            background: rgba(255, 255, 255, 0.2);
+            background: #edf2f7;  /* 更淺的灰色背景 */
             padding: 6px 14px;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 0.9rem;
             font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
             font-weight: 500;
             letter-spacing: 0.3px;
+            color: #2d3748;
         }
         
         .export-html-btn {
             position: absolute;
-            top: 50%;
+            top: 30px;  /* 調整到更上方 */
             right: 30px;
-            transform: translateY(-50%);
-            background: rgba(255, 255, 255, 0.9);
-            color: #667eea;
+            background: #4a5568;  /* 深灰色背景 */
+            color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 12px 24px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 16px;
             font-weight: 600;
@@ -128,8 +131,8 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .export-html-btn:hover {
-            background: white;
-            transform: translateY(-50%) translateY(-2px);
+            background: #2d3748;  /* hover 時更深的灰色 */
+            transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
         
@@ -215,10 +218,10 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .stat-card.highlight {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #4a5568;  /* 深灰色背景 */
             color: white;
             border: none;
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35);
+            box-shadow: 0 4px 8px rgba(74, 85, 104, 0.2);
         }
         
         .stat-card.highlight:hover {
@@ -289,12 +292,12 @@ EXCEL_REPORT_TEMPLATE = '''
         .table-header {
             position: relative;
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-            border-bottom: none;
+            background: #f8f9fa !important;  /* 改為淺灰色背景 */
+            border-bottom: 1px solid #e9ecef;
         }
         
         .table-header h3 {
-            color: white;
+            color: #333;  /* 改為深灰色文字 */
             margin: 0;
             font-size: 1.2rem;
             font-weight: 600;
@@ -398,12 +401,12 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         th {
-            background-color: #f8f9fa;
-            color: #333;
+            background-color: #f7f9fc;
+            color: #2d3748;
             font-weight: 600;
-            padding: 15px;
+            padding: 15px 40px 15px 15px;  /* 右邊增加 padding 給排序圖標空間 */
             text-align: left;
-            border-bottom: 2px solid #e9ecef;
+            border-bottom: 2px solid #e2e8f0;
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
@@ -412,17 +415,17 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         th:hover {
-            background-color: #e9ecef;
+            background-color: #edf2f7;  /* hover 時稍微深一點的灰色 */
         }
         
         .sort-indicator {
             position: absolute;
-            right: 10px;
+            right: 15px;  /* 確保有足夠空間 */
             top: 50%;
             transform: translateY(-50%);
-            color: #667eea;
+            color: #718096;
             font-size: 12px;
-            opacity: 0.7;
+            opacity: 0.9;
         }
         
         td {
@@ -432,15 +435,15 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         tr:hover {
-            background-color: #f8f9fa;
+            background-color: #e9ecef !important;  /* hover 時的顏色 */
         }
         
         .anr-row {
-            background-color: #fff3cd !important;
+            background-color: #f8f9fa !important;  /* 淺灰色背景 */
         }
         
         .tombstone-row {
-            background-color: #f8d7da !important;
+            background-color: #fff !important;  /* 白色背景 */
         }
         
         /* 導航標籤 */
@@ -448,43 +451,35 @@ EXCEL_REPORT_TEMPLATE = '''
             border-bottom: none;
             margin-bottom: 30px;
             display: flex;
-            gap: 8px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 8px;
-            border-radius: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            gap: 4px;
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            box-shadow: none;
             position: relative;
+            border-bottom: 2px solid #e2e8f0;
         }
 
         .nav-tabs::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            border-radius: 16px;
-            padding: 1px;
-            background: linear-gradient(135deg, #e0e0e0, #f5f5f5);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: destination-out;
-            mask-composite: exclude;
-            z-index: -1;
+            display: none;  /* 移除之前的裝飾 */
         }
 
         .nav-link {
-            color: #666;
+            color: #64748b;  /* 柔和的灰色 */
             border: none;
-            padding: 14px 28px;
-            border-radius: 12px;
+            padding: 12px 32px;  /* 增加左右 padding，減少上下 */
+            border-radius: 12px 12px 0 0;  /* 更圓潤的上方圓角 */
             transition: all 0.3s ease;
-            background: transparent;
+            background: #f8fafc;  /* 很淺的灰藍色背景 */
             cursor: pointer;
             font-weight: 600;
             font-size: 0.95rem;
             position: relative;
             overflow: hidden;
             letter-spacing: 0.3px;
+            margin-right: 4px;
+            border: 1px solid #e2e8f0;
+            border-bottom: none;
         }
         
         .nav-link::before {
@@ -511,12 +506,24 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .nav-link.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            transform: translateY(-1px);
+            background: #ffffff;  /* 白色背景 */
+            color: #1e293b;
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+            transform: none;
+            z-index: 1;
+            border: 1px solid #cbd5e1;  /* 添加淡灰色邊框 */
+            border-bottom: 0px solid white;
+            margin-bottom: -2px;
         }
-        
+
+        /* 添加 focus 效果 */
+        .nav-link:focus {
+            outline: none;
+            background: #ffffaa;
+            border-bottom: 0px solid white;
+            box-shadow: 0 0 0 1px rgba(71, 85, 105, 0.1);  /* 淡淡的 focus 效果 */
+        }
+
         .nav-link.active::after {
             display: none;
         }
@@ -526,8 +533,8 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .nav-link:hover:not(.active) {
-            color: #667eea;
-            transform: translateY(-1px);
+            background: #f1f5f9;  /* hover 時稍微深一點 */
+            color: #475569;
         }
         
         .nav-link:hover:not(.active)::after {
@@ -617,15 +624,15 @@ EXCEL_REPORT_TEMPLATE = '''
         .pivot-table {
             overflow-x: auto;
             background: white;
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
         
         .pivot-table table {
             border: none;
             width: 100%;
-            border-radius: 12px;
+            border-radius: 8px;
             overflow: hidden;
             border-collapse: separate;
             border-spacing: 0;
@@ -635,23 +642,40 @@ EXCEL_REPORT_TEMPLATE = '''
         .pivot-table td {
             border: none;
             padding: 14px 16px;
-            text-align: center;
         }
-        
+
+        /* 樞紐分析表排序指示器 */
+        .pivot-sort-indicator {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #718096;
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
         .pivot-table th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-weight: 600;
-            color: white;
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 0.5px;
+            padding: 14px 35px 14px 16px !important;  /* 右邊給排序圖標留更多空間 */
+            position: relative;
         }
-        
+
+        .pivot-table th:hover {
+            background: #cbd5e1;  /* hover 時更深的灰色 */
+        }
+
         .pivot-table td {
             background: white;
             border-bottom: 1px solid #f0f2f5;
             border-right: 1px solid #f0f2f5;
+            padding: 14px 16px;
+            text-align: center;
         }
+
+        /* 確保所有數據行樣式一致 */
+        .pivot-table tr:nth-child(even) td {
+            background-color: #f8f9fa;
+        }        
 
         .pivot-table td:last-child {
             border-right: none;
@@ -662,28 +686,60 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .pivot-table tr:hover td {
-            background-color: #f8f9ff;
+            background-color: #e9ecef !important;
         }
 
         .pivot-table .total-row {
-            background: linear-gradient(135deg, #42a5f5 0%, #478ed1 100%) !important;
+            background: #4a5568 !important;
         }
         
         .pivot-table .total-row td {
+            background: #334155 !important;  /* 深灰色背景 */
             color: white !important;
             font-weight: 700 !important;
             font-size: 0.95rem;
             border: none !important;
         }
 
+        /* 總計行 hover 效果 */
+        .pivot-table .total-row:hover td {
+            background: #1e293b !important;  /* hover 時更深 */            
+        }
+
         .pivot-table .subtotal-row {
-            background-color: #e3f2fd !important;
+            background-color: #f1f5f9 !important;
+        }
+
+        /* 移除第一列的特殊背景色 */
+        .pivot-table td:first-child {
+            background: white;  /* 改為白色背景 */
+            font-weight: 600;
+            color: #495057;
+            text-align: left;
+            border-right: 2px solid #e2e8f0;  /* 添加右邊框作為分隔 */
+        }
+
+        /* 偶數行樣式 */
+        .pivot-table tbody tr:nth-child(even) td {
+            background-color: #f8f9fa;
+        }
+
+        /* hover 效果 */
+        .pivot-table tbody tr:hover td {
+            background-color: #e9ecef !important;
         }
 
         .pivot-table .subtotal-row td {
-            font-weight: 600;
-            color: #1976d2;
-            border-color: #e3f2fd !important;
+            background-color: #f1f5f9 !important;
+            font-weight: 700;
+            color: #334155;
+            border-top: 2px solid #cbd5e1;
+        }
+
+        /* 確保總計行的第一個儲存格也有正確的樣式 */
+        .pivot-table .total-row td:first-child {
+            background: transparent !important;
+            color: white !important;
         }
 
         /* 第一列（類別欄）特殊樣式 */
@@ -1012,29 +1068,37 @@ EXCEL_REPORT_TEMPLATE = '''
                     <table id="dataTable">
                         <thead>
                             <tr>
-                                <th onclick="sortDataTable('SN')" style="width: 60px;">
-                                    SN <span class="sort-indicator" data-column="SN">▼</span>
+                                <th onclick="sortDataTable('SN')" style="width: 100px; position: relative;">
+                                    <span style="margin-right: 6px;">🔢</span>SN
+                                    <span class="sort-indicator" data-column="SN">▲</span>
                                 </th>
-                                <th onclick="sortDataTable('Date')" style="width: 150px;">
-                                    Date <span class="sort-indicator" data-column="Date"></span>
+                                <th onclick="sortDataTable('Date')" style="width: 170px; position: relative;">
+                                    <span style="margin-right: 6px;">📅</span>Date
+                                    <span class="sort-indicator" data-column="Date"></span>
                                 </th>
-                                <th onclick="sortDataTable('問題 set')" style="width: 120px;">
-                                    問題 set <span class="sort-indicator" data-column="問題 set"></span>
+                                <th onclick="sortDataTable('問題 set')" style="width: 140px; position: relative;">
+                                    <span style="margin-right: 6px;">📁</span>問題 set
+                                    <span class="sort-indicator" data-column="問題 set"></span>
                                 </th>
-                                <th onclick="sortDataTable('Type')" style="width: 100px;">
-                                    Type <span class="sort-indicator" data-column="Type"></span>
+                                <th onclick="sortDataTable('Type')" style="width: 120px; position: relative;">
+                                    <span style="margin-right: 6px;">🏷️</span>Type
+                                    <span class="sort-indicator" data-column="Type"></span>
                                 </th>
-                                <th onclick="sortDataTable('Process')">
-                                    Process <span class="sort-indicator" data-column="Process"></span>
+                                <th onclick="sortDataTable('Process')" style="position: relative;">
+                                    <span style="margin-right: 6px;">⚙️</span>Process
+                                    <span class="sort-indicator" data-column="Process"></span>
                                 </th>
-                                <th onclick="sortDataTable('AI result')">
-                                    AI result <span class="sort-indicator" data-column="AI result"></span>
+                                <th onclick="sortDataTable('AI result')" style="position: relative;">
+                                    <span style="margin-right: 6px;">🤖</span>AI result
+                                    <span class="sort-indicator" data-column="AI result"></span>
                                 </th>
-                                <th onclick="sortDataTable('Filename')">
-                                    Filename <span class="sort-indicator" data-column="Filename"></span>
+                                <th onclick="sortDataTable('Filename')" style="position: relative;">
+                                    <span style="margin-right: 6px;">📄</span>Filename
+                                    <span class="sort-indicator" data-column="Filename"></span>
                                 </th>
-                                <th onclick="sortDataTable('Folder Path')">
-                                    Folder Path <span class="sort-indicator" data-column="Folder Path"></span>
+                                <th onclick="sortDataTable('Folder Path')" style="position: relative;">
+                                    <span style="margin-right: 6px;">📂</span>Folder Path
+                                    <span class="sort-indicator" data-column="Folder Path"></span>
                                 </th>
                             </tr>
                         </thead>
@@ -1046,7 +1110,12 @@ EXCEL_REPORT_TEMPLATE = '''
             </div>
         </div>
     </div>
-
+    <!-- 添加頁尾 -->
+    <footer style="background-color: #f8f9fa; padding: 20px 0; margin-top: 50px; border-top: 1px solid #e9ecef;">
+        <div style="text-align: center; color: #6c757d; font-size: 14px;">
+            © 2025 Copyright by Vince. All rights reserved.
+        </div>
+    </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // 全域變數
@@ -1382,12 +1451,30 @@ EXCEL_REPORT_TEMPLATE = '''
         
         // 初始化圖表
         function initializeCharts() {
+            // 先隱藏圖表容器
+            document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+                wrapper.style.visibility = 'hidden';
+            });
+            
             createTypeChart();
             createDailyChart();
             createProcessChart();
             createProblemSetChart();
             createProblemSetPieChart();
             createHourlyChart();
+            
+            // 延遲顯示並觸發 resize
+            setTimeout(() => {
+                document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+                    wrapper.style.visibility = 'visible';
+                });
+                window.dispatchEvent(new Event('resize'));
+                
+                // 再次觸發以確保完全置中
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                }, 100);
+            }, 200);
         }
         
         // 類型分佈圖
@@ -1413,9 +1500,15 @@ EXCEL_REPORT_TEMPLATE = '''
                 height: 400,
                 autosize: true,
                 margin: { l: 50, r: 50, t: 50, b: 50 },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('typeChart', data, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('typeChart');
+            }, 100);            
         }
         
         // 每日趨勢圖
@@ -1463,10 +1556,16 @@ EXCEL_REPORT_TEMPLATE = '''
                     title: '數量',
                     dtick: 1
                 },
-                margin: { b: 100 }
+                margin: { b: 100 },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('dailyChart', traces, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('dailyChart');
+            }, 100);              
         }
         
         // 程序問題分佈圖
@@ -1515,10 +1614,16 @@ EXCEL_REPORT_TEMPLATE = '''
                     title: '數量',
                     dtick: 1
                 },
-                margin: { b: 200 }
+                margin: { b: 200 },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('processChart', traces, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('processChart');
+            }, 100);             
         }
         
         // 問題集分析圖
@@ -1563,10 +1668,16 @@ EXCEL_REPORT_TEMPLATE = '''
                     title: '數量',
                     dtick: 1
                 },
-                margin: { b: 100 }
+                margin: { b: 100 },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('problemSetChart', traces, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('problemSetChart');
+            }, 100);                
         }
         
         // 問題集餅圖
@@ -1594,10 +1705,16 @@ EXCEL_REPORT_TEMPLATE = '''
             const layout = {
                 height: 400,
                 showlegend: true,
-                margin: { t: 20, b: 20 }
+                margin: { t: 20, b: 20 },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('problemSetPieChart', data, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('problemSetPieChart');
+            }, 100);             
         }
         
         // 每小時分佈圖
@@ -1643,20 +1760,32 @@ EXCEL_REPORT_TEMPLATE = '''
                 yaxis: { 
                     title: '數量',
                     dtick: 1
-                }
+                },
+                autosize: true  // 添加這行
             };
             
             Plotly.newPlot('hourlyChart', traces, layout, {responsive: true});
+
+            // 強制重新調整大小
+            setTimeout(() => {
+                Plotly.Plots.resize('hourlyChart');
+            }, 100);              
         }
         
         // 初始化資料表格
         function initializeDataTable() {
-            // 先依照 SN 排序
+            // 先依照 SN 升冪排序
+            sortOrder = 'asc';  // 設定預設為升冪
+            sortColumn = 'SN';
             filteredData.sort((a, b) => {
                 const aSN = parseInt(a.SN) || 0;
                 const bSN = parseInt(b.SN) || 0;
-                return aSN - bSN;
+                return aSN - bSN;  // 升冪排序
             });
+            
+            // 更新排序指示器
+            document.querySelector('.sort-indicator[data-column="SN"]').textContent = '▲';
+            
             updateDataTable();
         }
         
@@ -1792,6 +1921,151 @@ EXCEL_REPORT_TEMPLATE = '''
             updateDataTable();
         }
         
+        // 添加樞紐分析表排序功能
+        function addPivotTableSorting() {
+            setTimeout(() => {
+                const pivotTable = document.querySelector('#pivotTable table');
+                if (pivotTable) {
+                    const headers = pivotTable.querySelectorAll('th');
+                    headers.forEach((header, index) => {
+                        header.style.cursor = 'pointer';
+                        header.style.userSelect = 'none';
+                        header.onclick = () => sortPivotTable(pivotTable, index);
+                    });
+                }
+            }, 100);
+        }
+
+        // 樞紐分析表排序函數
+        function sortPivotTable(table, columnIndex) {
+            const tbody = table.querySelector('tbody');
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // 先檢查是否有 rowspan（合併儲存格）的情況
+            const hasRowspan = allRows.some(row => {
+                return Array.from(row.cells).some(cell => cell.rowSpan > 1);
+            });
+            
+            if (hasRowspan) {
+                // 如果有合併儲存格，使用特殊的排序邏輯
+                sortPivotTableWithRowspan(table, columnIndex);
+                return;
+            }
+            
+            // 原本的簡單排序邏輯（適用於沒有合併儲存格的情況）
+            const totalRow = allRows.find(row => row.classList.contains('total-row'));
+            const dataRows = allRows.filter(row => !row.classList.contains('total-row'));
+            
+            const isAscending = table.dataset.sortColumn == columnIndex && 
+                            table.dataset.sortOrder === 'asc';
+            
+            dataRows.sort((a, b) => {
+                const aText = a.cells[columnIndex]?.textContent.trim() || '';
+                const bText = b.cells[columnIndex]?.textContent.trim() || '';
+                
+                const aNum = parseFloat(aText.replace(/[^0-9.-]/g, ''));
+                const bNum = parseFloat(bText.replace(/[^0-9.-]/g, ''));
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return isAscending ? bNum - aNum : aNum - bNum;
+                }
+                
+                return isAscending ? 
+                    bText.localeCompare(aText) : 
+                    aText.localeCompare(bText);
+            });
+            
+            tbody.innerHTML = '';
+            dataRows.forEach(row => tbody.appendChild(row));
+            if (totalRow) tbody.appendChild(totalRow);
+            
+            table.dataset.sortColumn = columnIndex;
+            table.dataset.sortOrder = isAscending ? 'desc' : 'asc';
+        }
+
+        // 處理有合併儲存格的樞紐分析表排序
+        function sortPivotTableWithRowspan(table, columnIndex) {
+            const tbody = table.querySelector('tbody');
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // 識別總計行
+            const totalRow = allRows.find(row => row.classList.contains('total-row'));
+            const rowsWithoutTotal = allRows.filter(row => !row.classList.contains('total-row'));
+            
+            // 建立分組結構
+            const groups = [];
+            let currentGroup = null;
+            
+            rowsWithoutTotal.forEach(row => {
+                const firstCell = row.cells[0];
+                if (firstCell && firstCell.rowSpan > 1) {
+                    // 新的分組開始
+                    currentGroup = {
+                        headerCell: firstCell,
+                        rows: [row],
+                        rowspan: firstCell.rowSpan
+                    };
+                    groups.push(currentGroup);
+                } else if (currentGroup && currentGroup.rows.length < currentGroup.rowspan) {
+                    // 繼續當前分組
+                    currentGroup.rows.push(row);
+                } else if (row.classList.contains('subtotal-row')) {
+                    // 小計行
+                    if (currentGroup) {
+                        currentGroup.rows.push(row);
+                    }
+                }
+            });
+            
+            const isAscending = table.dataset.sortColumn == columnIndex && 
+                            table.dataset.sortOrder === 'asc';
+            
+            // 對每個分組內的數據行排序（不包括小計行）
+            groups.forEach(group => {
+                const subtotalRow = group.rows[group.rows.length - 1];
+                const dataRows = group.rows.slice(0, -1);
+                
+                dataRows.sort((a, b) => {
+                    const aText = a.cells[columnIndex - 1]?.textContent.trim() || '';  // 注意：因為第一個儲存格被合併，索引要調整
+                    const bText = b.cells[columnIndex - 1]?.textContent.trim() || '';
+                    
+                    const aNum = parseFloat(aText.replace(/[^0-9.-]/g, ''));
+                    const bNum = parseFloat(bText.replace(/[^0-9.-]/g, ''));
+                    
+                    if (!isNaN(aNum) && !isNaN(bNum)) {
+                        return isAscending ? bNum - aNum : aNum - bNum;
+                    }
+                    
+                    return isAscending ? 
+                        bText.localeCompare(aText) : 
+                        aText.localeCompare(bText);
+                });
+                
+                // 更新分組內的行順序
+                group.rows = [...dataRows, subtotalRow];
+            });
+            
+            // 重建表格
+            tbody.innerHTML = '';
+            groups.forEach(group => {
+                group.rows.forEach((row, index) => {
+                    if (index === 0) {
+                        // 重新添加合併的儲存格
+                        row.insertBefore(group.headerCell, row.firstChild);
+                    }
+                    tbody.appendChild(row);
+                });
+            });
+            
+            // 最後添加總計行
+            if (totalRow) {
+                tbody.appendChild(totalRow);
+            }
+            
+            table.dataset.sortColumn = columnIndex;
+            table.dataset.sortOrder = isAscending ? 'desc' : 'asc';
+        }
+
         // 更新樞紐分析表
         function updatePivotTable() {
             const dimension = document.getElementById('pivotDimension').value;
@@ -1825,6 +2099,45 @@ EXCEL_REPORT_TEMPLATE = '''
             }
             
             document.getElementById('pivotTable').innerHTML = pivotHtml;
+            addPivotTableSorting();  // 添加這一行
+
+            document.getElementById('pivotTable').innerHTML = pivotHtml;
+            
+            // 綁定點擊事件
+            setTimeout(() => {
+                const pivotTable = document.querySelector('#pivotTable table');
+                if (pivotTable) {
+                    const headers = pivotTable.querySelectorAll('thead tr th');
+                    
+                    // 檢查是否有合併儲存格
+                    const tbody = pivotTable.querySelector('tbody');
+                    const hasRowspan = Array.from(tbody.querySelectorAll('tr')).some(row => {
+                        return Array.from(row.cells).some(cell => cell.rowSpan > 1);
+                    });
+                    
+                    headers.forEach((header, index) => {
+                        header.style.cursor = 'pointer';
+                        
+                        // 添加排序指示器（如果還沒有）
+                        if (!header.querySelector('.pivot-sort-indicator')) {
+                            header.style.position = 'relative';
+                            header.innerHTML += '<span class="pivot-sort-indicator"></span>';
+                        }
+                        
+                        header.onclick = function(e) {
+                            e.preventDefault();
+                            
+                            if (index === 0 && hasRowspan) {
+                                // 第一欄且有合併儲存格，使用特殊處理
+                                sortPivotTableByFirstColumn(this);
+                            } else {
+                                // 其他情況使用通用排序
+                                sortPivotColumn(this, index);
+                            }
+                        };
+                    });
+                }
+            }, 100);       
         }
         
         // 依問題集的樞紐分析
@@ -1847,7 +2160,13 @@ EXCEL_REPORT_TEMPLATE = '''
             });
             
             let html = '<table class="table table-bordered">';
-            html += '<thead><tr><th>問題集</th><th>程序</th><th style="text-align: center;">ANR</th><th style="text-align: center;">Tombstone</th><th style="text-align: center;">總計</th></tr></thead>';
+            html += '<thead><tr>';
+            html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="position: relative;">程序<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">ANR<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">Tombstone<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">總計<span class="pivot-sort-indicator"></span></th>';
+            html += '</tr></thead>';
             html += '<tbody>';
             
             Object.entries(pivotData).forEach(([problemSet, processes]) => {
@@ -1892,7 +2211,100 @@ EXCEL_REPORT_TEMPLATE = '''
             html += '</tbody></table>';
             return html;
         }
-        
+
+        // 處理問題集欄位（第一列）的排序
+        function sortPivotTableByFirstColumn(th) {
+            console.log('===== 開始排序第一列 =====');
+            
+            try {
+                const table = th.closest('table');
+                const tbody = table.querySelector('tbody');
+                const allRows = Array.from(tbody.querySelectorAll('tr'));
+                
+                // 保存總計行
+                const totalRow = tbody.querySelector('.total-row');
+                
+                // 建立分組
+                const groups = [];
+                let i = 0;
+                
+                while (i < allRows.length) {
+                    const row = allRows[i];
+                    
+                    // 跳過總計行
+                    if (row.classList.contains('total-row')) {
+                        i++;
+                        continue;
+                    }
+                    
+                    const firstCell = row.cells[0];
+                    
+                    if (firstCell && firstCell.rowSpan > 1) {
+                        // 這是一個分組的開始
+                        const group = {
+                            name: firstCell.textContent.trim(),
+                            rows: [],
+                            rowSpan: firstCell.rowSpan
+                        };
+                        
+                        // 收集這個分組的所有行（包括第一行）
+                        for (let j = 0; j < firstCell.rowSpan && i < allRows.length; j++) {
+                            if (!allRows[i].classList.contains('total-row')) {
+                                group.rows.push(allRows[i]);
+                            }
+                            i++;
+                        }
+                        
+                        groups.push(group);
+                        
+                        console.log(`分組 "${group.name}": 包含 ${group.rows.length} 行`);
+                    } else {
+                        // 沒有 rowspan 的單獨行（不應該發生在正確的樞紐表中）
+                        i++;
+                    }
+                }
+                
+                console.log(`總共 ${groups.length} 個分組`);
+                
+                // 排序
+                const isAscending = th.dataset.sortOrder !== 'asc';
+                groups.sort((a, b) => {
+                    return isAscending ? 
+                        a.name.localeCompare(b.name) : 
+                        b.name.localeCompare(a.name);
+                });
+                
+                console.log('排序後順序:', groups.map(g => g.name).join(', '));
+                
+                // 重建表格
+                tbody.innerHTML = '';
+                
+                // 按順序添加所有分組
+                groups.forEach(group => {
+                    group.rows.forEach(row => {
+                        tbody.appendChild(row);
+                    });
+                });
+                
+                // 最後添加總計行
+                if (totalRow) {
+                    tbody.appendChild(totalRow);
+                }
+                
+                // 更新排序狀態
+                th.dataset.sortOrder = isAscending ? 'asc' : 'desc';
+                
+                // 更新排序指示器 - 這是缺少的部分！
+                updatePivotSortIndicators(th, isAscending);
+                
+                console.log('===== 排序完成 =====');
+                
+            } catch (error) {
+                console.error('排序時發生錯誤:', error);
+                console.error(error.stack);
+            }
+        }
+
         // 依程序的樞紐分析
         function createPivotByProcess(data) {
             const pivotData = {};
@@ -1913,7 +2325,13 @@ EXCEL_REPORT_TEMPLATE = '''
             });
             
             let html = '<table class="table table-bordered">';
-            html += '<thead><tr><th>程序</th><th>問題集</th><th style="text-align: center;">ANR</th><th style="text-align: center;">Tombstone</th><th style="text-align: center;">總計</th></tr></thead>';
+            html += '<thead><tr>';
+            html += '<th style="position: relative;">程序<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">ANR<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">Tombstone<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">總計<span class="pivot-sort-indicator"></span></th>';
+            html += '</tr></thead>';
             html += '<tbody>';
             
             Object.entries(pivotData).forEach(([process, problemSets]) => {
@@ -1977,8 +2395,11 @@ EXCEL_REPORT_TEMPLATE = '''
             });
             
             let html = '<table class="table table-bordered">';
-            html += '<thead><tr><th>類型</th><th>問題集</th><th style="text-align: center;">數量</th></tr></thead>';
-            html += '<tbody>';
+            html += '<thead><tr>';
+            html += '<th style="position: relative;">類型<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">數量<span class="pivot-sort-indicator"></span></th>';
+            html += '</tr></thead>';
             
             Object.entries(pivotData).forEach(([type, problemSets]) => {
                 const typeTotal = Object.values(problemSets).reduce((sum, count) => sum + count, 0);
@@ -2013,6 +2434,117 @@ EXCEL_REPORT_TEMPLATE = '''
             return html;
         }
         
+        // 修正 sortPivotColumn 函數
+        function sortPivotColumn(th, columnIndex) {
+            console.log(`排序第 ${columnIndex} 欄`);
+            
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            
+            // 先檢查是否有合併儲存格
+            const hasRowspan = Array.from(tbody.querySelectorAll('tr')).some(row => {
+                return Array.from(row.cells).some(cell => cell.rowSpan > 1);
+            });
+            
+            // 如果沒有合併儲存格，使用簡單排序
+            if (!hasRowspan) {
+                console.log('沒有合併儲存格，使用簡單排序');
+                sortSimpleTable(th, columnIndex);
+                return;
+            }
+            
+            // 以下是處理有合併儲存格的邏輯
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            const totalRow = tbody.querySelector('.total-row');
+            
+            // 建立分組
+            const groups = [];
+            let i = 0;
+            
+            while (i < allRows.length) {
+                const row = allRows[i];
+                
+                if (row.classList.contains('total-row')) {
+                    i++;
+                    continue;
+                }
+                
+                const firstCell = row.cells[0];
+                
+                if (firstCell && firstCell.rowSpan > 1) {
+                    const group = {
+                        name: firstCell.textContent.trim(),
+                        rows: [],
+                        rowSpan: firstCell.rowSpan,
+                        // 保存第一行的排序值（用於排序整個分組）
+                        sortValue: row.cells[columnIndex]?.textContent.trim() || ''
+                    };
+                    
+                    // 收集這個分組的所有行
+                    for (let j = 0; j < firstCell.rowSpan && i < allRows.length; j++) {
+                        if (!allRows[i].classList.contains('total-row')) {
+                            group.rows.push(allRows[i]);
+                        }
+                        i++;
+                    }
+                    
+                    groups.push(group);
+                } else {
+                    i++;
+                }
+            }
+            
+            const isAscending = th.dataset.sortOrder !== 'asc';
+            
+            // 根據指定欄位排序整個分組
+            groups.sort((a, b) => {
+                const aValue = a.sortValue;
+                const bValue = b.sortValue;
+                
+                const aNum = parseFloat(aValue.replace(/[^0-9.-]/g, ''));
+                const bNum = parseFloat(bValue.replace(/[^0-9.-]/g, ''));
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return isAscending ? aNum - bNum : bNum - aNum;
+                }
+                
+                return isAscending ? 
+                    aValue.localeCompare(bValue) : 
+                    bValue.localeCompare(aValue);
+            });
+            
+            // 重建表格
+            tbody.innerHTML = '';
+            
+            groups.forEach(group => {
+                group.rows.forEach(row => {
+                    tbody.appendChild(row);
+                });
+            });
+            
+            if (totalRow) {
+                tbody.appendChild(totalRow);
+            }
+            
+            th.dataset.sortOrder = isAscending ? 'asc' : 'desc';
+            updatePivotSortIndicators(th, isAscending);
+        }
+
+        // 更新樞紐分析表的排序指示器
+        function updatePivotSortIndicators(currentTh, isAscending) {
+            // 清除所有指示器
+            const allIndicators = currentTh.closest('thead').querySelectorAll('.pivot-sort-indicator');
+            allIndicators.forEach(indicator => {
+                indicator.textContent = '';
+            });
+            
+            // 設置當前欄位的指示器
+            const indicator = currentTh.querySelector('.pivot-sort-indicator');
+            if (indicator) {
+                indicator.textContent = isAscending ? '▲' : '▼';
+            }
+        }
+
         // 依日期的樞紐分析
         function createPivotByDate(data) {
             const pivotData = {};
@@ -2030,7 +2562,12 @@ EXCEL_REPORT_TEMPLATE = '''
             });
             
             let html = '<table class="table table-bordered">';
-            html += '<thead><tr><th>日期</th><th style="text-align: center;">ANR</th><th style="text-align: center;">Tombstone</th><th style="text-align: center;">總計</th></tr></thead>';
+            html += '<thead><tr>';
+            html += '<th style="position: relative;">日期<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">ANR<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">Tombstone<span class="pivot-sort-indicator"></span></th>';
+            html += '<th style="text-align: center; position: relative;">總計<span class="pivot-sort-indicator"></span></th>';
+            html += '</tr></thead>';
             html += '<tbody>';
             
             Object.entries(pivotData).sort().forEach(([date, counts]) => {
@@ -2065,6 +2602,69 @@ EXCEL_REPORT_TEMPLATE = '''
             a.click();
             window.URL.revokeObjectURL(url);
         }
+
+        // 處理簡單表格（沒有合併儲存格）的排序
+        function sortSimpleTable(th, columnIndex) {
+            console.log('排序簡單表格，第', columnIndex, '欄');
+            
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // 分離總計行和數據行
+            const totalRow = allRows.find(row => row.classList.contains('total-row'));
+            const dataRows = allRows.filter(row => !row.classList.contains('total-row'));
+            
+            console.log('數據行數:', dataRows.length);
+            
+            // 如果沒有數據行或只有一行，不需要排序
+            if (dataRows.length <= 1) {
+                console.log('只有一行或沒有數據，不需要排序');
+                // 但仍然要更新排序狀態和圖標
+                const isAscending = th.dataset.sortOrder !== 'asc';
+                th.dataset.sortOrder = isAscending ? 'asc' : 'desc';
+                updatePivotSortIndicators(th, isAscending);
+                return;
+            }
+            
+            const isAscending = th.dataset.sortOrder !== 'asc';
+            
+            // 排序數據行
+            dataRows.sort((a, b) => {
+                const aText = a.cells[columnIndex]?.textContent.trim() || '';
+                const bText = b.cells[columnIndex]?.textContent.trim() || '';
+                
+                // 嘗試轉換為數字
+                const aNum = parseFloat(aText.replace(/[^0-9.-]/g, ''));
+                const bNum = parseFloat(bText.replace(/[^0-9.-]/g, ''));
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return isAscending ? aNum - bNum : bNum - aNum;
+                }
+                
+                // 日期比較
+                const aDate = new Date(aText);
+                const bDate = new Date(bText);
+                if (!isNaN(aDate) && !isNaN(bDate)) {
+                    return isAscending ? aDate - bDate : bDate - aDate;
+                }
+                
+                // 文字比較
+                return isAscending ? 
+                    aText.localeCompare(bText) : 
+                    bText.localeCompare(aText);
+            });
+            
+            // 重建表格
+            tbody.innerHTML = '';
+            dataRows.forEach(row => tbody.appendChild(row));
+            if (totalRow) tbody.appendChild(totalRow);
+            
+            // 更新排序狀態和圖標
+            th.dataset.sortOrder = isAscending ? 'asc' : 'desc';
+            updatePivotSortIndicators(th, isAscending);
+        }
+
     </script>
 </body>
 </html>
