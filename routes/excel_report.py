@@ -630,10 +630,8 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .pivot-table table {
-            border: none;
-            width: 100%;
-            border-radius: 8px;
-            overflow: hidden;
+            table-layout: fixed !important;  /* 固定表格佈局 */
+            width: 100% !important;
             border-collapse: separate;
             border-spacing: 0;
         }
@@ -650,26 +648,81 @@ EXCEL_REPORT_TEMPLATE = '''
             right: 8px;
             top: 50%;
             transform: translateY(-50%);
-            color: #718096;
+            color: #475569;
             font-size: 12px;
-            opacity: 0.9;
+        }
+
+        /* hover 時排序圖標顏色 */
+        .pivot-table th:hover .pivot-sort-indicator {
+            color: #1e293b;  /* hover 時更深 */
         }
 
         .pivot-table th {
-            padding: 14px 35px 14px 16px !important;  /* 右邊給排序圖標留更多空間 */
+            background: #cbd5e1;
+            font-weight: 700;
+            color: #1a202c;
+            text-transform: uppercase;
+            font-size: 13px;  /* 稍微小一點 */
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #94a3b8;
+            cursor: pointer;
+            user-select: none;
+            padding: 12px 35px 12px 16px !important;  /* 右邊留空間給圖標 */
             position: relative;
+            transition: all 0.2s ease;
+            text-align: left;  /* 預設左對齊 */
+        }
+
+        /* 數字欄位的表頭置中 */
+        .pivot-table th:nth-child(3),
+        .pivot-table th:nth-child(4),
+        .pivot-table th:nth-child(5) {
+            text-align: center !important;
         }
 
         .pivot-table th:hover {
-            background: #cbd5e1;  /* hover 時更深的灰色 */
+            background: #94a3b8;  /* hover 時更深的灰藍色 */
+            color: #0f172a;  /* hover 時文字顏色更深 */
         }
 
         .pivot-table td {
-            background: white;
-            border-bottom: 1px solid #f0f2f5;
-            border-right: 1px solid #f0f2f5;
-            padding: 14px 16px;
-            text-align: center;
+            height: 40px !important;
+            line-height: 40px !important;
+            vertical-align: middle !important;
+        }
+
+        /* 問題集欄位（有 rowspan 的） */
+        .pivot-table td[rowspan] {
+            background: white !important;
+            font-weight: 600 !important;
+            text-align: left !important;
+            vertical-align: middle !important;
+            border-right: 2px solid #e2e8f0 !important;
+        }
+
+        /* 程序名稱欄位 - 統一對齊和縮排 */
+        .pivot-table tbody tr td:nth-child(2):not([colspan]),
+        .pivot-table tbody tr td:first-child:not([rowspan]) {
+            text-align: left !important;
+            padding-left: 20px !important;  /* 統一縮排 */
+        }
+
+        /* 小計行特殊處理 */
+        .pivot-table .subtotal-row td:first-child:not([rowspan]) {
+            padding-left: 20px !important;  /* 與程序名稱對齊 */
+            font-weight: 700 !important;
+        }
+
+        /* 確保數字欄位正確置中對齊 */
+        .pivot-table tbody tr td:nth-child(3),
+        .pivot-table tbody tr td:nth-child(4),
+        .pivot-table tbody tr td:nth-child(5),
+        .pivot-table tbody tr td:nth-child(2):last-child,  /* 處理小計行 */
+        .pivot-table tbody tr td:nth-child(3):last-child,  /* 處理小計行 */
+        .pivot-table tbody tr td:nth-child(4):last-child {  /* 處理小計行 */
+            text-align: center !important;
+            padding-left: 12px !important;
+            padding-right: 12px !important;
         }
 
         /* 確保所有數據行樣式一致 */
@@ -693,30 +746,60 @@ EXCEL_REPORT_TEMPLATE = '''
             background: #4a5568 !important;
         }
         
+        /* 樞紐分析表數字欄位使用等寬字體 */
+        .pivot-table td:nth-child(3),
+        .pivot-table td:nth-child(4),
+        .pivot-table td:nth-child(5),
+        .pivot-table .subtotal-row td:nth-child(2),
+        .pivot-table .subtotal-row td:nth-child(3),
+        .pivot-table .subtotal-row td:nth-child(4),
         .pivot-table .total-row td {
-            background: #334155 !important;  /* 深灰色背景 */
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+            font-size: 14px !important;
+            text-align: center !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+            letter-spacing: 0 !important;
+        }
+
+        /* 小計行的數字也要置中 */
+        .pivot-table .subtotal-row td:nth-child(2),
+        .pivot-table .subtotal-row td:nth-child(3),
+        .pivot-table .subtotal-row td:nth-child(4) {
+            text-align: center !important;
+        }
+
+        .pivot-table .total-row td {
+            background: #334155 !important;
             color: white !important;
             font-weight: 700 !important;
-            font-size: 0.95rem;
-            border: none !important;
+            font-size: 14px !important;
+            text-align: center !important;
+            text-align: center !important;
         }
 
         /* 總計行 hover 效果 */
         .pivot-table .total-row:hover td {
-            background: #1e293b !important;  /* hover 時更深 */            
+            background: #1e293b !important;           
         }
 
         .pivot-table .subtotal-row {
             background-color: #f1f5f9 !important;
         }
 
-        /* 移除第一列的特殊背景色 */
-        .pivot-table td:first-child {
-            background: white;  /* 改為白色背景 */
-            font-weight: 600;
-            color: #495057;
-            text-align: left;
-            border-right: 2px solid #e2e8f0;  /* 添加右邊框作為分隔 */
+        /* 確保合併儲存格的第一行也使用相同樣式 */
+        .pivot-table tr td[rowspan] {
+            font-size: 14px !important;    /* 統一字體大小 */
+            font-weight: 600 !important;   /* 統一字體粗細 */
+            color: #374151 !important;     /* 統一文字顏色 */
+            vertical-align: middle;        /* 垂直置中 */
+        }
+
+        /* 其他數據行的樣式 */
+        .pivot-table tr td:not(:first-child) {
+            font-size: 14px !important;    /* 確保所有數據格字體大小一致 */
+            font-weight: 400 !important;   /* 正常字體粗細 */
+            text-align: center !important; /* 置中對齊 */
         }
 
         /* 偶數行樣式 */
@@ -730,10 +813,8 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .pivot-table .subtotal-row td {
-            background-color: #f1f5f9 !important;
-            font-weight: 700;
-            color: #334155;
-            border-top: 2px solid #cbd5e1;
+            text-align: center !important;
+            padding: 12px 8px !important;
         }
 
         /* 確保總計行的第一個儲存格也有正確的樣式 */
@@ -756,8 +837,19 @@ EXCEL_REPORT_TEMPLATE = '''
 
         .pivot-table .total-row td:first-child,
         .pivot-table .subtotal-row td:first-child {
-            background: inherit;
-            color: inherit;
+            text-align: left !important;
+            padding-left: 16px !important;
+        }
+
+        /* 確保所有數字使用等寬字體 */
+        .pivot-table td:nth-child(2),
+        .pivot-table td:nth-child(3),
+        .pivot-table td:nth-child(4),
+        .pivot-table .subtotal-row td:nth-child(2),
+        .pivot-table .subtotal-row td:nth-child(3),
+        .pivot-table .subtotal-row td:nth-child(4) {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+            font-variant-numeric: tabular-nums !important;
         }
 
         /* 數字欄位樣式 */
@@ -2159,7 +2251,14 @@ EXCEL_REPORT_TEMPLATE = '''
                 totals.Total++;
             });
             
-            let html = '<table class="table table-bordered">';
+            let html = '<table class="table table-bordered" style="table-layout: fixed; width: 100%;">';
+            html += '<colgroup>';
+            html += '<col style="width: 12%;">';
+            html += '<col style="width: 43%;">';
+            html += '<col style="width: 15%;">';
+            html += '<col style="width: 15%;">';
+            html += '<col style="width: 15%;">';
+            html += '</colgroup>';
             html += '<thead><tr>';
             html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
             html += '<th style="position: relative;">程序<span class="pivot-sort-indicator"></span></th>';
@@ -2177,13 +2276,13 @@ EXCEL_REPORT_TEMPLATE = '''
                 Object.entries(processes).forEach(([process, counts]) => {
                     html += '<tr>';
                     if (firstRow) {
-                        html += `<td rowspan="${processCount + 1}" style="vertical-align: middle;"><strong>${problemSet}</strong></td>`;
+                        html += `<td rowspan="${processCount + 1}" style="vertical-align: middle; font-weight: 600;">${problemSet}</td>`;
                         firstRow = false;
                     }
-                    html += `<td>${process}</td>`;
-                    html += `<td style="text-align: center;">${counts.ANR}</td>`;
-                    html += `<td style="text-align: center;">${counts.Tombstone}</td>`;
-                    html += `<td style="text-align: center;"><strong>${counts.Total}</strong></td>`;
+                    html += `<td style="padding-left: 16px;">${process}</td>`;
+                    html += `<td style="text-align: center !important;">${counts.ANR}</td>`;
+                    html += `<td style="text-align: center !important;">${counts.Tombstone}</td>`;
+                    html += `<td style="text-align: center !important; font-weight: 600;">${counts.Total}</td>`;
                     html += '</tr>';
                     
                     psTotal.ANR += counts.ANR;
@@ -2191,21 +2290,21 @@ EXCEL_REPORT_TEMPLATE = '''
                     psTotal.Total += counts.Total;
                 });
                 
-                // 小計
+                // 小計行 - 注意這裡的結構
                 html += '<tr class="subtotal-row">';
-                html += `<td><strong>小計</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${psTotal.ANR}</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${psTotal.Tombstone}</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${psTotal.Total}</strong></td>`;
+                // 小計行只有 4 個欄位（因為第一欄被合併了）
+                html += `<td style="font-weight: 700; padding-left: 16px;">小計</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${psTotal.ANR}</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${psTotal.Tombstone}</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${psTotal.Total}</td>`;
                 html += '</tr>';
             });
             
-            // 總計
             html += '<tr class="total-row">';
-            html += '<td colspan="2" style="text-align: center;"><strong>總計</strong></td>';
-            html += `<td style="text-align: center;"><strong>${totals.ANR}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Tombstone}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Total}</strong></td>`;
+            html += '<td colspan="2" style="text-align: center !important; font-weight: 700;">總計</td>';
+            html += `<td style="text-align: center !important;">${totals.ANR}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Tombstone}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Total}</td>`;
             html += '</tr>';
             
             html += '</tbody></table>';
@@ -2324,7 +2423,14 @@ EXCEL_REPORT_TEMPLATE = '''
                 totals.Total++;
             });
             
-            let html = '<table class="table table-bordered">';
+            let html = '<table class="table table-bordered" style="table-layout: fixed; width: 100%;">';
+            html += '<colgroup>';
+            html += '<col style="width: 30%;">';
+            html += '<col style="width: 25%;">';
+            html += '<col style="width: 15%;">';
+            html += '<col style="width: 15%;">';
+            html += '<col style="width: 15%;">';
+            html += '</colgroup>';
             html += '<thead><tr>';
             html += '<th style="position: relative;">程序<span class="pivot-sort-indicator"></span></th>';
             html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
@@ -2342,13 +2448,13 @@ EXCEL_REPORT_TEMPLATE = '''
                 Object.entries(problemSets).forEach(([problemSet, counts]) => {
                     html += '<tr>';
                     if (firstRow) {
-                        html += `<td rowspan="${psCount + 1}" style="vertical-align: middle;"><strong>${process}</strong></td>`;
+                        html += `<td rowspan="${psCount + 1}" style="vertical-align: middle; font-weight: 600;">${process}</td>`;
                         firstRow = false;
                     }
-                    html += `<td>${problemSet}</td>`;
-                    html += `<td style="text-align: center;">${counts.ANR}</td>`;
-                    html += `<td style="text-align: center;">${counts.Tombstone}</td>`;
-                    html += `<td style="text-align: center;"><strong>${counts.Total}</strong></td>`;
+                    html += `<td style="padding-left: 16px;">${problemSet}</td>`;
+                    html += `<td style="text-align: center !important;">${counts.ANR}</td>`;
+                    html += `<td style="text-align: center !important;">${counts.Tombstone}</td>`;
+                    html += `<td style="text-align: center !important; font-weight: 600;">${counts.Total}</td>`;
                     html += '</tr>';
                     
                     processTotal.ANR += counts.ANR;
@@ -2356,21 +2462,19 @@ EXCEL_REPORT_TEMPLATE = '''
                     processTotal.Total += counts.Total;
                 });
                 
-                // 小計
                 html += '<tr class="subtotal-row">';
-                html += `<td><strong>小計</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${processTotal.ANR}</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${processTotal.Tombstone}</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${processTotal.Total}</strong></td>`;
+                html += `<td style="font-weight: 700; padding-left: 16px;">小計</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${processTotal.ANR}</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${processTotal.Tombstone}</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${processTotal.Total}</td>`;
                 html += '</tr>';
             });
             
-            // 總計
             html += '<tr class="total-row">';
-            html += '<td colspan="2" style="text-align: center;"><strong>總計</strong></td>';
-            html += `<td style="text-align: center;"><strong>${totals.ANR}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Tombstone}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Total}</strong></td>`;
+            html += '<td colspan="2" style="text-align: center !important; font-weight: 700;">總計</td>';
+            html += `<td style="text-align: center !important;">${totals.ANR}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Tombstone}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Total}</td>`;
             html += '</tr>';
             
             html += '</tbody></table>';
@@ -2394,12 +2498,18 @@ EXCEL_REPORT_TEMPLATE = '''
                 totals.Total++;
             });
             
-            let html = '<table class="table table-bordered">';
+            let html = '<table class="table table-bordered" style="table-layout: fixed; width: 100%;">';
+            html += '<colgroup>';
+            html += '<col style="width: 20%;">';
+            html += '<col style="width: 60%;">';
+            html += '<col style="width: 20%;">';
+            html += '</colgroup>';
             html += '<thead><tr>';
             html += '<th style="position: relative;">類型<span class="pivot-sort-indicator"></span></th>';
             html += '<th style="position: relative;">問題集<span class="pivot-sort-indicator"></span></th>';
             html += '<th style="text-align: center; position: relative;">數量<span class="pivot-sort-indicator"></span></th>';
             html += '</tr></thead>';
+            html += '<tbody>';
             
             Object.entries(pivotData).forEach(([type, problemSets]) => {
                 const typeTotal = Object.values(problemSets).reduce((sum, count) => sum + count, 0);
@@ -2409,25 +2519,23 @@ EXCEL_REPORT_TEMPLATE = '''
                 Object.entries(problemSets).forEach(([problemSet, count]) => {
                     html += '<tr>';
                     if (firstRow) {
-                        html += `<td rowspan="${psCount + 1}" style="vertical-align: middle;"><strong>${type}</strong></td>`;
+                        html += `<td rowspan="${psCount + 1}" style="vertical-align: middle; font-weight: 600;">${type}</td>`;
                         firstRow = false;
                     }
-                    html += `<td>${problemSet}</td>`;
-                    html += `<td style="text-align: center;">${count}</td>`;
+                    html += `<td style="padding-left: 16px;">${problemSet}</td>`;
+                    html += `<td style="text-align: center !important;">${count}</td>`;
                     html += '</tr>';
                 });
                 
-                // 小計
                 html += '<tr class="subtotal-row">';
-                html += `<td><strong>小計</strong></td>`;
-                html += `<td style="text-align: center;"><strong>${typeTotal}</strong></td>`;
+                html += `<td style="font-weight: 700; padding-left: 16px;">小計</td>`;
+                html += `<td style="text-align: center !important; font-weight: 700;">${typeTotal}</td>`;
                 html += '</tr>';
             });
             
-            // 總計
             html += '<tr class="total-row">';
-            html += '<td colspan="2" style="text-align: center;"><strong>總計</strong></td>';
-            html += `<td style="text-align: center;"><strong>${totals.Total}</strong></td>`;
+            html += '<td colspan="2" style="text-align: center !important; font-weight: 700;">總計</td>';
+            html += `<td style="text-align: center !important; font-weight: 700;">${totals.Total}</td>`;
             html += '</tr>';
             
             html += '</tbody></table>';
@@ -2561,7 +2669,13 @@ EXCEL_REPORT_TEMPLATE = '''
                 totals.Total++;
             });
             
-            let html = '<table class="table table-bordered">';
+            let html = '<table class="table table-bordered" style="table-layout: fixed; width: 100%;">';
+            html += '<colgroup>';
+            html += '<col style="width: 25%;">';
+            html += '<col style="width: 25%;">';
+            html += '<col style="width: 25%;">';
+            html += '<col style="width: 25%;">';
+            html += '</colgroup>';
             html += '<thead><tr>';
             html += '<th style="position: relative;">日期<span class="pivot-sort-indicator"></span></th>';
             html += '<th style="text-align: center; position: relative;">ANR<span class="pivot-sort-indicator"></span></th>';
@@ -2572,19 +2686,18 @@ EXCEL_REPORT_TEMPLATE = '''
             
             Object.entries(pivotData).sort().forEach(([date, counts]) => {
                 html += '<tr>';
-                html += `<td><strong>${date}</strong></td>`;
-                html += `<td style="text-align: center;">${counts.ANR}</td>`;
-                html += `<td style="text-align: center;">${counts.Tombstone}</td>`;
-                html += `<td style="text-align: center;"><strong>${counts.Total}</strong></td>`;
+                html += `<td style="font-weight: 600;">${date}</td>`;
+                html += `<td style="text-align: center !important;">${counts.ANR}</td>`;
+                html += `<td style="text-align: center !important;">${counts.Tombstone}</td>`;
+                html += `<td style="text-align: center !important; font-weight: 600;">${counts.Total}</td>`;
                 html += '</tr>';
             });
             
-            // 總計
             html += '<tr class="total-row">';
-            html += '<td style="text-align: center;"><strong>總計</strong></td>';
-            html += `<td style="text-align: center;"><strong>${totals.ANR}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Tombstone}</strong></td>`;
-            html += `<td style="text-align: center;"><strong>${totals.Total}</strong></td>`;
+            html += '<td style="text-align: center !important; font-weight: 700;">總計</td>';
+            html += `<td style="text-align: center !important;">${totals.ANR}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Tombstone}</td>`;
+            html += `<td style="text-align: center !important;">${totals.Total}</td>`;
             html += '</tr>';
             
             html += '</tbody></table>';
