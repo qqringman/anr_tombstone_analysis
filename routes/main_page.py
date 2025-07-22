@@ -5591,10 +5591,39 @@ def analyze():
         # 在每個 log 中添加完整路徑
         for log in results['logs']:
             log['full_path'] = log.get('file', '')
-        
+            
+            # 從檔案路徑中提取 problem_set
+            # 假設路徑格式為 /base/path/問題集名稱/anr或tombstones/檔案名稱
+            if 'problem_set' not in log and log.get('file'):
+                try:
+                    file_path = log['file']
+                    # 移除基礎路徑
+                    relative_path = file_path.replace(path, '').lstrip('/')
+                    # 取得第一層資料夾名稱作為 problem_set
+                    parts = relative_path.split('/')
+                    if len(parts) > 1:
+                        log['problem_set'] = parts[0]
+                    else:
+                        log['problem_set'] = '未分類'
+                except:
+                    log['problem_set'] = '未分類'
+    
         # 在每個 file_stat 中添加完整路徑  
         for file_stat in results['file_statistics']:
             file_stat['full_path'] = file_stat.get('filepath', '')
+            
+            # 同樣處理 file_statistics 的 problem_set
+            if 'problem_set' not in file_stat and file_stat.get('filepath'):
+                try:
+                    file_path = file_stat['filepath']
+                    relative_path = file_path.replace(path, '').lstrip('/')
+                    parts = relative_path.split('/')
+                    if len(parts) > 1:
+                        file_stat['problem_set'] = parts[0]
+                    else:
+                        file_stat['problem_set'] = '未分類'
+                except:
+                    file_stat['problem_set'] = '未分類'
 
         # 將分析輸出路徑加入結果中
         results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
@@ -5981,6 +6010,7 @@ def export_ai_csv():
             csv_data.append({
                 'SN': sn,
                 'Date': current_time,
+                'Problem Set': log.get('problem_set', '-'),  # 新增問題 set 欄位
                 'Type': log.get('type', ''),
                 'Process': log.get('process', ''),
                 'AI result': ai_result,
@@ -6187,6 +6217,7 @@ def export_ai_excel():
             excel_data.append({
                 'SN': sn,
                 'Date': current_time,
+                'Problem set': log.get('problem_set', '-'),  # 新增問題 set 欄位
                 'Type': log.get('type', ''),
                 'Process': log.get('process', ''),
                 'AI result': ai_result,
@@ -6211,8 +6242,8 @@ def export_ai_excel():
             bottom=Side(style='thin')
         )
         
-        # 寫入標題
-        headers = ['SN', 'Date', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path']
+        # 寫入標題（加入問題 set）
+        headers = ['SN', 'Date', 'Problem set', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path']
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.fill = header_fill
@@ -6246,8 +6277,8 @@ def export_ai_excel():
                 else:
                     cell.alignment = data_alignment
                 
-                # 根據類型設定背景色
-                if col_idx == 3:  # Type 欄位
+                # 根據類型設定背景色（Type 欄位現在是第 4 欄）
+                if col_idx == 4:  # Type 欄位
                     if row_data.get('Type') == 'ANR':
                         cell.fill = anr_fill
                     elif row_data.get('Type') == 'Tombstone':
@@ -6257,11 +6288,12 @@ def export_ai_excel():
         column_widths = {
             'A': 8,   # SN
             'B': 20,  # Date
-            'C': 12,  # Type
-            'D': 30,  # Process
-            'E': 60,  # AI result
-            'F': 40,  # Filename
-            'G': 80   # Folder Path
+            'C': 20,  # 問題 set
+            'D': 12,  # Type
+            'E': 30,  # Process
+            'F': 60,  # AI result
+            'G': 40,  # Filename
+            'H': 80   # Folder Path
         }
         
         for col, width in column_widths.items():
@@ -6435,6 +6467,7 @@ def export_all_excel_with_current():
                 new_rows.append([
                     sn,
                     current_time,
+                    log.get('problem_set', '-'),  # 新增問題 set 欄位
                     log.get('type', ''),
                     log.get('process', ''),
                     ai_result,
@@ -6470,7 +6503,7 @@ def export_all_excel_with_current():
                         cell.alignment = data_alignment
                     
                     # Type 欄位背景色
-                    if col_idx == 3:
+                    if col_idx == 4:
                         if value == 'ANR':
                             cell.fill = anr_fill
                         elif value == 'Tombstone':
@@ -6581,6 +6614,7 @@ def export_all_history_excel():
                 row_data = [
                     sn,
                     current_time,
+                    log.get('problem_set', '-'),  # 新增問題 set 欄位
                     log.get('type', ''),
                     log.get('process', ''),
                     ai_result,
@@ -6600,7 +6634,7 @@ def export_all_history_excel():
                         cell.alignment = data_alignment
                     
                     # Type 欄位背景色
-                    if col_idx == 3:
+                    if col_idx == 4:
                         if value == 'ANR':
                             cell.fill = anr_fill
                         elif value == 'Tombstone':
@@ -6800,6 +6834,7 @@ def merge_excel():
             new_rows.append([
                 sn,
                 current_time,
+                log.get('problem_set', '-'),  # 新增問題 set 欄位
                 log.get('type', ''),
                 log.get('process', ''),
                 ai_result,
@@ -6835,7 +6870,7 @@ def merge_excel():
                     cell.alignment = data_alignment
                 
                 # Type 欄位背景色
-                if col_idx == 3:
+                if col_idx == 4:
                     if value == 'ANR':
                         cell.fill = anr_fill
                     elif value == 'Tombstone':
@@ -6942,6 +6977,7 @@ def merge_excel_upload():
             row_data = [
                 sn,
                 current_time,
+                log.get('problem_set', '-'),  # 新增問題 set 欄位
                 log.get('type', ''),
                 log.get('process', ''),
                 ai_result,
@@ -6961,7 +6997,7 @@ def merge_excel_upload():
                     cell.alignment = data_alignment
                 
                 # Type 欄位背景色
-                if col_idx == 3:
+                if col_idx == 4:
                     if value == 'ANR':
                         cell.fill = anr_fill
                     elif value == 'Tombstone':
