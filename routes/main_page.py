@@ -22,6 +22,7 @@ import asyncio
 import queue
 from routes.grep_analyzer import AndroidLogAnalyzer, LimitedCache
 import shutil
+import pandas as pd
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
@@ -79,6 +80,58 @@ HTML_TEMPLATE = r'''
     .header h1 {
         font-size: 2.5rem;
         margin-bottom: 10px;
+    }
+
+    .load-excel-btn {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .load-excel-btn:hover {
+        background: #138496;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+    }
+
+    .export-excel-report-btn {
+        position: absolute;
+        top: 30px;
+        right: 420px;  /* 在合併 Excel 按鈕左邊 */
+        background: #ff6b6b;  /* 紅色背景，區別於其他按鈕 */
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    .export-excel-report-btn:hover {
+        background: rgba(255, 107, 107, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
+    @media (max-width: 768px) {
+        .export-excel-report-btn {
+            position: static;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
     }
 
     .export-html-btn {
@@ -2172,6 +2225,7 @@ HTML_TEMPLATE = r'''
             <h1>Android ANR/Tombstone Analyzer</h1>
             <p>分析 anr/ 和 tombstones/ 資料夾中的 Cmd line: / Cmdline: 統計資訊</p>
             <button class="export-excel-btn" id="exportExcelBtn" onclick="exportAIResults()" style="display: none;">匯出 Excel</button>
+            <button class="export-excel-report-btn" id="exportExcelReportBtn" onclick="exportExcelReport()" style="display: none;">匯出 Excel 報表</button>
             <button class="merge-excel-btn" id="mergeExcelBtn" onclick="openMergeDialog()" style="display: none;">合併 Excel</button>
             <button class="export-html-btn" id="exportHtmlBtn" onclick="exportResults('html')">匯出 HTML</button>
             <div class="header-separator" id="headerSeparator"></div>
@@ -2222,6 +2276,7 @@ HTML_TEMPLATE = r'''
             </small>                
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
+                <button onclick="openLoadExcelDialog()" id="loadExcelBtn" class="load-excel-btn">📊 載入 Excel</button>
                 <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
             </div>    
             <div class="loading" id="loading">
@@ -3416,6 +3471,12 @@ HTML_TEMPLATE = r'''
                     // 顯示 Excel 匯出按鈕
                     if (exportExcelBtn) {
                         exportExcelBtn.style.display = 'block';
+                    }
+
+                    // 顯示 Excel 報表按鈕
+                    const exportExcelReportBtn = document.getElementById('exportExcelReportBtn');
+                    if (exportExcelReportBtn) {
+                        exportExcelReportBtn.style.display = 'block';
                     }
 
                     // 顯示合併 Excel 按鈕
@@ -5271,6 +5332,154 @@ HTML_TEMPLATE = r'''
         });
 
     </script>
+    <script>
+        // 載入 Excel 相關變數
+        let loadExcelMode = false;
+        let selectedLoadExcelPath = null;
+
+        // 打開載入 Excel 對話框
+        function openLoadExcelDialog() {
+            loadExcelMode = true;
+            
+            // 使用現有的合併對話框，但修改標題和按鈕
+            const dialog = document.getElementById('mergeDialogOverlay');
+            const dialogHeader = dialog.querySelector('.merge-dialog-header h3');
+            const executeBtn = document.getElementById('mergeExecuteBtn');
+            
+            // 修改對話框內容
+            dialogHeader.innerHTML = '📊 載入 Excel 檔案';
+            executeBtn.textContent = '分析 Report';
+            executeBtn.onclick = executeLoadExcel;  // 改變按鈕功能
+            
+            // 隱藏匯出相關按鈕
+            const exportBtns = document.querySelectorAll('.export-html-btn, .export-excel-btn, .merge-excel-btn');
+            exportBtns.forEach(btn => {
+                if (btn) btn.style.display = 'none';
+            });
+            
+            // 開啟對話框
+            openMergeDialog();
+        }
+
+        // 執行載入 Excel
+        async function executeLoadExcel() {
+            if (!selectedMergeFile && !selectedMergeFilePath) {
+                showMessage('請選擇要載入的 Excel 檔案', 'error');
+                return;
+            }
+            
+            const executeBtn = document.getElementById('mergeExecuteBtn');
+            executeBtn.disabled = true;
+            executeBtn.textContent = '分析中...';
+            
+            try {
+                let formData = new FormData();
+                
+                if (selectedMergeFile) {
+                    // 上傳的檔案
+                    formData.append('file', selectedMergeFile);
+                } else {
+                    // 伺服器路徑
+                    formData.append('file_path', selectedMergeFilePath);
+                }
+                
+                // 發送到新的路由
+                const response = await fetch('/load-excel-report', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.report_url) {
+                        // 開啟新視窗顯示報告
+                        window.open(data.report_url, '_blank');
+                        closeMergeDialog();
+                        showMessage('Excel 載入成功，報告已在新視窗開啟', 'success');
+                    }
+                } else {
+                    const error = await response.json();
+                    showMessage('載入失敗: ' + (error.error || '未知錯誤'), 'error');
+                }
+            } catch (error) {
+                showMessage('載入失敗: ' + error.message, 'error');
+            } finally {
+                executeBtn.disabled = false;
+                executeBtn.textContent = '分析 Report';
+                loadExcelMode = false;
+            }
+        }
+
+        // 修改 closeMergeDialog 函數，重置對話框
+        const originalCloseMergeDialog = closeMergeDialog;
+        closeMergeDialog = function() {
+            originalCloseMergeDialog();
+            
+            // 重置對話框內容
+            if (loadExcelMode) {
+                const dialogHeader = document.querySelector('.merge-dialog-header h3');
+                const executeBtn = document.getElementById('mergeExecuteBtn');
+                
+                dialogHeader.innerHTML = '💹 合併 Excel 檔案';
+                executeBtn.textContent = '匯出';
+                executeBtn.onclick = executeMerge;
+                
+                loadExcelMode = false;
+            }
+            
+            // 恢復匯出按鈕顯示
+            const exportBtns = document.querySelectorAll('.export-html-btn, .export-excel-btn, .merge-excel-btn');
+            exportBtns.forEach(btn => {
+                if (btn && window.hasCurrentAnalysis) {
+                    btn.style.display = 'block';
+                }
+            });
+        };    
+    </script>
+    <script>
+        async function exportExcelReport() {
+            if (!currentAnalysisId || !allLogs || allLogs.length === 0) {
+                showMessage('請先執行分析', 'error');
+                return;
+            }
+            
+            const exportBtn = document.getElementById('exportExcelReportBtn');
+            if (!exportBtn) return;
+            
+            exportBtn.disabled = true;
+            exportBtn.textContent = '生成報表中...';
+            
+            try {
+                const response = await fetch('/export-excel-report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: document.getElementById('pathInput').value,
+                        analysis_id: currentAnalysisId
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.report_url) {
+                        // 在新視窗開啟報表
+                        window.open(data.report_url, '_blank');
+                        showMessage('Excel 報表已生成', 'success');
+                    }
+                } else {
+                    const error = await response.text();
+                    showMessage('生成報表失敗: ' + error, 'error');
+                }
+            } catch (error) {
+                showMessage('生成報表失敗: ' + error.message, 'error');
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '匯出 Excel 報表';
+            }
+        }    
+    </script>
 </body>
 </html>
 '''
@@ -7026,4 +7235,168 @@ def merge_excel_upload():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/load-excel-report', methods=['POST'])
+def load_excel_report():
+    """載入 Excel 並跳轉到報告頁面"""
+    try:
+        import tempfile
+        
+        # 處理檔案
+        excel_path = None
+        temp_file = None
+        original_filename = None
+        original_path = None
+        
+        if 'file' in request.files:
+            # 上傳的檔案
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'error': '沒有選擇檔案'}), 400
+            
+            if not file.filename.endswith('.xlsx'):
+                return jsonify({'error': '只支援 .xlsx 格式的 Excel 檔案'}), 400
+            
+            original_filename = file.filename
+            original_path = f"本地上傳: {file.filename}"
+            
+            # 儲存到暫存檔案
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+            file.save(temp_file.name)
+            excel_path = temp_file.name
+            
+        elif 'file_path' in request.form:
+            # 伺服器路徑
+            excel_path = request.form.get('file_path')
+            if not os.path.exists(excel_path):
+                return jsonify({'error': '檔案不存在'}), 404
+            
+            original_filename = os.path.basename(excel_path)
+            original_path = excel_path
+        else:
+            return jsonify({'error': '未提供檔案'}), 400
+        
+        # 將檔案路徑存入 session 或生成唯一 ID
+        import uuid
+        report_id = str(uuid.uuid4())
+        
+        # 使用 analysis_cache 儲存檔案資訊
+        analysis_cache.set(f"excel_report_{report_id}", {
+            'excel_path': excel_path,
+            'is_temp': temp_file is not None,
+            'original_filename': original_filename,
+            'original_path': original_path
+        })
+        
+        # 返回報告 URL
+        return jsonify({
+            'report_url': f'/excel-report/{report_id}'
+        })
+        
+    except Exception as e:
+        print(f"Error in load_excel_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/export-excel-report', methods=['POST'])
+def export_excel_report():
+    """將分析結果匯出為 Excel 報表格式"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # 使用者選擇的路徑
+        path = data.get('path')
+        # 分析 ID
+        analysis_id = data.get('analysis_id')
+        
+        if not path or not analysis_id:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # 從快取中取得分析結果
+        analysis_data = analysis_cache.get(analysis_id)
+        if not analysis_data:
+            return jsonify({'error': 'Analysis data not found'}), 404
+        
+        # 生成唯一的報表 ID
+        report_id = str(uuid.uuid4())[:8]
+        
+        # 建立臨時 Excel 檔案
+        import tempfile
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        from openpyxl.utils.dataframe import dataframe_to_rows
+        
+        # 建立 Pandas DataFrame
+        logs = analysis_data.get('logs', [])
+        
+        # 準備資料
+        excel_data = []
+        for idx, log in enumerate(logs, 1):
+            excel_data.append({
+                'SN': idx,
+                'Date': log.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+                '問題 set': log.get('problem_set', '-'),
+                'Type': log.get('type', ''),
+                'Process': log.get('process', ''),
+                'AI result': '-',  # 暫時沒有 AI 分析結果
+                'Filename': log.get('filename', ''),
+                'Folder Path': log.get('folder_path', '')
+            })
+        
+        # 轉換為 DataFrame
+        df = pd.DataFrame(excel_data)
+        
+        # 建立臨時檔案
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            excel_path = tmp_file.name
+            
+            # 將 DataFrame 寫入 Excel
+            with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='ANR Tombstone Analysis', index=False)
                 
+                # 取得工作表並美化
+                workbook = writer.book
+                worksheet = writer.sheets['ANR Tombstone Analysis']
+                
+                # 設定欄寬
+                column_widths = {
+                    'A': 8,   # SN
+                    'B': 20,  # Date
+                    'C': 20,  # 問題 set
+                    'D': 12,  # Type
+                    'E': 35,  # Process
+                    'F': 30,  # AI result
+                    'G': 40,  # Filename
+                    'H': 60   # Folder Path
+                }
+                
+                for col, width in column_widths.items():
+                    worksheet.column_dimensions[col].width = width
+                
+                # 凍結標題列
+                worksheet.freeze_panes = 'A2'
+        
+        # 儲存檔案資訊到快取
+        file_info = {
+            'excel_path': excel_path,
+            'is_temp': True,
+            'original_filename': f"{datetime.now().strftime('%Y%m%d')}_anr_tombstone_result.xlsx",
+            'original_path': path
+        }
+        
+        analysis_cache.set(f"excel_report_{report_id}", file_info)
+        
+        # 返回報表頁面的 URL
+        return jsonify({
+            'success': True,
+            'report_url': f'/excel-report/{report_id}'
+        })
+        
+    except Exception as e:
+        print(f"Error in export_excel_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
