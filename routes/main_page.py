@@ -2216,7 +2216,29 @@ HTML_TEMPLATE = r'''
         font-family: monospace;
         font-size: 90%;        
     }
-    
+
+    .download-zip-btn {
+        position: absolute;
+        top: 70px;  /* 在第二排 */
+        right: 160px;
+        background: #fd7e14;
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: none;
+    }
+
+    .download-zip-btn:hover {
+        background: rgba(253, 126, 20, 0.8);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+    }
+
     </style>      
 </head>
 <body>
@@ -2228,6 +2250,9 @@ HTML_TEMPLATE = r'''
             <button class="export-excel-report-btn" id="exportExcelReportBtn" onclick="exportExcelReport()" style="display: none;">匯出 Excel 報表</button>
             <button class="merge-excel-btn" id="mergeExcelBtn" onclick="openMergeDialog()" style="display: none;">合併 Excel</button>
             <button class="export-html-btn" id="exportHtmlBtn" onclick="exportResults('html')">匯出 HTML</button>
+            <button class="download-zip-btn" id="downloadCurrentZipBtn" onclick="downloadCurrentAnalysisZip()" style="display: none;">
+                📦 分析結果打包
+            </button>            
             <div class="header-separator" id="headerSeparator"></div>
         </div>
         
@@ -2285,7 +2310,25 @@ HTML_TEMPLATE = r'''
             
             <div id="message"></div>
         </div>
-        
+        <div id="historySection" style="display: none; margin-top: 20px;">
+            <h2 style="margin-bottom: 10px; color: #667eea;">📚 歷史分析文件</h2>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #667eea;">
+                <div class="button-group" style="margin-top: 10px;">
+                    <button onclick="viewHistoryIndex()" id="viewIndexBtn" style="display: none; background: #6f42c1;">
+                        📊 查看已有分析結果
+                    </button>
+                    <button onclick="downloadExistingExcel()" id="downloadExcelBtn" style="display: none; background: #28a745;">
+                        📥 匯出 Excel
+                    </button>
+                    <button onclick="viewExistingHTML()" id="viewHTMLBtn" style="display: none; background: #17a2b8;">
+                        📈 已統計分析
+                    </button>
+                    <button onclick="downloadAnalysisZip()" id="downloadZipBtn" style="display: none; background: #fd7e14;">
+                        📦 打包分析結果
+                    </button>
+                </div>
+            </div>
+        </div>        
         <div id="results">
             <div class="section-container" id="stats-section-container">
                 <div class="logs-table" id="stats-section">
@@ -3483,7 +3526,13 @@ HTML_TEMPLATE = r'''
                     const mergeExcelBtn = document.getElementById('mergeExcelBtn');
                     if (mergeExcelBtn) {
                         mergeExcelBtn.style.display = 'block';
-                    }                    
+                    }
+
+                    // 顯示分析結果打包按鈕
+                    const downloadCurrentZipBtn = document.getElementById('downloadCurrentZipBtn');
+                    if (downloadCurrentZipBtn) {
+                        downloadCurrentZipBtn.style.display = 'block';
+                    }
                 }
                 
                 console.log('vp_analyze 執行結果:', {
@@ -5480,6 +5529,172 @@ HTML_TEMPLATE = r'''
             }
         }    
     </script>
+    <script>
+        // 儲存歷史分析路徑資訊
+        let historyAnalysisInfo = null;
+
+        // 檢查是否有已存在的分析結果
+        async function checkExistingAnalysis(path) {
+            if (!path) return;
+            
+            // 顯示檢查中的狀態
+            const viewAnalysisBtn = document.getElementById('viewAnalysisBtn');
+            
+            try {
+                const response = await fetch('/check-existing-analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path: path })
+                });
+                
+                const data = await response.json();
+                
+                // 保持原本的邏輯 - 檢查是否有分析結果
+                if (data.exists && data.analysis_path) {
+                    window.existingAnalysisPath = data.analysis_path;
+                    if (viewAnalysisBtn) {
+                        viewAnalysisBtn.style.display = 'inline-flex';
+                    }
+                } else {
+                    if (viewAnalysisBtn) {
+                        viewAnalysisBtn.style.display = 'none';
+                    }
+                    window.existingAnalysisPath = null;
+                }
+                
+                // 新增：處理歷史文件區塊
+                historyAnalysisInfo = data;
+                const historySection = document.getElementById('historySection');
+                const viewIndexBtn = document.getElementById('viewIndexBtn');
+                const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+                const viewHTMLBtn = document.getElementById('viewHTMLBtn');
+                const downloadZipBtn = document.getElementById('downloadZipBtn');
+                
+                if (data.exists && data.has_folder) {
+                    historySection.style.display = 'block';
+                    
+                    // 根據檔案存在狀況顯示按鈕
+                    viewIndexBtn.style.display = data.has_index ? 'inline-flex' : 'none';
+                    downloadExcelBtn.style.display = data.has_excel ? 'inline-flex' : 'none';
+                    viewHTMLBtn.style.display = data.has_html ? 'inline-flex' : 'none';
+                    downloadZipBtn.style.display = 'inline-flex';
+                } else {
+                    historySection.style.display = 'none';
+                }
+                
+            } catch (error) {
+                console.error('檢查已有分析結果失敗:', error);
+                // 錯誤時隱藏按鈕
+                if (viewAnalysisBtn) viewAnalysisBtn.style.display = 'none';
+                window.existingAnalysisPath = null;
+            }
+        }
+
+        // 查看已存在的 HTML 統計
+        function viewExistingHTML() {
+            if (historyAnalysisInfo && historyAnalysisInfo.html_path) {
+                window.open('/view-file?path=' + encodeURIComponent(historyAnalysisInfo.html_path), '_blank');
+            }
+        }
+
+        // 下載已存在的 Excel
+        function downloadExistingExcel() {
+            if (historyAnalysisInfo && historyAnalysisInfo.excel_path) {
+                window.location.href = '/download-file?path=' + encodeURIComponent(historyAnalysisInfo.excel_path);
+            }
+        }
+
+        // 下載歷史分析 zip
+        async function downloadAnalysisZip() {
+            if (!historyAnalysisInfo || !historyAnalysisInfo.analysis_path) return;
+            
+            try {
+                const response = await fetch('/download-analysis-zip', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        analysis_path: historyAnalysisInfo.analysis_path
+                    })
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'analysis.zip';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                }
+            } catch (error) {
+                showMessage('下載失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 下載當前分析結果 zip
+        async function downloadCurrentAnalysisZip() {
+            if (!window.vpAnalyzeOutputPath) {
+                showMessage('請先執行分析', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/download-analysis-zip', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        analysis_path: window.vpAnalyzeOutputPath
+                    })
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    const contentDisposition = response.headers.get('content-disposition');
+                    let filename = 'analysis.zip';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                }
+            } catch (error) {
+                showMessage('下載失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 查看歷史分析結果（從歷史文件區塊）
+        function viewHistoryIndex() {
+            if (historyAnalysisInfo && historyAnalysisInfo.analysis_path) {
+                window.open('/view-analysis-report?path=' + encodeURIComponent(historyAnalysisInfo.analysis_path), '_blank');
+            }
+        }
+
+    </script>
 </body>
 </html>
 '''
@@ -6085,6 +6300,16 @@ def export(format, analysis_id):
         # 生成日期字串
         date_str = datetime.now().strftime('%Y%m%d')
         
+        # 儲存 HTML 到分析資料夾
+        if data.get('vp_analyze_output_path') and os.path.exists(data.get('vp_analyze_output_path')):
+            try:
+                html_save_path = os.path.join(data.get('vp_analyze_output_path'), 'all_anr_tombstone_result.html')
+                with open(html_save_path, 'w', encoding='utf-8') as f:
+                    f.write(html_report)
+                print(f"已儲存 HTML 檔案到: {html_save_path}")
+            except Exception as e:
+                print(f"儲存 HTML 檔案到分析資料夾失敗: {str(e)}")
+                        
         return send_file(
             output_bytes,
             mimetype='text/html',
@@ -6527,6 +6752,34 @@ def export_ai_excel():
             download_name=filename
         )
         
+        # 儲存到分析資料夾
+        if analysis_output_path and os.path.exists(analysis_output_path):
+            try:
+                # 儲存 Excel 檔案到分析資料夾
+                excel_save_path = os.path.join(analysis_output_path, 'all_anr_tombstone_result.xlsx')
+                wb_copy = Workbook()
+                ws_copy = wb_copy.active
+                ws_copy.title = "ANR Tombstone Analysis"
+                
+                # 複製內容
+                for row in ws.iter_rows():
+                    for cell in row:
+                        ws_copy[cell.coordinate].value = cell.value
+                        if cell.has_style:
+                            ws_copy[cell.coordinate]._style = cell._style
+                
+                # 複製欄寬
+                for col, width in column_widths.items():
+                    ws_copy.column_dimensions[col].width = width
+                
+                # 凍結標題列
+                ws_copy.freeze_panes = 'A2'
+                
+                wb_copy.save(excel_save_path)
+                print(f"已儲存 Excel 檔案到: {excel_save_path}")
+            except Exception as e:
+                print(f"儲存 Excel 檔案到分析資料夾失敗: {str(e)}")
+                        
         return response
         
     except Exception as e:
@@ -6585,28 +6838,37 @@ def check_existing_analysis():
             return jsonify({'exists': False})
         
         # 尋找分析資料夾
-        # 使用與 vp_analyze_logs.py 相同的命名規則
         last_folder_name = os.path.basename(base_path.rstrip(os.sep))
         analysis_folder_name = f".{last_folder_name}_anr_tombstones_analyze"
         analysis_path = os.path.join(base_path, analysis_folder_name)
         
-        if os.path.exists(analysis_path) and os.path.isdir(analysis_path):
-            # 檢查是否有 index.html
-            index_path = os.path.join(analysis_path, 'index.html')
-            has_index = os.path.exists(index_path)
-            
-            # 檢查是否有 all_anr_tombstone_result.xlsx
-            all_excel_path = os.path.join(analysis_path, 'all_anr_tombstone_result.xlsx')
-            has_all_excel = os.path.exists(all_excel_path)
-            
-            return jsonify({
-                'exists': has_index,
-                'analysis_path': analysis_path,
-                'has_all_excel': has_all_excel,
-                'all_excel_path': all_excel_path if has_all_excel else None
-            })
+        result = {
+            'exists': False,
+            'analysis_path': None,
+            'has_index': False,
+            'has_excel': False,
+            'has_html': False,
+            'has_folder': False
+        }
         
-        return jsonify({'exists': False})
+        if os.path.exists(analysis_path) and os.path.isdir(analysis_path):
+            result['exists'] = True
+            result['analysis_path'] = analysis_path
+            result['has_folder'] = True
+            
+            # 檢查各種檔案
+            index_path = os.path.join(analysis_path, 'index.html')
+            excel_path = os.path.join(analysis_path, 'all_anr_tombstone_result.xlsx')
+            html_path = os.path.join(analysis_path, 'all_anr_tombstone_result.html')
+            
+            result['has_index'] = os.path.exists(index_path)
+            result['has_excel'] = os.path.exists(excel_path)
+            result['has_html'] = os.path.exists(html_path)
+            
+            result['excel_path'] = excel_path if result['has_excel'] else None
+            result['html_path'] = html_path if result['has_html'] else None
+        
+        return jsonify(result)
         
     except Exception as e:
         print(f"Error checking existing analysis: {str(e)}")
@@ -7399,4 +7661,46 @@ def export_excel_report():
         print(f"Error in export_excel_report: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/download-analysis-zip', methods=['POST'])
+def download_analysis_zip():
+    """打包並下載分析結果"""
+    try:
+        import zipfile
+        import tempfile
+        
+        data = request.json
+        analysis_path = data.get('analysis_path')
+        
+        if not analysis_path or not os.path.exists(analysis_path):
+            return jsonify({'error': '分析資料夾不存在'}), 404
+        
+        # 建立暫存 zip 檔案
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+            zip_path = tmp_file.name
+        
+        # 打包資料夾
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(analysis_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.dirname(analysis_path))
+                    zipf.write(file_path, arcname)
+        
+        # 生成檔名
+        folder_name = os.path.basename(analysis_path.rstrip(os.sep))
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f"{date_str}_{folder_name}_analysis.zip"
+        
+        # 讀取並返回 zip 檔案
+        return send_file(
+            zip_path,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"Error in download_analysis_zip: {str(e)}")
         return jsonify({'error': str(e)}), 500
