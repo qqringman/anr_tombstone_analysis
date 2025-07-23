@@ -2466,7 +2466,7 @@ HTML_TEMPLATE = r'''
             <h2 style="margin-bottom: 10px; color: #333;">📚 歷史分析文件</h2>
             <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
                 <div class="button-group" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">
-                    <button onclick="viewHistoryIndex()" id="viewIndexBtn" style="display: none; background: #6f42c1; border: 2px dashed #fff; box-shadow: 0 0 0 2px #6f42c1;">
+                    <button onclick="viewHistoryIndex()" id="viewIndexBtn" style="display: none; background: #6f42c1;">
                         📊 查看已有分析結果
                     </button>
                     <button onclick="downloadExistingExcel()" id="downloadExcelBtn" style="display: none; background: #28a745;">
