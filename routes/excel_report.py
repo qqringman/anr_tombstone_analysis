@@ -28,29 +28,28 @@ EXCEL_REPORT_TEMPLATE = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel 分析報告</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.18.0.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* 全局優化 */
+        /* 全局優化 - 北歐藍色系 */
         * {
             box-sizing: border-box;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-            background-color: #f0f2f5;
+            background-color: #f0f4f8;  /* 淺藍灰色背景 */
             margin: 0;
             padding: 0;
         }
         
         .header {
-            background: #ffffff;  /* 白色背景 */
-            color: #2d3748;  /* 深灰色文字 */
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e88e5 100%);  /* 北歐藍漸層 */
+            color: white;
             padding: 30px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+            box-shadow: 0 2px 8px rgba(44, 90, 160, 0.2);
             position: relative;
-            border-bottom: 1px solid #e2e8f0;
         }
         
         .header-container {
@@ -63,17 +62,17 @@ EXCEL_REPORT_TEMPLATE = '''
             font-size: 2.2rem;
             margin: 0 0 20px 0;
             font-weight: 700;
-            color: #1a202c;  /* 更深的灰色 */
+            color: white;
         }
         
         .header-info {
-            background: #f7f9fc;  /* 淺灰藍色背景 */
-            border: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 8px;
             padding: 20px 25px;
             margin-top: 20px;
             display: inline-block;
-            box-shadow: none;  /* 移除陰影 */
+            backdrop-filter: blur(10px);
         }
         
         .header-info p {
@@ -82,7 +81,7 @@ EXCEL_REPORT_TEMPLATE = '''
             align-items: center;
             gap: 15px;
             font-size: 0.95rem;
-            color: #4a5568;  /* 中灰色文字 */
+            color: white;
         }
         
         .header-info p:last-child {
@@ -98,28 +97,27 @@ EXCEL_REPORT_TEMPLATE = '''
 
         .header-info .info-label {
             font-weight: 600;
-            opacity: 1;  /* 移除透明度 */
             min-width: 80px;
-            color: #2d3748;
+            color: white;
         }
 
         .header-info code {
-            background: #edf2f7;  /* 更淺的灰色背景 */
+            background: rgba(255, 255, 255, 0.2);
             padding: 6px 14px;
             border-radius: 4px;
             font-size: 0.9rem;
             font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
             font-weight: 500;
             letter-spacing: 0.3px;
-            color: #2d3748;
+            color: white;
         }
         
         .export-html-btn {
             position: absolute;
-            top: 30px;  /* 調整到更上方 */
+            top: 30px;
             right: 30px;
-            background: #4a5568;  /* 深灰色背景 */
-            color: white;
+            background: white;
+            color: #2c5aa0;
             border: none;
             padding: 12px 24px;
             border-radius: 6px;
@@ -131,7 +129,7 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .export-html-btn:hover {
-            background: #2d3748;  /* hover 時更深的灰色 */
+            background: #f0f4f8;
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
@@ -145,23 +143,23 @@ EXCEL_REPORT_TEMPLATE = '''
         .card {
             background: white;
             border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
             margin-bottom: 25px;
             padding: 30px;
-            border: 1px solid rgba(0,0,0,0.06);
+            border: 1px solid #e3ecf3;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         .card:hover {
-            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            box-shadow: 0 8px 24px rgba(44, 90, 160, 0.12);
             transform: translateY(-2px);
         }
         
         .card h3 {
-            color: #333;
+            color: #1e3a5f;  /* 深藍色標題 */
             margin-bottom: 20px;
             font-weight: 600;
-            border-bottom: 2px solid #f0f2f5;
+            border-bottom: 2px solid #e3ecf3;
             padding-bottom: 10px;
             display: flex;
             align-items: center;
@@ -171,11 +169,11 @@ EXCEL_REPORT_TEMPLATE = '''
         .stat-card {
             background: white;
             border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
             padding: 28px;
             text-align: center;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid rgba(0,0,0,0.06);
+            border: 1px solid #e3ecf3;
             position: relative;
             overflow: hidden;
         }
@@ -187,15 +185,15 @@ EXCEL_REPORT_TEMPLATE = '''
             left: 0;
             right: 0;
             height: 5px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
+            background: linear-gradient(90deg, #2c5aa0, #1e88e5);
             opacity: 0;
             transition: opacity 0.3s ease;
         }
         
         .stat-card:hover {
             transform: translateY(-6px);
-            box-shadow: 0 12px 28px rgba(0,0,0,0.12);
-            border-color: rgba(102, 126, 234, 0.2);
+            box-shadow: 0 12px 28px rgba(44, 90, 160, 0.15);
+            border-color: rgba(44, 90, 160, 0.2);
         }
         
         .stat-card:hover::before {
@@ -204,29 +202,29 @@ EXCEL_REPORT_TEMPLATE = '''
         
         .stat-card h3 {
             font-size: 2.5rem;
-            color: #667eea;
+            color: #2c5aa0;
             margin: 0;
             border: none;
             padding: 0;
         }
         
         .stat-card p {
-            color: #666;
+            color: #5a7a9f;
             margin: 10px 0 0 0;
             font-weight: 500;
             font-size: 0.95rem;
         }
         
         .stat-card.highlight {
-            background: #4a5568;  /* 深灰色背景 */
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e88e5 100%);
             color: white;
             border: none;
-            box-shadow: 0 4px 8px rgba(74, 85, 104, 0.2);
+            box-shadow: 0 4px 8px rgba(44, 90, 160, 0.3);
         }
         
         .stat-card.highlight:hover {
             transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 14px 32px rgba(102, 126, 234, 0.45);
+            box-shadow: 0 14px 32px rgba(44, 90, 160, 0.4);
         }
 
         .stat-card.highlight h3,
@@ -237,19 +235,19 @@ EXCEL_REPORT_TEMPLATE = '''
         .chart-container {
             background: white;
             border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(44, 90, 160, 0.08);
             padding: 25px;
             margin-bottom: 20px;
             transition: all 0.3s;
         }
         
         .chart-container:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.12);
         }
         
         .chart-container h4 {
             margin-bottom: 20px;
-            color: #333;
+            color: #1e3a5f;
             font-weight: 600;
             text-align: center;
         }
@@ -279,25 +277,25 @@ EXCEL_REPORT_TEMPLATE = '''
         .logs-table {
             background-color: white;
             border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(44, 90, 160, 0.08);
             overflow: hidden;
             margin-bottom: 30px;
             transition: all 0.3s;
         }
         
         .logs-table:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.12);
         }
         
         .table-header {
             position: relative;
             padding: 20px;
-            background: #f8f9fa !important;  /* 改為淺灰色背景 */
-            border-bottom: 1px solid #e9ecef;
+            background: linear-gradient(135deg, #f5f8fb 0%, #e8f0f8 100%);
+            border-bottom: 1px solid #e3ecf3;
         }
         
         .table-header h3 {
-            color: #333;  /* 改為深灰色文字 */
+            color: #1e3a5f;
             margin: 0;
             font-size: 1.2rem;
             font-weight: 600;
@@ -305,8 +303,8 @@ EXCEL_REPORT_TEMPLATE = '''
         
         .table-controls {
             padding: 20px;
-            background-color: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
+            background-color: #f5f8fb;
+            border-bottom: 1px solid #e3ecf3;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -323,7 +321,7 @@ EXCEL_REPORT_TEMPLATE = '''
         .search-box input {
             width: 100%;
             padding: 10px 40px 10px 15px;
-            border: 1px solid #ddd;
+            border: 1px solid #d4e3f1;
             border-radius: 8px;
             font-size: 14px;
             transition: all 0.3s;
@@ -331,8 +329,8 @@ EXCEL_REPORT_TEMPLATE = '''
         
         .search-box input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #2c5aa0;
+            box-shadow: 0 0 0 3px rgba(44, 90, 160, 0.1);
         }
         
         .search-box::after {
@@ -356,8 +354,8 @@ EXCEL_REPORT_TEMPLATE = '''
             padding: 8px 16px;
             font-size: 14px;
             background: white;
-            color: #667eea;
-            border: 1px solid #667eea;
+            color: #2c5aa0;
+            border: 1px solid #2c5aa0;
             cursor: pointer;
             border-radius: 6px;
             transition: all 0.3s;
@@ -365,21 +363,21 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .pagination button:hover:not(:disabled) {
-            background: #667eea;
+            background: #2c5aa0;
             color: white;
             transform: translateY(-1px);
         }
         
         .pagination button:disabled {
-            background: #f0f0f0;
-            color: #999;
-            border-color: #ddd;
+            background: #f0f4f8;
+            color: #9db4d0;
+            border-color: #d4e3f1;
             cursor: not-allowed;
         }
         
         .pagination span {
             padding: 0 10px;
-            color: #666;
+            color: #5a7a9f;
             font-weight: 500;
         }
         
@@ -401,12 +399,12 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         th {
-            background-color: #f7f9fc;
-            color: #2d3748;
+            background-color: #f5f8fb;
+            color: #1e3a5f;
             font-weight: 600;
-            padding: 15px 40px 15px 15px;  /* 右邊增加 padding 給排序圖標空間 */
+            padding: 15px 40px 15px 15px;
             text-align: left;
-            border-bottom: 2px solid #e2e8f0;
+            border-bottom: 2px solid #e3ecf3;
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
@@ -415,35 +413,35 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         th:hover {
-            background-color: #edf2f7;  /* hover 時稍微深一點的灰色 */
+            background-color: #e8f0f8;
         }
         
         .sort-indicator {
             position: absolute;
-            right: 15px;  /* 確保有足夠空間 */
+            right: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: #718096;
+            color: #5a7a9f;
             font-size: 12px;
             opacity: 0.9;
         }
         
         td {
             padding: 15px;
-            border-bottom: 1px solid #f0f2f5;
+            border-bottom: 1px solid #f0f4f8;
             vertical-align: top;
         }
         
         tr:hover {
-            background-color: #e9ecef !important;  /* hover 時的顏色 */
+            background-color: #f5f8fb !important;
         }
         
         .anr-row {
-            background-color: #f8f9fa !important;  /* 淺灰色背景 */
+            background-color: #fffbf0 !important;  /* 淺黃色背景 */
         }
         
         .tombstone-row {
-            background-color: #fff !important;  /* 白色背景 */
+            background-color: #fff !important;
         }
         
         /* 導航標籤 */
@@ -457,20 +455,20 @@ EXCEL_REPORT_TEMPLATE = '''
             border-radius: 0;
             box-shadow: none;
             position: relative;
-            border-bottom: 2px solid #e2e8f0;
+            border-bottom: 2px solid #e3ecf3;
         }
 
         .nav-tabs::before {
-            display: none;  /* 移除之前的裝飾 */
+            display: none;
         }
 
         .nav-link {
-            color: #64748b;  /* 柔和的灰色 */
+            color: #5a7a9f;
             border: none;
-            padding: 12px 32px;  /* 增加左右 padding，減少上下 */
-            border-radius: 12px 12px 0 0;  /* 更圓潤的上方圓角 */
+            padding: 12px 32px;
+            border-radius: 12px 12px 0 0;
             transition: all 0.3s ease;
-            background: #f8fafc;  /* 很淺的灰藍色背景 */
+            background: #f5f8fb;
             cursor: pointer;
             font-weight: 600;
             font-size: 0.95rem;
@@ -478,7 +476,7 @@ EXCEL_REPORT_TEMPLATE = '''
             overflow: hidden;
             letter-spacing: 0.3px;
             margin-right: 4px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #e3ecf3;
             border-bottom: none;
         }
         
@@ -501,27 +499,26 @@ EXCEL_REPORT_TEMPLATE = '''
             transform: translateX(-50%) scaleX(0);
             width: 30px;
             height: 3px;
-            background: #667eea;
+            background: #2c5aa0;
             transition: transform 0.3s;
         }
         
         .nav-link.active {
-            background: #ffffff;  /* 白色背景 */
-            color: #1e293b;
+            background: #ffffff;
+            color: #1e3a5f;
             box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
             transform: none;
             z-index: 1;
-            border: 1px solid #cbd5e1;  /* 添加淡灰色邊框 */
+            border: 1px solid #d4e3f1;
             border-bottom: 0px solid white;
             margin-bottom: -2px;
         }
 
-        /* 添加 focus 效果 */
         .nav-link:focus {
             outline: none;
-            background: #ffffaa;
+            background: #e8f0f8;
             border-bottom: 0px solid white;
-            box-shadow: 0 0 0 1px rgba(71, 85, 105, 0.1);  /* 淡淡的 focus 效果 */
+            box-shadow: 0 0 0 1px rgba(44, 90, 160, 0.1);
         }
 
         .nav-link.active::after {
@@ -533,8 +530,8 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .nav-link:hover:not(.active) {
-            background: #f1f5f9;  /* hover 時稍微深一點 */
-            color: #475569;
+            background: #e8f0f8;
+            color: #1e3a5f;
         }
         
         .nav-link:hover:not(.active)::after {
@@ -542,12 +539,12 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .filter-section {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: linear-gradient(135deg, #f5f8fb 0%, #e8f0f8 100%);
             padding: 25px;
             border-radius: 12px;
             margin-bottom: 25px;
-            border: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border: 1px solid #e3ecf3;
+            box-shadow: 0 2px 8px rgba(44, 90, 160, 0.06);
         }
         
         .filter-section .row {
@@ -566,7 +563,7 @@ EXCEL_REPORT_TEMPLATE = '''
             display: block;
             margin-bottom: 10px;
             font-weight: 600;
-            color: #444;
+            color: #1e3a5f;
             font-size: 0.95rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -575,14 +572,14 @@ EXCEL_REPORT_TEMPLATE = '''
         .filter-section select,
         .filter-section input {
             background: white;
-            border: 2px solid #e1e4e8;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            border: 2px solid #d4e3f1;
+            box-shadow: 0 2px 6px rgba(44, 90, 160, 0.05);
         }
         
         .filter-section select:focus,
         .filter-section input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+            border-color: #2c5aa0;
+            box-shadow: 0 0 0 4px rgba(44, 90, 160, 0.15);
         }
         
         #loadingOverlay {
@@ -609,7 +606,7 @@ EXCEL_REPORT_TEMPLATE = '''
         
         .loading-spinner p {
             margin-top: 20px;
-            color: #666;
+            color: #5a7a9f;
             font-weight: 500;
         }
         
@@ -624,60 +621,79 @@ EXCEL_REPORT_TEMPLATE = '''
         .pivot-table {
             overflow-x: auto;
             background: white;
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            box-shadow: 0 2px 4px rgba(44, 90, 160, 0.08);
+            overflow: hidden;
+        }
+
+        .pivot-table:hover {
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.12);
         }
         
         .pivot-table table {
-            table-layout: fixed !important;  /* 固定表格佈局 */
+            table-layout: fixed !important;
             width: 100% !important;
             border-collapse: separate;
             border-spacing: 0;
+            overflow: hidden;
+            border-radius: 12px;
         }
         
         .pivot-table th,
         .pivot-table td {
-            all: unset;
-            display: table-cell;
-            border-bottom: 1px solid #f0f2f5;
-            border-right: 1px solid #f0f2f5;
-            padding: 12px 16px;
-            vertical-align: middle;
+            border-bottom: 1px solid #e3ecf3;
+            border-right: 1px solid #e3ecf3;
         }
 
-        /* 樞紐分析表排序指示器 */
         .pivot-sort-indicator {
             position: absolute;
             right: 8px;
             top: 50%;
             transform: translateY(-50%);
-            color: #475569;
+            color: #5a7a9f;
             font-size: 12px;
         }
 
-        /* hover 時排序圖標顏色 */
         .pivot-table th:hover .pivot-sort-indicator {
-            color: #1e293b;  /* hover 時更深 */
+            color: #1e3a5f;
         }
 
         .pivot-table th {
-            background: #cbd5e1;
-            font-weight: 700;
-            color: #1a202c;
-            text-transform: uppercase;
-            font-size: 13px;  /* 稍微小一點 */
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid #94a3b8;
+            background: #f5f8fb;
+            font-weight: 600;
+            color: #1e3a5f;
+            text-transform: none;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+            border-bottom: 2px solid #e3ecf3;
             cursor: pointer;
             user-select: none;
-            padding: 12px 35px 12px 16px !important;  /* 右邊留空間給圖標 */
+            padding: 15px 35px 15px 16px !important;
             position: relative;
             transition: all 0.2s ease;
-            text-align: left;  /* 預設左對齊 */
+            text-align: left;
+            height: 50px;
+            line-height: 20px;
         }
 
-        /* 數字欄位的表頭置中 */
+        .pivot-table thead tr:first-child th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        .pivot-table thead tr:first-child th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        .pivot-table tbody tr:last-child td:first-child {
+            border-bottom-left-radius: 12px;
+        }
+
+        .pivot-table tbody tr:last-child td:last-child {
+            border-bottom-right-radius: 12px;
+        }        
+
+        /* 數字欄位的表頭置中 - 更明確的選擇器 */
         .pivot-table th:nth-child(3),
         .pivot-table th:nth-child(4),
         .pivot-table th:nth-child(5) {
@@ -685,14 +701,15 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .pivot-table th:hover {
-            background: #94a3b8;  /* hover 時更深的灰藍色 */
-            color: #0f172a;  /* hover 時文字顏色更深 */
+            background: #e8f0f8;
+            color: #1e3a5f;
         }
 
         .pivot-table td {
             height: 40px !important;
             line-height: 40px !important;
             vertical-align: middle !important;
+            padding: 0 16px !important;
         }
 
         /* 問題集欄位（有 rowspan 的） */
@@ -701,38 +718,89 @@ EXCEL_REPORT_TEMPLATE = '''
             font-weight: 600 !important;
             text-align: left !important;
             vertical-align: middle !important;
-            border-right: 2px solid #e2e8f0 !important;
+            border-right: 2px solid #e3ecf3 !important;
+            padding-left: 16px !important;
         }
 
         /* 程序名稱欄位 - 統一對齊和縮排 */
         .pivot-table tbody tr td:nth-child(2):not([colspan]),
         .pivot-table tbody tr td:first-child:not([rowspan]) {
             text-align: left !important;
-            padding-left: 20px !important;  /* 統一縮排 */
+            padding-left: 20px !important;
         }
 
-        /* 小計行特殊處理 */
-        .pivot-table .subtotal-row td:first-child:not([rowspan]) {
-            padding-left: 20px !important;  /* 與程序名稱對齊 */
-            font-weight: 700 !important;
-        }
-
-        /* 確保數字欄位正確置中對齊 */
+        /* 最重要的部分：確保所有數字欄位都置中 */
         .pivot-table tbody tr td:nth-child(3),
         .pivot-table tbody tr td:nth-child(4),
-        .pivot-table tbody tr td:nth-child(5),
-        .pivot-table tbody tr td:nth-child(2):last-child,  /* 處理小計行 */
-        .pivot-table tbody tr td:nth-child(3):last-child,  /* 處理小計行 */
-        .pivot-table tbody tr td:nth-child(4):last-child {  /* 處理小計行 */
+        .pivot-table tbody tr td:nth-child(5) {
             text-align: center !important;
-            padding-left: 12px !important;
-            padding-right: 12px !important;
+            padding: 0 12px !important;
+            font-family: 'SF Mono', Monaco, Consolas, monospace !important;
+            font-variant-numeric: tabular-nums !important;
+        }
+
+        /* 小計行樣式 */
+        .pivot-table .subtotal-row td {
+            background: #e8f0f8 !important;
+            color: #1e3a5f !important;
+            font-weight: 600 !important;
+            height: 45px !important;
+            line-height: 45px !important;
+        }
+
+        /* 小計行的數字也要置中 */
+        .pivot-table .subtotal-row td:nth-child(2),
+        .pivot-table .subtotal-row td:nth-child(3),
+        .pivot-table .subtotal-row td:nth-child(4) {
+            text-align: center !important;
+            padding: 0 12px !important;
+        }
+
+        /* 總計行樣式 */
+        .pivot-table .total-row td {
+            background: #2c5aa0 !important;
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+            height: 50px !important;
+            line-height: 50px !important;
+        }
+
+        /* 總計行的所有儲存格都要置中（除了第一個） */
+        .pivot-table .total-row td:not(:first-child) {
+            text-align: center !important;
+            padding: 0 12px !important;
+        }
+
+        /* 總計行的第一個儲存格（合併的） */
+        .pivot-table .total-row td[colspan] {
+            text-align: center !important;
+            padding: 0 16px !important;
+        }
+
+        /* 總計行的圓角 */
+        .pivot-table .total-row td:first-child {
+            border-bottom-left-radius: 12px;
+        }
+
+        .pivot-table .total-row td:last-child {
+            border-bottom-right-radius: 12px;
+        }
+
+        /* 小計行 hover 效果 */
+        .pivot-table .subtotal-row:hover td {
+            background: #d4e3f1 !important;
+        }
+
+        /* 總計行 hover 效果 */
+        .pivot-table .total-row:hover td {
+            background: #1e3a5f !important;
         }
 
         /* 確保所有數據行樣式一致 */
         .pivot-table tr:nth-child(even) td {
-            background-color: #f8f9fa;
-        }        
+            background-color: #fafbfc;
+        }
 
         .pivot-table td:last-child {
             border-right: none;
@@ -743,105 +811,7 @@ EXCEL_REPORT_TEMPLATE = '''
         }
 
         .pivot-table tr:hover td {
-            background-color: #e9ecef !important;
-        }
-        
-        /* 樞紐分析表數字欄位使用等寬字體 */
-        .pivot-table td:nth-child(3),
-        .pivot-table td:nth-child(4),
-        .pivot-table td:nth-child(5),
-        .pivot-table .subtotal-row td:nth-child(2),
-        .pivot-table .subtotal-row td:nth-child(3),
-        .pivot-table .subtotal-row td:nth-child(4),
-        .pivot-table .total-row td {
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
-            font-size: 14px !important;
-            text-align: center !important;
-            padding-left: 8px !important;
-            padding-right: 8px !important;
-            letter-spacing: 0 !important;
-        }
-
-        /* 小計行的數字也要置中 */
-        .pivot-table .subtotal-row td:nth-child(2),
-        .pivot-table .subtotal-row td:nth-child(3),
-        .pivot-table .subtotal-row td:nth-child(4) {
-            text-align: center !important;
-        }
-
-        .pivot-table .total-row td {
-            background: #334155 !important;
-            color: white !important;
-            font-weight: 700 !important;
-            font-size: 14px !important;
-            text-align: center !important;
-            text-align: center !important;
-        }
-
-        /* 總計行 hover 效果 */
-        .pivot-table .total-row:hover td {
-            background: #0f172a !important;  /* 幾乎黑色 */
-            color: white !important;         
-        }
-
-        /* 確保合併儲存格的第一行也使用相同樣式 */
-        .pivot-table tr td[rowspan] {
-            font-size: 14px !important;    /* 統一字體大小 */
-            font-weight: 600 !important;   /* 統一字體粗細 */
-            color: #374151 !important;     /* 統一文字顏色 */
-            vertical-align: middle;        /* 垂直置中 */
-        }
-
-        /* 其他數據行的樣式 */
-        .pivot-table tr td:not(:first-child) {
-            font-size: 14px !important;    /* 確保所有數據格字體大小一致 */
-            font-weight: 400 !important;   /* 正常字體粗細 */
-            text-align: center !important; /* 置中對齊 */
-        }
-
-        /* 偶數行樣式 */
-        .pivot-table tbody tr:nth-child(even) td {
-            background-color: #f8f9fa;
-        }
-
-        /* hover 效果 */
-        .pivot-table tbody tr:hover td {
-            background-color: #e9ecef !important;
-        }
-
-        .pivot-table .subtotal-row td {
-            text-align: center !important;
-            padding: 12px 8px !important;
-        }
-
-        /* 確保總計行的第一個儲存格也有正確的樣式 */
-        .pivot-table .total-row td:first-child {
-            background: #00477d !important;
-            color: white !important;
-        }
-
-        .pivot-table .total-row td:first-child,
-        .pivot-table .subtotal-row td:first-child {
-            text-align: left !important;
-            padding-left: 16px !important;
-        }
-
-        /* 確保所有數字使用等寬字體 */
-        .pivot-table td:nth-child(2),
-        .pivot-table td:nth-child(3),
-        .pivot-table td:nth-child(4),
-        .pivot-table .subtotal-row td:nth-child(2),
-        .pivot-table .subtotal-row td:nth-child(3),
-        .pivot-table .subtotal-row td:nth-child(4) {
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
-            font-variant-numeric: tabular-nums !important;
-            text-align: center !important;            
-        }
-
-        /* 數字欄位樣式 */
-        .pivot-table td[style*="text-align: center"] {
-            font-family: 'SF Mono', Monaco, Consolas, monospace;
-            font-weight: 500;
+            background-color: #f5f8fb !important;
         }
 
         /* Tab 內容 */
@@ -880,17 +850,17 @@ EXCEL_REPORT_TEMPLATE = '''
         .stats-table td {
             padding: 12px 15px;
             text-align: left;
-            border-bottom: 1px solid #f0f2f5;
+            border-bottom: 1px solid #f0f4f8;
         }
         
         .stats-table th {
-            background: #f8f9fa;
+            background: #f5f8fb;
             font-weight: 600;
-            color: #555;
+            color: #1e3a5f;
         }
         
         .stats-table tr:hover {
-            background: #f8f9fa;
+            background: #f5f8fb;
         }
         
         .stats-table .text-right {
@@ -903,14 +873,14 @@ EXCEL_REPORT_TEMPLATE = '''
         
         /* 問題集標籤 */
         .problem-set-badge {
-            background: linear-gradient(135deg, #42a5f5 0%, #478ed1 100%);
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e88e5 100%);
             color: white;
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
             margin-left: 8px;
-            box-shadow: 0 2px 4px rgba(66, 165, 245, 0.3);
+            box-shadow: 0 2px 4px rgba(44, 90, 160, 0.3);
         }
         
         /* 美化滾動條 */
@@ -920,17 +890,17 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: #f0f4f8;
             border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb {
-            background: #999;
+            background: #9db4d0;
             border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
-            background: #666;
+            background: #5a7a9f;
         }
         
         /* 響應式設計 */
@@ -960,6 +930,7 @@ EXCEL_REPORT_TEMPLATE = '''
             }
         }
     </style>
+
 </head>
 <body>
     <div id="loadingOverlay">
@@ -1211,7 +1182,19 @@ EXCEL_REPORT_TEMPLATE = '''
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Raw data:', rawData);
             console.log('Sample row:', rawData[0]);
+
+            // 預處理資料：統一問題集欄位名稱
+            rawData = rawData.map(row => {
+                // 如果有 'Problem set' 欄位，複製到 '問題 set'
+                if (row['Problem set'] && !row['問題 set']) {
+                    row['問題 set'] = row['Problem set'];
+                }
+                return row;
+            });
             
+            // 重新初始化 filteredData
+            filteredData = [...rawData];
+                                    
             initializeStats();
             initializeCharts();
             initializeDataTable();
@@ -1333,7 +1316,7 @@ EXCEL_REPORT_TEMPLATE = '''
             // 計算最常見的問題集
             const problemSetCount = {};
             rawData.forEach(row => {
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 problemSetCount[ps] = (problemSetCount[ps] || 0) + 1;
             });
             const topProblemSet = Object.entries(problemSetCount)
@@ -1461,7 +1444,7 @@ EXCEL_REPORT_TEMPLATE = '''
         function createTopProblemSetsTable() {
             const problemSetCount = {};
             rawData.forEach(row => {
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 problemSetCount[ps] = (problemSetCount[ps] || 0) + 1;
             });
             
@@ -1567,7 +1550,7 @@ EXCEL_REPORT_TEMPLATE = '''
                 labels: Object.keys(typeCounts),
                 type: 'pie',
                 marker: {
-                    colors: ['#ffc107', '#dc3545']
+                    colors: ['#ffb84d', '#ff6b6b']  // 改為北歐風格的橙色和紅色
                 },
                 textinfo: 'label+percent',
                 textposition: 'outside',
@@ -1610,7 +1593,7 @@ EXCEL_REPORT_TEMPLATE = '''
                     name: 'ANR',
                     type: 'scatter',
                     mode: 'lines+markers',
-                    line: { color: '#ffc107', width: 3 },
+                    line: { color: '#ffb84d', width: 3 },  // ANR 用橙色
                     marker: { size: 8 }
                 },
                 {
@@ -1619,7 +1602,7 @@ EXCEL_REPORT_TEMPLATE = '''
                     name: 'Tombstone',
                     type: 'scatter',
                     mode: 'lines+markers',
-                    line: { color: '#dc3545', width: 3 },
+                    line: { color: '#ff6b6b', width: 3 },  // Tombstone 用紅色
                     marker: { size: 8 }
                 }
             ];
@@ -1709,7 +1692,7 @@ EXCEL_REPORT_TEMPLATE = '''
             const problemSetData = {};
             
             rawData.forEach(row => {
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 if (!problemSetData[ps]) {
                     problemSetData[ps] = { ANR: 0, Tombstone: 0 };
                 }
@@ -1762,7 +1745,7 @@ EXCEL_REPORT_TEMPLATE = '''
         function createProblemSetPieChart() {
             const problemSetCount = {};
             rawData.forEach(row => {
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 problemSetCount[ps] = (problemSetCount[ps] || 0) + 1;
             });
             
@@ -1877,7 +1860,7 @@ EXCEL_REPORT_TEMPLATE = '''
             let html = '';
             pageData.forEach(row => {
                 const rowClass = row.Type === 'ANR' ? 'anr-row' : 'tombstone-row';
-                const problemSet = row['問題 set'] || row['問題set'] || '-';
+                const problemSet = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '-';
                 html += `<tr class="${rowClass}">
                     <td class="text-center">${row.SN}</td>
                     <td>${row.Date}</td>
@@ -1953,8 +1936,8 @@ EXCEL_REPORT_TEMPLATE = '''
                 
                 // 處理問題 set 欄位名稱
                 if (column === '問題 set') {
-                    aVal = a['問題 set'] || a['問題set'] || '';
-                    bVal = b['問題 set'] || b['問題set'] || '';
+                    aVal = a['問題 set'] || a['問題set'] || a['Problem set'] || a['problem set'] || '';
+                    bVal = b['問題 set'] || b['問題set'] || b['Problem set'] || b['problem set'] || '';
                 }
                 
                 // 處理 AI result
@@ -2224,7 +2207,7 @@ EXCEL_REPORT_TEMPLATE = '''
             let totals = { ANR: 0, Tombstone: 0, Total: 0 };
             
             data.forEach(row => {
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 if (!pivotData[ps]) {
                     pivotData[ps] = {};
                 }
@@ -2399,7 +2382,7 @@ EXCEL_REPORT_TEMPLATE = '''
                 if (!pivotData[row.Process]) {
                     pivotData[row.Process] = {};
                 }
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 if (!pivotData[row.Process][ps]) {
                     pivotData[row.Process][ps] = { ANR: 0, Tombstone: 0, Total: 0 };
                 }
@@ -2476,7 +2459,7 @@ EXCEL_REPORT_TEMPLATE = '''
                 if (!pivotData[row.Type]) {
                     pivotData[row.Type] = {};
                 }
-                const ps = row['問題 set'] || row['問題set'] || '未分類';
+                const ps = row['問題 set'] || row['問題set'] || row['Problem set'] || row['problem set'] || '未分類';
                 if (!pivotData[row.Type][ps]) {
                     pivotData[row.Type][ps] = 0;
                 }
@@ -2692,12 +2675,42 @@ EXCEL_REPORT_TEMPLATE = '''
         
         // 匯出 HTML
         function exportToHTML() {
-            const htmlContent = document.documentElement.outerHTML;
+            // 創建一個新的 HTML 文檔
+            const newDoc = document.implementation.createHTMLDocument('Excel 分析報告');
+            
+            // 複製整個 HTML 內容
+            newDoc.documentElement.innerHTML = document.documentElement.innerHTML;
+            
+            // 確保所有的資料都被保存
+            const scriptTag = newDoc.createElement('script');
+            scriptTag.textContent = `
+                // 保存原始資料
+                let rawData = ${JSON.stringify(rawData)};
+                let filteredData = [...rawData];
+                let currentPage = 1;
+                const itemsPerPage = 10;
+                let sortColumn = 'SN';
+                let sortOrder = 'asc';
+                
+                // 保存 Excel Base64 資料
+                const excelDataBase64 = "${excelDataBase64}";
+            `;
+            newDoc.body.appendChild(scriptTag);
+            
+            // 生成 HTML 字符串
+            const htmlContent = '<!DOCTYPE html>\\n' + newDoc.documentElement.outerHTML;
+            
+            // 創建 Blob 並下載
             const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = '{{ filename }}_report_' + new Date().toISOString().slice(0, 10) + '.html';
+            
+            // 使用正確的檔案名稱
+            const filename = '{{ filename }}';
+            const cleanFilename = filename.replace('.xlsx', '').replace('.xls', '');
+            a.download = cleanFilename + '_report_' + new Date().toISOString().slice(0, 10) + '.html';
+            
             a.click();
             window.URL.revokeObjectURL(url);
         }
@@ -2822,8 +2835,8 @@ def show_excel_report(report_id):
         
         # 準備模板資料
         template_data = {
-            'filename': original_filename,
-            'filepath': original_path,
+            'filename': os.path.basename(original_filename).replace('.xlsx', '').replace('.xls', ''),  # 移除副檔名
+            'filepath': os.path.dirname(original_path),  # 只取目錄路徑
             'load_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'data': data,
             'excel_data_base64': excel_data_base64
