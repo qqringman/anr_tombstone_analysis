@@ -2240,6 +2240,68 @@ HTML_TEMPLATE = r'''
         transform: translateY(-2px);
     }
 
+    /* 歷史分析文件中的查看已有分析結果按鈕樣式 */
+    #historySection #viewIndexBtn {
+        position: relative;
+        padding: 12px 24px;
+        background: #6f42c1 !important;
+        color: white;
+        border: 2px solid #fff !important;
+        border-radius: 8px;
+        box-shadow: 0 0 0 3px #6f42c1 !important;
+        transition: all 0.3s;
+    }
+
+    #historySection #viewIndexBtn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(111, 66, 193, 0.4), 0 0 0 3px #6f42c1 !important;
+    }
+
+    /* 確保主控制面板的合併 Excel 按鈕樣式正確 */
+    #mergeExcelMainBtn {
+        background: #17a2b8 !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 24px !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        transition: all 0.2s !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        position: static !important;
+        margin: 0 !important;
+    }
+
+    #mergeExcelMainBtn:hover {
+        background: #138496 !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4) !important;
+    }
+
+    #viewExcelReportBtn {
+        background: #ff6b6b !important;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: none;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #viewExcelReportBtn:hover {
+        background: #ff5252 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+    }
+
     </style>      
 </head>
 <body>
@@ -2303,7 +2365,9 @@ HTML_TEMPLATE = r'''
             <div class="button-group">
                 <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
                 <button onclick="openLoadExcelDialog()" id="loadExcelBtn" class="load-excel-btn">📊 載入 Excel</button>
-                <button onclick="viewExistingAnalysis()" id="viewAnalysisBtn" class="view-analysis-btn" style="display: none;">📊 查看已有分析結果</button>
+                <button onclick="openMergeDialog()" id="mergeExcelMainBtn" class="merge-excel-btn" style="display: inline-flex; position: static; background: #17a2b8;">
+                    💹 合併 Excel
+                </button>                
             </div>    
             <div class="loading" id="loading">
                 正在分析中
@@ -2311,11 +2375,12 @@ HTML_TEMPLATE = r'''
             
             <div id="message"></div>
         </div>
+        <!-- 修改歷史分析文件區塊 -->
         <div id="historySection" style="display: none; margin-top: 20px;">
-            <h2 style="margin-bottom: 10px; color: #667eea;">📚 歷史分析文件</h2>
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid #667eea;">
-                <div class="button-group" style="margin-top: 10px;">
-                    <button onclick="viewHistoryIndex()" id="viewIndexBtn" style="display: none; background: #6f42c1;">
+            <h2 style="margin-bottom: 10px; color: #333;">📚 歷史分析文件</h2>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                <div class="button-group" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">
+                    <button onclick="viewHistoryIndex()" id="viewIndexBtn" style="display: none; background: #6f42c1; border: 2px dashed #fff; box-shadow: 0 0 0 2px #6f42c1;">
                         📊 查看已有分析結果
                     </button>
                     <button onclick="downloadExistingExcel()" id="downloadExcelBtn" style="display: none; background: #28a745;">
@@ -2324,12 +2389,15 @@ HTML_TEMPLATE = r'''
                     <button onclick="viewExistingHTML()" id="viewHTMLBtn" style="display: none; background: #17a2b8;">
                         📈 已統計分析
                     </button>
+                    <button onclick="viewExcelReport()" id="viewExcelReportBtn" style="display: none; background: #ff6b6b;">
+                        📊 Excel 報表
+                    </button>
                     <button onclick="downloadAnalysisZip()" id="downloadZipBtn" style="display: none; background: #fd7e14;">
                         📦 打包分析結果
                     </button>
                 </div>
             </div>
-        </div>        
+        </div>    
         <div id="results">
             <div class="section-container" id="stats-section-container">
                 <div class="logs-table" id="stats-section">
@@ -3062,46 +3130,14 @@ HTML_TEMPLATE = r'''
             
         });
 
-        // 檢查是否有已存在的分析結果
-        async function checkExistingAnalysis(path) {
-            if (!path) return;
-            
-            // 顯示檢查中的狀態
-            const viewAnalysisBtn = document.getElementById('viewAnalysisBtn');
-            const exportAllExcelBtn = document.getElementById('exportAllExcelBtn');
-            const allExcelPathInfo = document.getElementById('allExcelPathInfo');
-            const allExcelPath = document.getElementById('allExcelPath');
-            
-            try {
-                const response = await fetch('/check-existing-analysis', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ path: path })
-                });
-                
-                const data = await response.json();
-                
-                // 檢查是否有分析結果
-                if (data.exists && data.analysis_path) {
-                    window.existingAnalysisPath = data.analysis_path;
-                    if (viewAnalysisBtn) {
-                        viewAnalysisBtn.style.display = 'inline-flex';
-                    }
-                } else {
-                    if (viewAnalysisBtn) {
-                        viewAnalysisBtn.style.display = 'none';
-                    }
-                    window.existingAnalysisPath = null;
-                }
-                
-            } catch (error) {
-                console.error('檢查已有分析結果失敗:', error);
-                // 錯誤時隱藏按鈕
-                if (viewAnalysisBtn) viewAnalysisBtn.style.display = 'none';
-                if (exportAllExcelBtn) exportAllExcelBtn.style.display = 'none';
-                if (allExcelPathInfo) allExcelPathInfo.style.display = 'none';
+        // 新增查看 Excel 報表的函數
+        function viewExcelReport() {
+            if (historyAnalysisInfo && historyAnalysisInfo.excel_report_path) {
+                console.log('開啟 Excel 報表:', historyAnalysisInfo.excel_report_path);
+                // 使用與已統計分析相同的路由
+                window.open('/view-analysis-html?path=' + encodeURIComponent(historyAnalysisInfo.excel_report_path), '_blank');
+            } else {
+                showMessage('找不到 Excel 報表', 'error');
             }
         }
 
@@ -3445,7 +3481,6 @@ HTML_TEMPLATE = r'''
             window.currentAnalysisExported = false;
             window.hasCurrentAnalysis = false;
 
-            document.getElementById('analysisResultBtn').classList.remove('show');
             analysisIndexPath = null;
             
             // Disable analyze button
@@ -3545,6 +3580,14 @@ HTML_TEMPLATE = r'''
                         console.error('自動產生 HTML 失敗:', error);
                     }
                     
+                    // 自動產生並儲存 Excel 報表到分析資料夾
+                    try {
+                        await autoExportExcelReport(data.vp_analyze_output_path);
+                        console.log('已自動產生 Excel 報表');
+                    } catch (error) {
+                        console.error('自動產生 Excel 報表失敗:', error);
+                    }
+                                        
                     // 顯示分析結果打包按鈕
                     const downloadCurrentZipBtn = document.getElementById('downloadCurrentZipBtn');
                     if (downloadCurrentZipBtn) {
@@ -5554,9 +5597,6 @@ HTML_TEMPLATE = r'''
         async function checkExistingAnalysis(path) {
             if (!path) return;
             
-            // 顯示檢查中的狀態
-            const viewAnalysisBtn = document.getElementById('viewAnalysisBtn');
-            
             try {
                 const response = await fetch('/check-existing-analysis', {
                     method: 'POST',
@@ -5568,26 +5608,16 @@ HTML_TEMPLATE = r'''
                 
                 const data = await response.json();
                 
-                // 保持原本的邏輯 - 檢查是否有分析結果
-                if (data.exists && data.analysis_path) {
-                    window.existingAnalysisPath = data.analysis_path;
-                    if (viewAnalysisBtn) {
-                        viewAnalysisBtn.style.display = 'inline-flex';
-                    }
-                } else {
-                    if (viewAnalysisBtn) {
-                        viewAnalysisBtn.style.display = 'none';
-                    }
-                    window.existingAnalysisPath = null;
-                }
-                
-                // 新增：處理歷史文件區塊
+                // 保存歷史分析資訊
                 historyAnalysisInfo = data;
                 const historySection = document.getElementById('historySection');
                 const viewIndexBtn = document.getElementById('viewIndexBtn');
                 const downloadExcelBtn = document.getElementById('downloadExcelBtn');
                 const viewHTMLBtn = document.getElementById('viewHTMLBtn');
+                const viewExcelReportBtn = document.getElementById('viewExcelReportBtn');
                 const downloadZipBtn = document.getElementById('downloadZipBtn');
+                
+                console.log('檢查結果:', data); // 調試用
                 
                 if (data.exists && data.has_folder) {
                     historySection.style.display = 'block';
@@ -5596,6 +5626,15 @@ HTML_TEMPLATE = r'''
                     viewIndexBtn.style.display = data.has_index ? 'inline-flex' : 'none';
                     downloadExcelBtn.style.display = data.has_excel ? 'inline-flex' : 'none';
                     viewHTMLBtn.style.display = data.has_html ? 'inline-flex' : 'none';
+                    
+                    // 特別檢查 Excel 報表
+                    if (data.has_excel_report) {
+                        viewExcelReportBtn.style.display = 'inline-flex';
+                        console.log('找到 Excel 報表:', data.excel_report_path);
+                    } else {
+                        viewExcelReportBtn.style.display = 'none';
+                    }
+                    
                     downloadZipBtn.style.display = 'inline-flex';
                 } else {
                     historySection.style.display = 'none';
@@ -5603,9 +5642,7 @@ HTML_TEMPLATE = r'''
                 
             } catch (error) {
                 console.error('檢查已有分析結果失敗:', error);
-                // 錯誤時隱藏按鈕
-                if (viewAnalysisBtn) viewAnalysisBtn.style.display = 'none';
-                window.existingAnalysisPath = null;
+                document.getElementById('historySection').style.display = 'none';
             }
         }
 
@@ -5776,6 +5813,38 @@ HTML_TEMPLATE = r'''
                 
             } catch (error) {
                 console.error('自動匯出 Excel 錯誤:', error);
+                throw error;
+            }
+        }
+
+        // 自動匯出 Excel 報表到分析資料夾
+        async function autoExportExcelReport(outputPath) {
+            if (!currentAnalysisId || !outputPath) {
+                throw new Error('缺少必要參數');
+            }
+            
+            try {
+                const response = await fetch('/export-excel-report-to-folder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: document.getElementById('pathInput').value,
+                        analysis_id: currentAnalysisId,
+                        output_folder: outputPath
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('匯出 Excel 報表失敗');
+                }
+                
+                const result = await response.json();
+                console.log('Excel 報表已儲存到:', result.saved_path);
+                
+            } catch (error) {
+                console.error('自動匯出 Excel 報表錯誤:', error);
                 throw error;
             }
         }
@@ -6934,6 +7003,7 @@ def check_existing_analysis():
             'has_index': False,
             'has_excel': False,
             'has_html': False,
+            'has_excel_report': False,
             'has_folder': False
         }
         
@@ -6946,18 +7016,32 @@ def check_existing_analysis():
             index_path = os.path.join(analysis_path, 'index.html')
             excel_path = os.path.join(analysis_path, 'all_anr_tombstone_result.xlsx')
             html_path = os.path.join(analysis_path, 'all_anr_tombstone_result.html')
+            excel_report_path = os.path.join(analysis_path, 'all_anr_tombstone_excel_result.html')
+            
+            # 詳細記錄檢查結果
+            print(f"檢查分析資料夾: {analysis_path}")
+            print(f"  index.html 存在: {os.path.exists(index_path)}")
+            print(f"  Excel 存在: {os.path.exists(excel_path)}")
+            print(f"  HTML 存在: {os.path.exists(html_path)}")
+            print(f"  Excel 報表存在: {os.path.exists(excel_report_path)}")
             
             result['has_index'] = os.path.exists(index_path)
             result['has_excel'] = os.path.exists(excel_path)
             result['has_html'] = os.path.exists(html_path)
+            result['has_excel_report'] = os.path.exists(excel_report_path)
             
             result['excel_path'] = excel_path if result['has_excel'] else None
             result['html_path'] = html_path if result['has_html'] else None
+            result['excel_report_path'] = excel_report_path if result['has_excel_report'] else None
+            
+            print(f"回傳結果: {result}")
         
         return jsonify(result)
         
     except Exception as e:
         print(f"Error checking existing analysis: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'exists': False, 'error': str(e)})
 
 @main_page_bp.route('/export-all-excel-with-current', methods=['POST'])
@@ -8174,3 +8258,154 @@ def view_analysis_html():
         
     except Exception as e:
         return f"Error reading file: {str(e)}", 500
+
+@main_page_bp.route('/export-excel-report-to-folder', methods=['POST'])
+def export_excel_report_to_folder():
+    """將 Excel 報表儲存到指定資料夾"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        analysis_id = data.get('analysis_id')
+        output_folder = data.get('output_folder')
+        path = data.get('path')
+        
+        if not analysis_id or not output_folder:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # 從快取獲取分析資料
+        analysis_data = analysis_cache.get(analysis_id)
+        if not analysis_data:
+            return jsonify({'error': 'Analysis data not found'}), 404
+        
+        # 準備資料
+        logs = analysis_data.get('logs', [])
+        
+        # 轉換為 Excel 報表格式的資料
+        excel_data = []
+        sn = 1
+        for log in logs:
+            excel_data.append({
+                'SN': sn,
+                'Date': log.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+                'Problem set': log.get('problem_set', '-'),  # 改為英文，與模板一致
+                'Type': log.get('type', ''),
+                'Process': log.get('process', ''),
+                'AI result': '-',
+                'Filename': log.get('filename', ''),
+                'Folder Path': log.get('folder_path', '')
+            })
+            sn += 1
+        
+        # 建立 DataFrame
+        df = pd.DataFrame(excel_data)
+        
+        # 如果沒有資料，補充預設值
+        if df.empty:
+            excel_data = [{
+                'SN': 1,
+                'Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'Problem set': '-',
+                'Type': '-',
+                'Process': '-',
+                'AI result': '-',
+                'Filename': '-',
+                'Folder Path': '-'
+            }]
+            df = pd.DataFrame(excel_data)
+        
+        # 生成唯一的報表 ID
+        report_id = str(uuid.uuid4())[:8]
+        
+        # 建立臨時 Excel 檔案
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            excel_path = tmp_file.name
+            
+            # 將 DataFrame 寫入 Excel
+            with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='ANR Tombstone Analysis', index=False)
+                
+                # 美化 Excel
+                from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+                
+                workbook = writer.book
+                worksheet = writer.sheets['ANR Tombstone Analysis']
+                
+                # 設定欄寬
+                column_widths = {
+                    'A': 8,   # SN
+                    'B': 20,  # Date
+                    'C': 20,  # Problem set
+                    'D': 12,  # Type
+                    'E': 35,  # Process
+                    'F': 30,  # AI result
+                    'G': 40,  # Filename
+                    'H': 60   # Folder Path
+                }
+                
+                for col, width in column_widths.items():
+                    worksheet.column_dimensions[col].width = width
+                
+                # 凍結標題列
+                worksheet.freeze_panes = 'A2'
+        
+        # 將檔案資訊存入快取
+        file_info = {
+            'excel_path': excel_path,
+            'is_temp': True,
+            'original_filename': os.path.basename(output_folder),
+            'original_path': path
+        }
+        
+        analysis_cache.set(f"excel_report_{report_id}", file_info)
+        
+        # 從 routes/excel_report.py 複製模板內容
+        from routes.excel_report import EXCEL_REPORT_TEMPLATE
+        
+        # 準備模板資料 - 重要：傳入正確格式的資料
+        template_data = {
+            'filename': os.path.basename(output_folder),
+            'filepath': path,
+            'load_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'data': json.dumps(excel_data),  # 傳入格式化後的 excel_data，而不是原始的 logs
+            'excel_data_base64': ''  # Excel 報表不需要內嵌檔案
+        }
+        
+        # 生成 HTML 內容
+        html_content = EXCEL_REPORT_TEMPLATE
+        
+        # 替換模板變數
+        for key, value in template_data.items():
+            if key == 'data':
+                # 替換 {{ data | tojson }}
+                html_content = html_content.replace('{{ data | tojson }}', value)
+            else:
+                # 替換其他變數
+                html_content = html_content.replace(f'{{{{ {key} }}}}', str(value))
+        
+        # 儲存到檔案
+        report_save_path = os.path.join(output_folder, 'all_anr_tombstone_excel_result.html')
+        with open(report_save_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"已儲存 Excel 報表到: {report_save_path}")
+        
+        # 清理臨時檔案
+        try:
+            os.unlink(excel_path)
+        except:
+            pass
+        
+        return jsonify({
+            'success': True,
+            'saved_path': report_save_path
+        })
+        
+    except Exception as e:
+        print(f"Error in export_excel_report_to_folder: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
