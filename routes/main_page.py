@@ -70,11 +70,12 @@ HTML_TEMPLATE = r'''
     .header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 30px;
+        padding: 30px 30px 50px 30px;  /* 增加底部 padding */
         border-radius: 12px;
         margin-bottom: 30px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         position: relative;
+        min-height: 170px;  /* 設定最小高度 */
     }
 
     .header h1 {
@@ -105,9 +106,9 @@ HTML_TEMPLATE = r'''
 
     .export-excel-report-btn {
         position: absolute;
-        top: 30px;
-        right: 420px;  /* 在合併 Excel 按鈕左邊 */
-        background: #ff6b6b;  /* 紅色背景，區別於其他按鈕 */
+        top: 90px;  /* 改到第三排 */
+        right: 30px;
+        background: #ff6b6b;
         color: white;
         border: 2px solid rgba(255, 255, 255, 0.5);
         padding: 10px 20px;
@@ -136,8 +137,8 @@ HTML_TEMPLATE = r'''
 
     .export-html-btn {
         position: absolute;
-        top: 30px;
-        right: 30px;
+        top: 90px;  /* 改到第三排 */
+        right: 460px;  /* 在匯出 Excel 左邊 */
         background: rgba(255, 255, 255, 0.2);
         color: white;
         border: 2px solid rgba(255, 255, 255, 0.5);
@@ -167,8 +168,8 @@ HTML_TEMPLATE = r'''
 
     .export-excel-btn {
         position: absolute;
-        top: 30px;
-        right: 160px;
+        top: 90px;  /* 改到第三排 */
+        right: 330px;  /* 在合併 Excel 左邊 */
         background: #28a745;
         color: white;
         border: 2px solid rgba(255, 255, 255, 0.5);
@@ -269,9 +270,9 @@ HTML_TEMPLATE = r'''
 
     .merge-excel-btn {
         position: absolute;
-        top: 30px;
-        right: 290px;  /* 在匯出 Excel 按鈕左邊 */
-        background: #17a2b8;  /* 藍綠色背景 */
+        top: 90px;  /* 改到第三排 */
+        right: 200px;  /* 在匯出 Excel 報表左邊 */
+        background: #17a2b8;
         color: white;
         border: 2px solid rgba(255, 255, 255, 0.5);
         padding: 10px 20px;
@@ -2219,8 +2220,8 @@ HTML_TEMPLATE = r'''
 
     .download-zip-btn {
         position: absolute;
-        top: 70px;  /* 在第二排 */
-        right: 160px;
+        top: 130px;  /* 改到第四排 */
+        right: 30px;
         background: #fd7e14;
         color: white;
         border: 2px solid rgba(255, 255, 255, 0.5);
@@ -3528,6 +3529,22 @@ HTML_TEMPLATE = r'''
                         mergeExcelBtn.style.display = 'block';
                     }
 
+                    // 自動產生並儲存 Excel 到分析資料夾
+                    try {
+                        await autoExportExcel(data.vp_analyze_output_path);
+                        console.log('已自動產生 Excel 檔案');
+                    } catch (error) {
+                        console.error('自動產生 Excel 失敗:', error);
+                    }
+                    
+                    // 自動產生並儲存 HTML 到分析資料夾
+                    try {
+                        await autoExportHTML(data.vp_analyze_output_path);
+                        console.log('已自動產生 HTML 檔案');
+                    } catch (error) {
+                        console.error('自動產生 HTML 失敗:', error);
+                    }
+                    
                     // 顯示分析結果打包按鈕
                     const downloadCurrentZipBtn = document.getElementById('downloadCurrentZipBtn');
                     if (downloadCurrentZipBtn) {
@@ -5595,7 +5612,7 @@ HTML_TEMPLATE = r'''
         // 查看已存在的 HTML 統計
         function viewExistingHTML() {
             if (historyAnalysisInfo && historyAnalysisInfo.html_path) {
-                window.open('/view-file?path=' + encodeURIComponent(historyAnalysisInfo.html_path), '_blank');
+                window.open('/view-analysis-report?path=' + encodeURIComponent(historyAnalysisInfo.html_path), '_blank');
             }
         }
 
@@ -5691,6 +5708,75 @@ HTML_TEMPLATE = r'''
         function viewHistoryIndex() {
             if (historyAnalysisInfo && historyAnalysisInfo.analysis_path) {
                 window.open('/view-analysis-report?path=' + encodeURIComponent(historyAnalysisInfo.analysis_path), '_blank');
+            }
+        }
+
+        // 自動匯出 HTML 到分析資料夾
+        async function autoExportHTML(outputPath) {
+            if (!currentAnalysisId || !outputPath) {
+                throw new Error('缺少必要參數');
+            }
+            
+            try {
+                // 獲取當前服務器資訊
+                const serverResponse = await fetch('/server-info');
+                const serverInfo = await serverResponse.json();
+                
+                // 呼叫匯出 API，並指定儲存路徑
+                const response = await fetch(`/export-html-to-folder/${currentAnalysisId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        output_path: outputPath,
+                        base_url: serverInfo.base_url
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('匯出 HTML 失敗');
+                }
+                
+                const result = await response.json();
+                console.log('HTML 已儲存到:', result.saved_path);
+                
+            } catch (error) {
+                console.error('自動匯出 HTML 錯誤:', error);
+                throw error;
+            }
+        }
+
+        // 自動匯出 Excel 到分析資料夾
+        async function autoExportExcel(outputPath) {
+            if (!outputPath || !window.vpAnalyzeOutputPath) {
+                throw new Error('缺少必要參數');
+            }
+            
+            try {
+                const response = await fetch('/export-excel-to-folder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: document.getElementById('pathInput').value,
+                        analysis_output_path: window.vpAnalyzeOutputPath,
+                        output_folder: outputPath,
+                        logs: allLogs
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('匯出 Excel 失敗');
+                }
+                
+                const result = await response.json();
+                console.log('Excel 已儲存到:', result.saved_path);
+                
+            } catch (error) {
+                console.error('自動匯出 Excel 錯誤:', error);
+                throw error;
             }
         }
 
@@ -7704,3 +7790,387 @@ def download_analysis_zip():
     except Exception as e:
         print(f"Error in download_analysis_zip: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/export-html-to-folder/<analysis_id>', methods=['POST'])
+def export_html_to_folder(analysis_id):
+    """匯出 HTML 到指定資料夾"""
+    try:
+        # 從快取獲取分析資料
+        data = analysis_cache.get(analysis_id)
+        if data is None:
+            return jsonify({'error': 'Analysis not found or expired'}), 404
+        
+        request_data = request.json
+        output_path = request_data.get('output_path')
+        base_url = request_data.get('base_url', '')
+        
+        if not output_path or not os.path.exists(output_path):
+            return jsonify({'error': 'Invalid output path'}), 400
+        
+        # 建立 HTML 內容（使用現有的 export 邏輯）
+        html_report = HTML_TEMPLATE
+        
+        # 注入資料的腳本
+        static_script = f'''
+<script>
+    window.isStaticExport = true;
+    window.exportBaseUrl = "{base_url}";
+    
+    window.addEventListener('DOMContentLoaded', function() {{
+        setTimeout(function() {{
+            const controlPanel = document.querySelector('.control-panel');
+            if (controlPanel) {{
+                controlPanel.style.display = 'none';
+            }}
+            
+            const navToggleBtn = document.getElementById('navToggleBtn');
+            if (navToggleBtn) {{
+                navToggleBtn.classList.add('show');
+            }}
+            
+            const exportHtmlBtn = document.getElementById('exportHtmlBtn');
+            if (exportHtmlBtn) {{
+                exportHtmlBtn.style.display = 'none';
+            }}
+        }}, 500);
+    }});
+</script>
+'''
+        
+        # 注入分析資料
+        script_injection = static_script + f'''
+<script>
+    window.exportBaseUrl = "{base_url}";
+    
+    // 修改表格更新函數
+    window.originalUpdateFilesTable = updateFilesTable;
+    window.originalUpdateLogsTable = updateLogsTable;
+    
+    updateFilesTable = function() {{
+        window.originalUpdateFilesTable();
+        document.querySelectorAll('.file-link').forEach(link => {{
+            if (link.href && !link.href.startsWith('http')) {{
+                link.href = window.exportBaseUrl + link.getAttribute('href');
+            }}
+        }});
+    }};
+    
+    updateLogsTable = function() {{
+        window.originalUpdateLogsTable();
+        document.querySelectorAll('.file-link').forEach(link => {{
+            if (link.href && !link.href.startsWith('http')) {{
+                link.href = window.exportBaseUrl + link.getAttribute('href');
+            }}
+        }});
+    }};
+    
+    // Injected analysis data
+    window.injectedData = {json.dumps({
+        'analysis_id': data.get('analysis_id', analysis_id),
+        'total_files': data['total_files'],
+        'files_with_cmdline': data['files_with_cmdline'],
+        'anr_folders': data['anr_folders'],
+        'tombstone_folders': data['tombstone_folders'],
+        'statistics': data['statistics'],
+        'file_statistics': data['file_statistics'],
+        'logs': data['logs'],
+        'analysis_time': data['analysis_time'],
+        'used_grep': data['used_grep'],
+        'zip_files_extracted': data.get('zip_files_extracted', 0),
+        'anr_subject_count': data.get('anr_subject_count', 0)
+    })};
+    
+    // Auto-load the data when page loads
+    window.addEventListener('DOMContentLoaded', function() {{
+        currentAnalysisId = window.injectedData.analysis_id;
+        allLogs = window.injectedData.logs.sort((a, b) => {{
+            if (!a.timestamp && !b.timestamp) return 0;
+            if (!a.timestamp) return 1;
+            if (!b.timestamp) return -1;
+            return a.timestamp.localeCompare(b.timestamp);
+        }});
+        allSummary = window.injectedData.statistics.type_process_summary || [];
+        allFileStats = window.injectedData.file_statistics || [];
+        
+        // 生成程序統計資料
+        const processOnlyData = {{}};
+        window.injectedData.statistics.type_process_summary.forEach(item => {{
+            if (!processOnlyData[item.process]) {{
+                processOnlyData[item.process] = {{
+                    count: 0,
+                    problem_sets: new Set()
+                }};
+            }}
+            processOnlyData[item.process].count += item.count;
+            
+            if (item.problem_sets && Array.isArray(item.problem_sets)) {{
+                item.problem_sets.forEach(set => {{
+                    processOnlyData[item.process].problem_sets.add(set);
+                }});
+            }}
+        }});
+        
+        allProcessSummary = Object.entries(processOnlyData)
+            .map(([process, data]) => ({{ 
+                process, 
+                count: data.count,
+                problem_sets: Array.from(data.problem_sets).sort()
+            }}))
+            .sort((a, b) => b.count - a.count);
+        
+        resetFiltersAndPagination();
+        updateResults(window.injectedData);
+        
+        document.querySelector('.control-panel').style.display = 'none';
+        document.getElementById('exportHtmlBtn').style.display = 'none';
+        document.getElementById('navBar').classList.add('show');
+        
+        let message = `分析完成！共掃描 ${{window.injectedData.total_files}} 個檔案，找到 ${{window.injectedData.anr_subject_count || 0}} 個包含 ANR 的檔案，找到 ${{window.injectedData.files_with_cmdline - (window.injectedData.anr_subject_count || 0)}} 個包含 Tombstone 的檔案`;
+        message += `<br>分析耗時: ${{window.injectedData.analysis_time}} 秒`;
+        if (window.injectedData.used_grep) {{
+            message += '<span class="grep-badge">使用 grep 加速</span>';
+        }} else {{
+            message += '<span class="grep-badge no-grep-badge">未使用 grep</span>';
+        }}
+        if (window.injectedData.zip_files_extracted > 0) {{
+            message += `<br>已解壓縮 ${{window.injectedData.zip_files_extracted}} 個 ZIP 檔案`;
+        }}
+        message += `<br><br>報告生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`;
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'success';
+        infoDiv.innerHTML = message;
+        document.querySelector('.header').appendChild(infoDiv);
+    }});
+</script>
+'''
+        
+        # 插入腳本
+        html_report = html_report.replace('</body>', script_injection + '</body>')
+        
+        # 儲存到檔案
+        html_save_path = os.path.join(output_path, 'all_anr_tombstone_result.html')
+        with open(html_save_path, 'w', encoding='utf-8') as f:
+            f.write(html_report)
+        
+        print(f"已儲存 HTML 檔案到: {html_save_path}")
+        
+        return jsonify({
+            'success': True,
+            'saved_path': html_save_path
+        })
+        
+    except Exception as e:
+        print(f"Error in export_html_to_folder: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/export-excel-to-folder', methods=['POST'])
+def export_excel_to_folder():
+    """匯出 Excel 到指定資料夾（不下載）"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        base_path = data.get('path')
+        analysis_output_path = data.get('analysis_output_path')
+        output_folder = data.get('output_folder')
+        logs = data.get('logs', [])
+        
+        if not base_path or not analysis_output_path or not output_folder:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # 準備 Excel 資料
+        excel_data = []
+        sn = 1
+        current_time = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        
+        for log in logs:
+            # 讀取對應的 AI 分析結果
+            ai_result = ""
+            if log.get('file'):
+                try:
+                    file_path = log['file']
+                    if file_path.startswith(base_path):
+                        relative_path = os.path.relpath(file_path, base_path)
+                    else:
+                        relative_path = file_path
+                    
+                    analyzed_file = os.path.join(analysis_output_path, relative_path + '.analyzed.txt')
+                    
+                    if os.path.exists(analyzed_file):
+                        with open(analyzed_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            ai_result = extract_ai_summary(content)
+                    else:
+                        ai_result = "找不到分析結果"
+                except Exception as e:
+                    ai_result = f"讀取錯誤: {str(e)}"
+            
+            excel_data.append({
+                'SN': sn,
+                'Date': current_time,
+                'Problem set': log.get('problem_set', '-'),
+                'Type': log.get('type', ''),
+                'Process': log.get('process', ''),
+                'AI result': ai_result,
+                'Filename': log.get('filename', ''),
+                'Folder Path': log.get('file', '')
+            })
+            sn += 1
+        
+        # 建立 Excel 工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ANR Tombstone Analysis"
+        
+        # 設定標題樣式
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        header_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 寫入標題
+        headers = ['SN', 'Date', 'Problem set', 'Type', 'Process', 'AI result', 'Filename', 'Folder Path']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = header_border
+        
+        # 設定資料樣式
+        data_font = Font(size=11)
+        data_alignment = Alignment(vertical="top", wrap_text=True)
+        data_border = Border(
+            left=Side(style='thin', color='D3D3D3'),
+            right=Side(style='thin', color='D3D3D3'),
+            top=Side(style='thin', color='D3D3D3'),
+            bottom=Side(style='thin', color='D3D3D3')
+        )
+        
+        anr_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+        tombstone_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
+        
+        # 寫入資料
+        for row_idx, row_data in enumerate(excel_data, 2):
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ''))
+                cell.font = data_font
+                cell.border = data_border
+                
+                if col_idx == 1:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    cell.alignment = data_alignment
+                
+                if col_idx == 4:  # Type 欄位
+                    if row_data.get('Type') == 'ANR':
+                        cell.fill = anr_fill
+                    elif row_data.get('Type') == 'Tombstone':
+                        cell.fill = tombstone_fill
+        
+        # 調整欄寬
+        column_widths = {
+            'A': 8,   # SN
+            'B': 20,  # Date
+            'C': 20,  # 問題 set
+            'D': 12,  # Type
+            'E': 30,  # Process
+            'F': 60,  # AI result
+            'G': 40,  # Filename
+            'H': 80   # Folder Path
+        }
+        
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # 凍結標題列
+        ws.freeze_panes = 'A2'
+        
+        # 儲存到指定資料夾
+        excel_save_path = os.path.join(output_folder, 'all_anr_tombstone_result.xlsx')
+        wb.save(excel_save_path)
+        
+        print(f"已儲存 Excel 檔案到: {excel_save_path}")
+        
+        return jsonify({
+            'success': True,
+            'saved_path': excel_save_path
+        })
+        
+    except Exception as e:
+        print(f"Error in export_excel_to_folder: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/view-analysis-html')
+def view_analysis_html():
+    """查看分析產生的 HTML 報告"""
+    file_path = request.args.get('path')
+    
+    if not file_path:
+        return """
+        <html>
+        <body style="font-family: Arial; padding: 20px;">
+            <h2>錯誤：未提供檔案路徑</h2>
+            <p>請從分析結果頁面點擊「已統計分析」按鈕。</p>
+            <button onclick="window.history.back()">返回</button>
+        </body>
+        </html>
+        """, 400
+    
+    # Security check - prevent directory traversal
+    if '..' in file_path:
+        return "Invalid file path", 403
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        return f"File not found: {file_path}", 404
+    
+    # Check if it's an HTML file
+    if not file_path.endswith('.html'):
+        return "Not an HTML file", 400
+    
+    try:
+        # 讀取 HTML 檔案
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # 修改 HTML 中的相對路徑
+        base_dir = os.path.dirname(file_path)
+        
+        # 注入一個腳本來處理檔案連結
+        inject_script = """
+        <script>
+        // 確保所有檔案連結都能正常運作
+        window.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.file-link').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('/view-file')) {
+                    // 保持原有的連結格式
+                    link.setAttribute('target', '_blank');
+                }
+            });
+        });
+        </script>
+        """
+        
+        # 在 </body> 前插入腳本
+        content = content.replace('</body>', inject_script + '</body>')
+        
+        return Response(content, mimetype='text/html; charset=utf-8')
+        
+    except Exception as e:
+        return f"Error reading file: {str(e)}", 500
