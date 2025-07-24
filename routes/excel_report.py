@@ -262,22 +262,35 @@ EXCEL_REPORT_TEMPLATE = '''
         
         /* 圖表置中 */
         .chart-wrapper {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 400px;
+            display: block;  /* 改用 block 而不是 flex */
             width: 100%;
             position: relative;
+            text-align: center;  /* 文字置中 */
+        }
+
+        /* 確保 Plotly 容器正確顯示 */
+        .js-plotly-plot {
+            margin: 0 auto;
+            display: inline-block;
+        }
+
+        /* 強制所有 Plotly 圖表置中 */
+        .chart-wrapper > div {
+            margin: 0 auto !important;
+            max-width: 100% !important;
+        }
+
+        /* 特別針對非圓餅圖的設定 */
+        #dailyChart,
+        #processChart,
+        #problemSetChart,
+        #hourlyChart {
+            width: 100% !important;
+            margin: 0 auto !important;
         }
 
         /* 確保 Plotly 圖表置中 */
         .chart-wrapper > div {
-            margin: 0 auto !important;
-        }
-
-        /* 修正特定圖表的大小 */
-        #typeChart, #problemSetPieChart {
-            max-width: 600px !important;
             margin: 0 auto !important;
         }
 
@@ -1704,7 +1717,9 @@ EXCEL_REPORT_TEMPLATE = '''
                 autosize: true
             };
             
-            Plotly.newPlot('typeChart', data, layout, {responsive: true});          
+            Plotly.newPlot('typeChart', data, layout, {responsive: true}); 
+
+            addChartResizeObserver('typeChart'); 
         }
         
         // 每日趨勢圖
@@ -1744,6 +1759,7 @@ EXCEL_REPORT_TEMPLATE = '''
             
             const layout = {
                 height: 450,
+                width: null,
                 xaxis: { 
                     title: '日期',
                     tickangle: -45,
@@ -1768,7 +1784,14 @@ EXCEL_REPORT_TEMPLATE = '''
                 autosize: true
             };
             
-            Plotly.newPlot('dailyChart', traces, layout, {responsive: true});            
+            const config = {
+                responsive: true,
+                displayModeBar: false  // 隱藏工具列讓畫面更乾淨
+            };
+
+            Plotly.newPlot('dailyChart', traces, layout, config);
+
+            addChartResizeObserver('dailyChart');  
         }
         
         // 程序問題分佈圖
@@ -1834,6 +1857,8 @@ EXCEL_REPORT_TEMPLATE = '''
             };
             
             Plotly.newPlot('processChart', traces, layout, {responsive: true});           
+
+            addChartResizeObserver('processChart');            
         }
         
         // 問題集分析圖
@@ -1895,6 +1920,8 @@ EXCEL_REPORT_TEMPLATE = '''
             };
             
             Plotly.newPlot('problemSetChart', traces, layout, {responsive: true});              
+
+            addChartResizeObserver('problemSetChart');           
         }
         
         // 問題集餅圖
@@ -1940,6 +1967,8 @@ EXCEL_REPORT_TEMPLATE = '''
             };
             
             Plotly.newPlot('problemSetPieChart', data, layout, {responsive: true});            
+
+            addChartResizeObserver('problemSetPieChart');
         }
         
         // 每小時分佈圖
@@ -2003,8 +2032,24 @@ EXCEL_REPORT_TEMPLATE = '''
             };
             
             Plotly.newPlot('hourlyChart', traces, layout, {responsive: true});           
+
+            addChartResizeObserver('hourlyChart');
         }
-        
+
+        // 在檔案開頭添加這個輔助函數
+        function addChartResizeObserver(chartId) {
+            const observer = new MutationObserver(() => {
+                if (document.getElementById('charts-tab').classList.contains('active')) {
+                    Plotly.Plots.resize(chartId);
+                }
+            });
+            
+            observer.observe(document.getElementById('charts-tab'), {
+                attributes: true,
+                attributeFilter: ['class']
+            });
+        }
+
         // 初始化資料表格
         function initializeDataTable() {
             // 先依照 SN 升冪排序
