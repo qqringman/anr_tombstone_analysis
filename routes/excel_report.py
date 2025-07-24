@@ -117,25 +117,31 @@ EXCEL_REPORT_TEMPLATE = '''
             position: absolute;
             top: 30px;
             right: 30px;
-            background: linear-gradient(135deg, #e8f0f8 0%, #d4e3f1 100%);  /* 北歐風淺藍灰漸層 */
-            color: #1e3a5f;  /* 深藍色文字 */
-            border: 1px solid #b8d2e8;  /* 淺藍邊框 */
+            background: rgba(255, 255, 255, 0.15);  /* 半透明白色背景 */
+            backdrop-filter: blur(10px);  /* 模糊效果 */
+            color: white;  /* 白色文字 */
+            border: 1px solid rgba(255, 255, 255, 0.3);  /* 半透明白色邊框 */
             padding: 12px 24px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
             font-weight: 600;
             transition: all 0.3s;
-            box-shadow: 0 2px 6px rgba(44, 90, 160, 0.15);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
         
         .export-html-btn:hover {
-            background: linear-gradient(135deg, #d4e3f1 0%, #b8d2e8 100%);  /* hover 時稍深的漸層 */
+            background: rgba(255, 255, 255, 0.25);  /* hover 時背景更亮 */
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.25);
-            border-color: #9db4d0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.4);
         }
-        
+
+        .export-html-btn:active {
+            transform: translateY(0);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -1037,7 +1043,9 @@ EXCEL_REPORT_TEMPLATE = '''
                     </div>
                 </div>
             </div>
-            <button class="export-html-btn" onclick="exportToHTML()">匯出 HTML</button>
+            <button class="export-html-btn" onclick="exportToHTML()">
+                <span style="margin-right: 8px;">📥</span>匯出 HTML
+            </button>
         </div>
     </div>
 
@@ -1655,7 +1663,13 @@ EXCEL_REPORT_TEMPLATE = '''
                 // 再次觸發以確保完全置中
                 setTimeout(() => {
                     window.dispatchEvent(new Event('resize'));
-                }, 100);
+                    // 對每個圖表單獨調用 resize
+                    ['typeChart', 'dailyChart', 'processChart', 'problemSetChart', 'problemSetPieChart', 'hourlyChart'].forEach(chartId => {
+                        if (document.getElementById(chartId)) {
+                            Plotly.Plots.resize(chartId);
+                        }
+                    });
+                }, 300);
             }, 200);
         }
         
@@ -1680,17 +1694,17 @@ EXCEL_REPORT_TEMPLATE = '''
             
             const layout = {
                 height: 400,
-                autosize: true,
-                margin: { l: 50, r: 50, t: 50, b: 50 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 80, 
+                    r: 80, 
+                    t: 50, 
+                    b: 50,
+                    autoexpand: true
+                },
+                autosize: true
             };
             
-            Plotly.newPlot('typeChart', data, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('typeChart');
-            }, 100);            
+            Plotly.newPlot('typeChart', data, layout, {responsive: true});          
         }
         
         // 每日趨勢圖
@@ -1729,25 +1743,32 @@ EXCEL_REPORT_TEMPLATE = '''
             ];
             
             const layout = {
-                height: 400,
+                height: 450,
                 xaxis: { 
                     title: '日期',
-                    tickangle: -45
+                    tickangle: -45,
+                    tickfont: { size: 11 },
+                    automargin: true
                 },
                 yaxis: { 
                     title: '數量',
-                    dtick: 1
+                    tickfont: { size: 11 },
+                    automargin: true,
+                    tickformat: 'd',
+                    rangemode: 'tozero'
+                    // 不設定 dtick，讓 Plotly 自動決定
                 },
-                margin: { b: 100 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 100,
+                    r: 50,
+                    b: 120,  // 因為日期標籤是斜的，需要更多底部空間
+                    t: 30,
+                    autoexpand: true
+                },
+                autosize: true
             };
             
-            Plotly.newPlot('dailyChart', traces, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('dailyChart');
-            }, 100);              
+            Plotly.newPlot('dailyChart', traces, layout, {responsive: true});            
         }
         
         // 程序問題分佈圖
@@ -1790,22 +1811,29 @@ EXCEL_REPORT_TEMPLATE = '''
                 barmode: 'stack',
                 xaxis: { 
                     title: '程序',
-                    tickangle: -45
+                    tickangle: -45,
+                    tickfont: { size: 10 },
+                    automargin: true
                 },
                 yaxis: { 
                     title: '數量',
-                    dtick: 1
+                    tickfont: { size: 11 },
+                    automargin: true,
+                    tickformat: 'd',
+                    rangemode: 'tozero'
+                    // 不設定 dtick，讓 Plotly 自動決定
                 },
-                margin: { b: 200 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 100,
+                    r: 50,
+                    b: 200,  // 程序名稱通常較長，需要更多底部空間
+                    t: 30,
+                    autoexpand: true
+                },
+                autosize: true
             };
             
-            Plotly.newPlot('processChart', traces, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('processChart');
-            }, 100);             
+            Plotly.newPlot('processChart', traces, layout, {responsive: true});           
         }
         
         // 問題集分析圖
@@ -1840,26 +1868,33 @@ EXCEL_REPORT_TEMPLATE = '''
             ];
             
             const layout = {
-                height: 400,
+                height: 450,
                 barmode: 'group',
                 xaxis: { 
                     title: '問題集',
-                    tickangle: -45
+                    tickangle: -45,
+                    tickfont: { size: 11 },
+                    automargin: true
                 },
                 yaxis: { 
                     title: '數量',
-                    dtick: 1
+                    tickfont: { size: 11 },
+                    automargin: true,
+                    tickformat: 'd',
+                    rangemode: 'tozero'
+                    // 不設定 dtick，讓 Plotly 自動決定
                 },
-                margin: { b: 100 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 100,
+                    r: 50,
+                    b: 120,
+                    t: 30,
+                    autoexpand: true
+                },
+                autosize: true
             };
             
-            Plotly.newPlot('problemSetChart', traces, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('problemSetChart');
-            }, 100);                
+            Plotly.newPlot('problemSetChart', traces, layout, {responsive: true});              
         }
         
         // 問題集餅圖
@@ -1885,18 +1920,26 @@ EXCEL_REPORT_TEMPLATE = '''
             }];
             
             const layout = {
-                height: 400,
+                height: 450,
                 showlegend: true,
-                margin: { t: 20, b: 20 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 50,
+                    r: 50,
+                    t: 50,
+                    b: 50,
+                    autoexpand: true
+                },
+                autosize: true,
+                legend: {
+                    orientation: "v",
+                    x: 1,
+                    y: 0.5,
+                    xanchor: 'left',
+                    font: { size: 11 }
+                }
             };
             
-            Plotly.newPlot('problemSetPieChart', data, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('problemSetPieChart');
-            }, 100);             
+            Plotly.newPlot('problemSetPieChart', data, layout, {responsive: true});            
         }
         
         // 每小時分佈圖
@@ -1933,25 +1976,33 @@ EXCEL_REPORT_TEMPLATE = '''
             ];
             
             const layout = {
-                height: 400,
+                height: 450,
                 barmode: 'stack',
                 xaxis: { 
                     title: '小時',
-                    dtick: 1
+                    dtick: 1,  // 小時保持每個都顯示
+                    tickfont: { size: 11 },
+                    automargin: true
                 },
                 yaxis: { 
                     title: '數量',
-                    dtick: 1
+                    tickfont: { size: 11 },
+                    automargin: true,
+                    tickformat: 'd',
+                    rangemode: 'tozero'
+                    // 不設定 dtick，讓 Plotly 自動決定
                 },
-                autosize: true  // 添加這行
+                margin: { 
+                    l: 100,
+                    r: 50,
+                    b: 60,
+                    t: 30,
+                    autoexpand: true
+                },
+                autosize: true
             };
             
-            Plotly.newPlot('hourlyChart', traces, layout, {responsive: true});
-
-            // 強制重新調整大小
-            setTimeout(() => {
-                Plotly.Plots.resize('hourlyChart');
-            }, 100);              
+            Plotly.newPlot('hourlyChart', traces, layout, {responsive: true});           
         }
         
         // 初始化資料表格
@@ -2962,12 +3013,7 @@ def excel_report(report_id):
         except Exception as e:
             return f"讀取 Excel 檔案時發生錯誤: {str(e)}", 500
         finally:
-            # 如果是暫存檔案，清理它
-            if is_temp and os.path.exists(excel_path):
-                try:
-                    os.unlink(excel_path)
-                except:
-                    pass
+            pass
             
     except Exception as e:
         return f"載入報告時發生錯誤: {str(e)}", 500
