@@ -684,10 +684,30 @@ HTML_TEMPLATE = r'''
         border-left: 5px solid #28a745;
         border-radius: 8px;
         margin-top: 5px;
-        display: flex;
-        align-items: flex-start;
         font-family: monospace;
         font-size: 90%;
+        white-space: nowrap;      /* 新增：保持單行顯示 */
+        overflow-x: auto;         /* 新增：允許水平捲動 */
+        overflow-y: hidden;       /* 新增：隱藏垂直捲軸 */
+    }
+
+    /* 新增：美化輸入框的捲軸 */
+    #pathInput::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    #pathInput::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+
+    #pathInput::-webkit-scrollbar-thumb {
+        background: #999;
+        border-radius: 3px;
+    }
+
+    #pathInput::-webkit-scrollbar-thumb:hover {
+        background: #666;
     }
 
     #pathInput:focus ~ .path-autocomplete {
@@ -711,9 +731,28 @@ HTML_TEMPLATE = r'''
         border-radius: 0 0 8px 8px;
         max-height: 300px;
         overflow-y: auto;
+        overflow-x: hidden;         /* 容器本身不需要水平捲軸 */
         display: none;
         z-index: 1000;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    /* 為自動完成框添加捲軸樣式 */
+    .path-autocomplete::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .path-autocomplete::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    .path-autocomplete::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+    }
+
+    .path-autocomplete::-webkit-scrollbar-thumb:hover {
+        background: #555;
     }
 
     .path-suggestion {
@@ -725,15 +764,35 @@ HTML_TEMPLATE = r'''
         color: #333;
         transition: background-color 0.2s;
         white-space: nowrap;        /* 防止折行 */
-        overflow-x: auto;           /* 水平滾動 */
-        text-overflow: ellipsis;    /* 文字過長時顯示省略號 */        
+        overflow-x: auto;           /* 允許水平捲動 */
+        overflow-y: hidden;         /* 隱藏垂直捲軸 */
+        text-overflow: ellipsis;    /* 文字過長時顯示省略號 */
+        max-width: 100%;            /* 確保不超出容器 */     
     }
 
     .path-suggestion:hover {
         background-color: #f8f9fa;
-        overflow-x: visible;
+        overflow-x: auto;           /* 保持水平捲動 */
         position: relative;
-        z-index: 10;               
+        z-index: 10;          
+    }
+
+    /* 美化路徑建議的捲軸 */
+    .path-suggestion::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .path-suggestion::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .path-suggestion::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 2px;
+    }
+
+    .path-suggestion::-webkit-scrollbar-thumb:hover {
+        background: #999;
     }
 
     .path-suggestion.selected {
@@ -3578,13 +3637,49 @@ HTML_TEMPLATE = r'''
             // === 新增：隱藏歷史區塊 ===
             document.getElementById('historySection').style.display = 'none';
 
+            // === 新增：隱藏所有浮動按鈕 ===
+            const floatingButtons = [
+                'backToTop',
+                'navToggleBtn', 
+                'globalToggleBtn',
+                'analysisResultBtn'
+            ];
+            
+            floatingButtons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.classList.remove('show');
+                }
+            });
+            
+            // === 新增：隱藏 header 區域的所有按鈕 ===
+            const headerButtons = [
+                'exportExcelBtn',
+                'exportExcelReportBtn',
+                'mergeExcelBtn',
+                'exportHtmlBtn',
+                'downloadCurrentZipBtn'
+            ];
+            
+            headerButtons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.style.display = 'none';
+                }
+            });
+                        
+            // 確保導覽列也關閉
+            const navBar = document.getElementById('navBar');
+            if (navBar && navBar.classList.contains('show')) {
+                toggleNavBar();
+            }
+
             analysisIndexPath = null;
             
             // Disable analyze button
             document.getElementById('analyzeBtn').disabled = true;
             document.getElementById('loading').style.display = 'block';
             document.getElementById('results').style.display = 'none';
-            document.getElementById('exportHtmlBtn').style.display = 'none';
             
             // 隱藏當次分析的匯出按鈕
             const exportExcelBtn = document.getElementById('exportExcelBtn');
