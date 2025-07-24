@@ -3030,13 +3030,23 @@ def excel_report(report_id):
                 display_filename = f"合併 {file_count} 個檔案"
                 # 使用列表形式傳遞檔案名稱
                 filename_list = original_filenames
-                # 使用列表形式傳遞路徑
-                path_list = original_paths
+                # 修正這裡：檢查路徑是否為空或是「本地上傳」
+                path_list = []
+                for path in original_paths:
+                    if path and path != "本地上傳":
+                        path_list.append(path)
+                    else:
+                        # 如果是本地上傳，顯示更有意義的信息
+                        path_list.append("本地上傳檔案")
             else:
                 # 單一檔案
                 display_filename = original_filenames[0] if original_filenames else "未知檔案"
                 filename_list = [display_filename]
-                path_list = original_paths if original_paths else ["未知路徑"]
+                # 修正路徑顯示
+                if original_paths and original_paths[0] and original_paths[0] != "本地上傳":
+                    path_list = original_paths
+                else:
+                    path_list = ["本地上傳檔案"]
             
             # 轉換為適合前端顯示的格式
             data = df.to_dict('records')

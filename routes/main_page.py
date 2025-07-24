@@ -5671,7 +5671,12 @@ HTML_TEMPLATE = r'''
                 showMessage('請選擇要載入的 Excel 檔案', 'error');
                 return;
             }
-            
+
+            // 添加調試信息
+            console.log('=== 檔案選擇情況 ===');
+            console.log('selectedMergeFiles:', selectedMergeFiles);
+            console.log('selectedMergeFilePaths:', selectedMergeFilePaths);
+                        
             const executeBtn = document.getElementById('mergeExecuteBtn');
             executeBtn.disabled = true;
             executeBtn.textContent = '分析中...';
@@ -5686,17 +5691,21 @@ HTML_TEMPLATE = r'''
                 // 收集本地檔案資訊
                 selectedMergeFiles.forEach(file => {
                     allFilenames.push(file.name);
-                    // 本地檔案顯示為 "本地上傳"
+                    // 本地檔案確實沒有路徑，只能顯示「本地上傳」
                     allPaths.push("本地上傳");
                 });
 
                 // 收集伺服器檔案資訊
                 selectedMergeFilePaths.forEach(path => {
-                    const filename = path.split('/').pop().split('\\').pop(); // 取得檔案名稱
+                    const filename = path.split('/').pop().split('\\').pop();
                     allFilenames.push(filename);
-                    // 顯示完整路徑
-                    allPaths.push(path);
+                    // 這裡應該要顯示完整路徑
+                    allPaths.push(path);  // 確保這裡是完整路徑
                 });
+                
+                // 添加調試信息
+                console.log('檔案名稱:', allFilenames);
+                console.log('檔案路徑:', allPaths);
                 
                 // 處理多個檔案
                 if (selectedMergeFiles.length + selectedMergeFilePaths.length > 1) {
