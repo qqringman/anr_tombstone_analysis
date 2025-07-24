@@ -3223,8 +3223,13 @@ HTML_TEMPLATE = r'''
         function viewExcelReport() {
             if (historyAnalysisInfo && historyAnalysisInfo.excel_report_path) {
                 console.log('開啟 Excel 報表:', historyAnalysisInfo.excel_report_path);
-                // 使用與已統計分析相同的路由
-                window.open('/view-analysis-html?path=' + encodeURIComponent(historyAnalysisInfo.excel_report_path), '_blank');
+                try {
+                    // 使用與已統計分析相同的路由
+                    window.open('/view-analysis-html?path=' + encodeURIComponent(historyAnalysisInfo.excel_report_path), '_blank');
+                } catch (error) {
+                    console.error('開啟 Excel 報表時發生錯誤:', error);
+                    showMessage('開啟 Excel 報表失敗', 'error');
+                }
             } else {
                 showMessage('找不到 Excel 報表', 'error');
             }
@@ -5087,6 +5092,16 @@ HTML_TEMPLATE = r'''
 
         // 打開合併對話框
         function openMergeDialog() {
+            // 重置對話框狀態
+            const dialog = document.getElementById('mergeDialogOverlay');
+            const dialogHeader = dialog.querySelector('.merge-dialog-header h3');
+            const executeBtn = document.getElementById('mergeExecuteBtn');
+            
+            // 確保設置為合併 Excel 的預設值
+            dialogHeader.innerHTML = '💹 合併 Excel 檔案';
+            executeBtn.textContent = '匯出';
+            executeBtn.onclick = executeMerge;  // 確保綁定正確的函數
+            
             // 防止背景滾動
             document.body.style.overflow = 'hidden';
             document.body.style.position = 'fixed';
@@ -5794,19 +5809,24 @@ HTML_TEMPLATE = r'''
         // 修改 closeMergeDialog 函數，重置對話框
         const originalCloseMergeDialog = closeMergeDialog;
         closeMergeDialog = function() {
-            originalCloseMergeDialog();
+            // 先重置對話框內容（無論是否在 loadExcelMode）
+            const dialogHeader = document.querySelector('.merge-dialog-header h3');
+            const executeBtn = document.getElementById('mergeExecuteBtn');
             
-            // 重置對話框內容
-            if (loadExcelMode) {
-                const dialogHeader = document.querySelector('.merge-dialog-header h3');
-                const executeBtn = document.getElementById('mergeExecuteBtn');
-                
+            // 總是重置為預設值
+            if (dialogHeader) {
                 dialogHeader.innerHTML = '💹 合併 Excel 檔案';
+            }
+            if (executeBtn) {
                 executeBtn.textContent = '匯出';
                 executeBtn.onclick = executeMerge;
-                
-                loadExcelMode = false;
             }
+            
+            // 呼叫原始的關閉函數
+            originalCloseMergeDialog();
+            
+            // 確保 loadExcelMode 被重置
+            loadExcelMode = false;
             
             // 恢復匯出按鈕顯示
             const exportBtns = document.querySelectorAll('.export-html-btn, .export-excel-btn, .merge-excel-btn');
@@ -5815,7 +5835,7 @@ HTML_TEMPLATE = r'''
                     btn.style.display = 'block';
                 }
             });
-        };    
+        };  
     </script>
     <script>
         async function exportExcelReport() {
@@ -5936,6 +5956,14 @@ HTML_TEMPLATE = r'''
         async function downloadAnalysisZip() {
             if (!historyAnalysisInfo || !historyAnalysisInfo.analysis_path) return;
             
+            // 獲取按鈕並添加轉場效果
+            const downloadBtn = document.getElementById('downloadZipBtn');
+            if (!downloadBtn) return;
+            
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '📦 打包中...';
+            
             try {
                 const response = await fetch('/download-analysis-zip', {
                     method: 'POST',
@@ -5965,9 +5993,17 @@ HTML_TEMPLATE = r'''
                     a.download = filename;
                     a.click();
                     window.URL.revokeObjectURL(url);
+                    
+                    showMessage('分析結果打包完成', 'success');
+                } else {
+                    throw new Error('下載失敗');
                 }
             } catch (error) {
                 showMessage('下載失敗: ' + error.message, 'error');
+            } finally {
+                // 恢復按鈕狀態
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = originalText;
             }
         }
 
@@ -5977,6 +6013,14 @@ HTML_TEMPLATE = r'''
                 showMessage('請先執行分析', 'error');
                 return;
             }
+            
+            // 獲取按鈕並添加轉場效果
+            const downloadBtn = document.getElementById('downloadCurrentZipBtn');
+            if (!downloadBtn) return;
+            
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '📦 打包中...';
             
             try {
                 const response = await fetch('/download-analysis-zip', {
@@ -6007,9 +6051,17 @@ HTML_TEMPLATE = r'''
                     a.download = filename;
                     a.click();
                     window.URL.revokeObjectURL(url);
+                    
+                    showMessage('分析結果打包完成', 'success');
+                } else {
+                    throw new Error('下載失敗');
                 }
             } catch (error) {
                 showMessage('下載失敗: ' + error.message, 'error');
+            } finally {
+                // 恢復按鈕狀態
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = originalText;
             }
         }
 
@@ -8705,8 +8757,11 @@ def export_excel_report_to_folder():
             'filename': os.path.basename(output_folder),
             'filepath': path,
             'load_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'data': json.dumps(excel_data),  # 傳入格式化後的 excel_data，而不是原始的 logs
-            'excel_data_base64': ''  # Excel 報表不需要內嵌檔案
+            'data': json.dumps(excel_data),  # 傳入格式化後的 excel_data
+            'excel_data_base64': '',  # Excel 報表不需要內嵌檔案
+            # 新增這兩個必要的變數
+            'filename_list': [os.path.basename(output_folder)],  # 改為列表格式
+            'path_list': [path]  # 改為列表格式
         }
         
         # 生成 HTML 內容
@@ -8714,9 +8769,14 @@ def export_excel_report_to_folder():
         
         # 替換模板變數
         for key, value in template_data.items():
-            if key == 'data':
-                # 替換 {{ data | tojson }}
-                html_content = html_content.replace('{{ data | tojson }}', value)
+            if key in ['data', 'filename_list', 'path_list']:
+                # 這些需要特殊處理
+                if key == 'data':
+                    html_content = html_content.replace('{{ data | tojson }}', value)
+                elif key == 'filename_list':
+                    html_content = html_content.replace('{{ filename_list | tojson }}', json.dumps(value))
+                elif key == 'path_list':
+                    html_content = html_content.replace('{{ path_list | tojson }}', json.dumps(value))
             else:
                 # 替換其他變數
                 html_content = html_content.replace(f'{{{{ {key} }}}}', str(value))
