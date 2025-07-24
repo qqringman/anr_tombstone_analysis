@@ -8,6 +8,7 @@ import plotly.utils
 from collections import defaultdict
 import io
 import base64
+from routes.main_page import analysis_cache
 
 # 創建藍圖
 excel_report_bp = Blueprint('excel_report_bp', __name__)
@@ -929,6 +930,71 @@ EXCEL_REPORT_TEMPLATE = '''
                 max-width: 100%;
             }
         }
+
+        .info-item {
+            display: flex;
+            align-items: center;  /* 改回 center 讓 icon 和單行文字對齊 */
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-icon {
+            font-size: 24px;
+            margin-right: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;  /* 確保 icon 內容居中 */
+            height: 24px;  /* 固定高度 */
+        }
+
+        .info-content {
+            flex: 1;
+            min-width: 0;  /* 防止內容溢出 */
+        }
+
+        .info-label {
+            font-size: 14px;
+            font-weight: 500;
+            word-break: break-word;
+            line-height: 1.5;  /* 設定行高 */
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 500;
+            word-break: break-word;  /* 允許長文字換行 */
+        }
+
+        /* 當有多個檔案時的特殊處理 */
+        .info-item.has-list {
+            align-items: flex-start;  /* 只有列表時才使用 flex-start */
+        }
+
+        .info-item.has-list .info-icon {
+            margin-top: 20px;  /* 調整 icon 位置以對齊第一行文字 */
+        }
+
+        /* 檔案列表樣式 */
+        .file-list {
+            margin: 8px 0 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .file-list li {
+            padding: 2px 0;
+            position: relative;
+            padding-left: 20px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .file-list li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+        }
+
     </style>
 
 </head>
@@ -944,21 +1010,31 @@ EXCEL_REPORT_TEMPLATE = '''
         <div class="header-container">
             <h1>Excel 分析報告</h1>
             <div class="header-info">
-                <p>
-                    <span class="info-icon">📄</span>
-                    <span class="info-label">檔案名稱</span>
-                    <code>{{ filename }}</code>
-                </p>
-                <p>
-                    <span class="info-icon">📁</span>
-                    <span class="info-label">檔案路徑</span>
-                    <code>{{ filepath }}</code>
-                </p>
-                <p>
-                    <span class="info-icon">🕐</span>
-                    <span class="info-label">載入時間</span>
-                    <code>{{ load_time }}</code>
-                </p>
+                <div class="info-item" id="filenameItem">
+                    <div class="info-icon">📄</div>
+                    <div class="info-content">
+                        <div class="info-label">檔案名稱</div>
+                        <div class="info-value" id="filenameDisplay">
+                            <!-- 由 JavaScript 填充 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="info-item" id="filepathItem">
+                    <div class="info-icon">📁</div>
+                    <div class="info-content">
+                        <div class="info-label">檔案路徑</div>
+                        <div class="info-value" id="filepathDisplay">
+                            <!-- 由 JavaScript 填充 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-icon">🕐</div>
+                    <div class="info-content">
+                        <div class="info-label">載入時間</div>
+                        <div class="info-value">{{ load_time }}</div>
+                    </div>
+                </div>
             </div>
             <button class="export-html-btn" onclick="exportToHTML()">匯出 HTML</button>
         </div>
@@ -1183,6 +1259,50 @@ EXCEL_REPORT_TEMPLATE = '''
             console.log('Raw data:', rawData);
             console.log('Sample row:', rawData[0]);
 
+            // 處理檔案名稱和路徑列表
+            const filenameList = {{ filename_list | tojson }};
+            const pathList = {{ path_list | tojson }};
+            
+            // 更新檔案名稱顯示
+            const filenameDisplay = document.getElementById('filenameDisplay');
+            const filenameItem = document.getElementById('filenameItem');
+            
+            if (filenameList && filenameList.length > 0) {
+                if (filenameList.length === 1) {
+                    // 單一檔案，直接顯示
+                    filenameDisplay.textContent = filenameList[0];
+                } else {
+                    // 多個檔案，顯示列表
+                    filenameItem.classList.add('has-list');
+                    let html = `合併 ${filenameList.length} 個檔案：<ul class="file-list">`;
+                    filenameList.forEach(filename => {
+                        html += `<li>${filename}</li>`;
+                    });
+                    html += '</ul>';
+                    filenameDisplay.innerHTML = html;
+                }
+            }
+            
+            // 更新路徑顯示
+            const filepathDisplay = document.getElementById('filepathDisplay');
+            const filepathItem = document.getElementById('filepathItem');
+            
+            if (pathList && pathList.length > 0) {
+                if (pathList.length === 1) {
+                    // 單一路徑，直接顯示完整路徑
+                    filepathDisplay.textContent = pathList[0];
+                } else {
+                    // 多個路徑，顯示列表
+                    filepathItem.classList.add('has-list');
+                    let html = '<ul class="file-list">';
+                    pathList.forEach(path => {
+                        html += `<li>${path}</li>`;
+                    });
+                    html += '</ul>';
+                    filepathDisplay.innerHTML = html;
+                }
+            }
+            
             // 預處理資料：統一問題集欄位名稱
             rawData = rawData.map(row => {
                 // 如果有 'Problem set' 欄位，複製到 '問題 set'
@@ -2783,69 +2903,71 @@ EXCEL_REPORT_TEMPLATE = '''
 '''
 
 @excel_report_bp.route('/excel-report/<report_id>')
-def show_excel_report(report_id):
+def excel_report(report_id):
     """顯示 Excel 分析報告"""
     try:
-        # 從主模組導入 cache
-        from routes.main_page import analysis_cache
+        # 從快取獲取檔案資訊
+        try:
+            from routes.main_page import analysis_cache
+        except ImportError:
+            from routes.shared_cache import analysis_cache
         
-        # 獲取檔案資訊
         file_info = analysis_cache.get(f"excel_report_{report_id}")
         if not file_info:
-            return "報告不存在或已過期", 404
+            return "報告已過期或不存在", 404
         
         excel_path = file_info['excel_path']
         is_temp = file_info.get('is_temp', False)
-        original_filename = file_info.get('original_filename', os.path.basename(excel_path))
-        original_path = file_info.get('original_path', excel_path)
-        
-        # 檢查檔案是否存在
-        if not os.path.exists(excel_path):
-            # 如果有 base64 資料，嘗試恢復
-            excel_data_base64 = file_info.get('excel_data_base64')
-            if excel_data_base64:
-                excel_content = base64.b64decode(excel_data_base64)
-            else:
-                return "檔案已被刪除，請重新上傳", 404
-        else:
-            # 讀取 Excel 檔案到記憶體
-            with open(excel_path, 'rb') as f:
-                excel_content = f.read()
-        
-        # 轉換為 Base64
-        excel_data_base64 = base64.b64encode(excel_content).decode('utf-8')
-        
-        # 更新 cache 中的 base64 資料
-        file_info['excel_data_base64'] = excel_data_base64
-        analysis_cache.set(f"excel_report_{report_id}", file_info)  # 使用 set 方法
+        original_filenames = file_info.get('original_filenames', [])
+        original_paths = file_info.get('original_paths', [])
+        is_merged = file_info.get('is_merged', False)
+        file_count = file_info.get('file_count', 1)
         
         # 讀取 Excel 檔案
-        df = pd.read_excel(io.BytesIO(excel_content))
-        
-        # 處理問題集欄位名稱
-        if 'Problem set' in df.columns and '問題 set' not in df.columns:
-            df['問題 set'] = df['Problem set']
-        elif 'problem set' in df.columns and '問題 set' not in df.columns:
-            df['問題 set'] = df['problem set']
-        elif '問題set' in df.columns and '問題 set' not in df.columns:
-            df['問題 set'] = df['問題set']
-        
-        # 轉換資料為 JSON
-        data = df.to_dict('records')
-        
-        # 準備模板資料
-        template_data = {
-            'filename': os.path.basename(original_filename).replace('.xlsx', '').replace('.xls', ''),  # 移除副檔名
-            'filepath': os.path.dirname(original_path),  # 只取目錄路徑
-            'load_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'data': data,
-            'excel_data_base64': excel_data_base64
-        }
-        
-        return render_template_string(EXCEL_REPORT_TEMPLATE, **template_data)
-        
+        try:
+            df = pd.read_excel(excel_path)
+            
+            # 準備顯示的檔案名稱和路徑
+            if is_merged and len(original_filenames) > 1:
+                # 多檔案合併的情況
+                display_filename = f"合併 {file_count} 個檔案"
+                # 使用列表形式傳遞檔案名稱
+                filename_list = original_filenames
+                # 使用列表形式傳遞路徑
+                path_list = original_paths
+            else:
+                # 單一檔案
+                display_filename = original_filenames[0] if original_filenames else "未知檔案"
+                filename_list = [display_filename]
+                path_list = original_paths if original_paths else ["未知路徑"]
+            
+            # 轉換為適合前端顯示的格式
+            data = df.to_dict('records')
+            
+            # 渲染模板
+            return render_template_string(
+                EXCEL_REPORT_TEMPLATE,
+                filename=display_filename,
+                filepath='',  # 不再使用這個參數
+                filename_list=filename_list,  # 新增：檔案名稱列表
+                path_list=path_list,  # 新增：路徑列表
+                load_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                data=data,
+                excel_data_base64='',
+                file_count=file_count,
+                is_merged=is_merged
+            )
+            
+        except Exception as e:
+            return f"讀取 Excel 檔案時發生錯誤: {str(e)}", 500
+        finally:
+            # 如果是暫存檔案，清理它
+            if is_temp and os.path.exists(excel_path):
+                try:
+                    os.unlink(excel_path)
+                except:
+                    pass
+            
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return f"載入報告時發生錯誤: {str(e)}", 500
         

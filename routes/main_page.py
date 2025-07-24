@@ -1288,13 +1288,7 @@ HTML_TEMPLATE = r'''
     }
 
     tr:hover {
-        background-color: #e8eaf6;
-    }
-
-    .table-highlight {
-        background-color: #fff59d !important;
-        color: #000;
-        font-weight: 600;
+        background-color: #f3f4fb;  /* 更淺的藍色 */
     }
 
     /* ===== 表格內容特定樣式 ===== */
@@ -1549,8 +1543,8 @@ HTML_TEMPLATE = r'''
     }
 
     .table-highlight {
-        background-color: #fff59d !important;
-        color: #000;
+        background-color: rgba(102, 126, 234, 0.1) !important;  /* 透明的藍紫色 */
+        color: #333;
         font-weight: 600;
     }
 
@@ -3866,7 +3860,7 @@ HTML_TEMPLATE = r'''
             `;
             document.getElementById('statsSummary').innerHTML = summaryHtml;
             
-            // Update charts - 修正這裡，使用 type_process_summary 來確保排序一致
+            // Update charts
             updateProcessChart(data.statistics.type_process_summary);
             updateTypeChart(data.statistics.by_type);
             updateDailyChart(data.statistics.by_date, data.statistics.by_date_type);
@@ -3879,7 +3873,25 @@ HTML_TEMPLATE = r'''
             
             // Show results
             document.getElementById('results').style.display = 'block';
-            
+
+            // 修正：強制圖表重新調整大小
+            setTimeout(() => {
+                // 確保所有圖表都正確顯示
+                Object.values(charts).forEach(chart => {
+                    if (chart) {
+                        chart.resize();
+                        chart.update();
+                    }
+                });
+                
+                // 確保圖表區域可見
+                const chartSection = document.getElementById('charts-section-container');
+                if (chartSection && !chartSection.classList.contains('collapsed')) {
+                    // 觸發窗口調整事件
+                    window.dispatchEvent(new Event('resize'));
+                }
+            }, 100);
+                        
             // Setup search handlers
             setupSearchHandlers();
 
@@ -5655,7 +5667,6 @@ HTML_TEMPLATE = r'''
 
         // 執行載入 Excel
         async function executeLoadExcel() {
-            // 修正：使用多檔案變數
             if (selectedMergeFiles.length === 0 && selectedMergeFilePaths.length === 0) {
                 showMessage('請選擇要載入的 Excel 檔案', 'error');
                 return;
@@ -5668,78 +5679,75 @@ HTML_TEMPLATE = r'''
             try {
                 let formData = new FormData();
                 
+                // 收集所有檔案名稱和路徑
+                let allFilenames = [];
+                let allPaths = [];
+
+                // 收集本地檔案資訊
+                selectedMergeFiles.forEach(file => {
+                    allFilenames.push(file.name);
+                    // 本地檔案顯示為 "本地上傳"
+                    allPaths.push("本地上傳");
+                });
+
+                // 收集伺服器檔案資訊
+                selectedMergeFilePaths.forEach(path => {
+                    const filename = path.split('/').pop().split('\\').pop(); // 取得檔案名稱
+                    allFilenames.push(filename);
+                    // 顯示完整路徑
+                    allPaths.push(path);
+                });
+                
                 // 處理多個檔案
-                if (selectedMergeFiles.length > 0) {
-                    // 如果有多個本地檔案，需要先合併
-                    if (selectedMergeFiles.length > 1) {
-                        // 先合併檔案
-                        const mergeFormData = new FormData();
-                        mergeFormData.append('has_analysis', 'false');
-                        
-                        // 添加所有本地檔案
-                        selectedMergeFiles.forEach(file => {
-                            mergeFormData.append('files', file);
-                        });
-                        
-                        // 添加伺服器路徑檔案
-                        mergeFormData.append('file_paths', JSON.stringify(selectedMergeFilePaths));
-                        
-                        // 呼叫合併 API
-                        const mergeResponse = await fetch('/merge-multiple-excel', {
-                            method: 'POST',
-                            body: mergeFormData
-                        });
-                        
-                        if (!mergeResponse.ok) {
-                            throw new Error('合併檔案失敗');
-                        }
-                        
-                        // 獲取合併後的檔案
-                        const mergedBlob = await mergeResponse.blob();
-                        const mergedFile = new File([mergedBlob], 'merged_result.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                        
-                        // 使用合併後的檔案進行分析
-                        formData.append('file', mergedFile);
-                        formData.append('is_merged', 'true');
-                        formData.append('file_count', selectedMergeFiles.length + selectedMergeFilePaths.length);
-                    } else {
-                        // 只有一個檔案，直接使用
+                if (selectedMergeFiles.length + selectedMergeFilePaths.length > 1) {
+                    // 需要先合併
+                    const mergeFormData = new FormData();
+                    mergeFormData.append('has_analysis', 'false');
+                    
+                    // 添加所有本地檔案
+                    selectedMergeFiles.forEach(file => {
+                        mergeFormData.append('files', file);
+                    });
+                    
+                    // 添加伺服器路徑檔案
+                    mergeFormData.append('file_paths', JSON.stringify(selectedMergeFilePaths));
+                    
+                    // 呼叫合併 API
+                    const mergeResponse = await fetch('/merge-multiple-excel', {
+                        method: 'POST',
+                        body: mergeFormData
+                    });
+                    
+                    if (!mergeResponse.ok) {
+                        throw new Error('合併檔案失敗');
+                    }
+                    
+                    // 獲取合併後的檔案
+                    const mergedBlob = await mergeResponse.blob();
+                    const mergedFile = new File([mergedBlob], 'merged_result.xlsx', { 
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                    });
+                    
+                    // 使用合併後的檔案進行分析
+                    formData.append('file', mergedFile);
+                    formData.append('is_merged', 'true');
+                    formData.append('file_count', allFilenames.length);
+                    
+                    // 傳遞原始檔案資訊
+                    formData.append('merged_file_info', JSON.stringify({
+                        filenames: allFilenames,
+                        paths: allPaths
+                    }));
+                    
+                } else {
+                    // 只有一個檔案
+                    if (selectedMergeFiles.length > 0) {
                         formData.append('file', selectedMergeFiles[0]);
-                        formData.append('is_merged', 'false');
-                        formData.append('file_count', '1');
-                    }
-                } else if (selectedMergeFilePaths.length > 0) {
-                    // 處理伺服器路徑
-                    if (selectedMergeFilePaths.length > 1) {
-                        // 多個伺服器檔案，需要先合併
-                        const mergeFormData = new FormData();
-                        mergeFormData.append('has_analysis', 'false');
-                        mergeFormData.append('file_paths', JSON.stringify(selectedMergeFilePaths));
-                        
-                        // 呼叫合併 API
-                        const mergeResponse = await fetch('/merge-multiple-excel', {
-                            method: 'POST',
-                            body: mergeFormData
-                        });
-                        
-                        if (!mergeResponse.ok) {
-                            throw new Error('合併檔案失敗');
-                        }
-                        
-                        // 獲取合併後的檔案
-                        const mergedBlob = await mergeResponse.blob();
-                        const mergedFile = new File([mergedBlob], 'merged_result.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                        
-                        // 使用合併後的檔案進行分析
-                        formData.append('file', mergedFile);
-                        formData.append('is_merged', 'true');
-                        formData.append('file_count', selectedMergeFilePaths.length);
                     } else {
-                        // 只有一個伺服器路徑
                         formData.append('file_path', selectedMergeFilePaths[0]);
-                        formData.append('is_merged', 'false');
-                        formData.append('file_count', '1');
                     }
+                    formData.append('is_merged', 'false');
+                    formData.append('file_count', '1');
                 }
                 
                 // 發送到報告路由
@@ -5755,7 +5763,7 @@ HTML_TEMPLATE = r'''
                         window.open(data.report_url, '_blank');
                         closeMergeDialog();
                         
-                        const fileCount = selectedMergeFiles.length + selectedMergeFilePaths.length;
+                        const fileCount = allFilenames.length;
                         const message = fileCount > 1 ? 
                             `已合併 ${fileCount} 個 Excel 檔案並生成報告` : 
                             'Excel 載入成功，報告已在新視窗開啟';
@@ -7724,10 +7732,17 @@ def load_excel_report():
         # 處理檔案
         excel_path = None
         temp_file = None
-        original_filename = None
-        original_path = None
+        original_filenames = []  # 改為列表儲存所有檔案名稱
+        original_paths = []      # 改為列表儲存所有檔案路徑
         is_merged = request.form.get('is_merged') == 'true'
         file_count = request.form.get('file_count', '1')
+        
+        # 如果是合併的檔案，嘗試從請求中獲取原始檔案資訊
+        merged_file_info = request.form.get('merged_file_info')
+        if merged_file_info:
+            merged_info = json.loads(merged_file_info)
+            original_filenames = merged_info.get('filenames', [])
+            original_paths = merged_info.get('paths', [])
         
         if 'file' in request.files:
             # 上傳的檔案
@@ -7739,12 +7754,15 @@ def load_excel_report():
                 return jsonify({'error': '只支援 .xlsx 格式的 Excel 檔案'}), 400
             
             # 根據是否為合併檔案設定檔名
-            if is_merged:
-                original_filename = f"合併 {file_count} 個 Excel 檔案"
-                original_path = f"合併自 {file_count} 個檔案"
+            if is_merged and original_filenames:
+                # 使用傳遞過來的原始檔案名稱
+                display_filename = f"合併 {len(original_filenames)} 個 Excel 檔案"
+                display_path = original_filenames  # 傳遞檔案名稱列表
             else:
-                original_filename = file.filename
-                original_path = f"本地上傳: {file.filename}"
+                display_filename = file.filename
+                display_path = f"本地上傳: {file.filename}"
+                original_filenames = [file.filename]
+                original_paths = [f"本地上傳: {file.filename}"]
             
             # 儲存到暫存檔案
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
@@ -7757,8 +7775,10 @@ def load_excel_report():
             if not os.path.exists(excel_path):
                 return jsonify({'error': '檔案不存在'}), 404
             
-            original_filename = os.path.basename(excel_path)
-            original_path = excel_path
+            display_filename = os.path.basename(excel_path)
+            display_path = excel_path
+            original_filenames = [display_filename]
+            original_paths = [excel_path]
         else:
             return jsonify({'error': '未提供檔案'}), 400
         
@@ -7770,10 +7790,10 @@ def load_excel_report():
         analysis_cache.set(f"excel_report_{report_id}", {
             'excel_path': excel_path,
             'is_temp': temp_file is not None,
-            'original_filename': original_filename,
-            'original_path': original_path,
+            'original_filenames': original_filenames,  # 儲存所有檔案名稱
+            'original_paths': original_paths,          # 儲存所有檔案路徑
             'is_merged': is_merged,
-            'file_count': file_count
+            'file_count': len(original_filenames)      # 使用實際檔案數量
         })
         
         # 返回報告 URL
@@ -7815,10 +7835,13 @@ def export_excel_report():
         import tempfile
         from openpyxl import Workbook
         from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-        from openpyxl.utils.dataframe import dataframe_to_rows
         
-        # 建立 Pandas DataFrame
+        # 準備資料
         logs = analysis_data.get('logs', [])
+        
+        # 生成檔案名稱
+        date_str = datetime.now().strftime('%Y%m%d')
+        original_filename = f"{date_str}_anr_tombstone_result.xlsx"
         
         # 準備資料
         excel_data = []
@@ -7826,10 +7849,10 @@ def export_excel_report():
             excel_data.append({
                 'SN': idx,
                 'Date': log.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-                '問題 set': log.get('problem_set', '-'),
+                'Problem set': log.get('problem_set', '-'),
                 'Type': log.get('type', ''),
                 'Process': log.get('process', ''),
-                'AI result': '-',  # 暫時沒有 AI 分析結果
+                'AI result': '-',
                 'Filename': log.get('filename', ''),
                 'Folder Path': log.get('folder_path', '')
             })
@@ -7845,7 +7868,7 @@ def export_excel_report():
             with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='ANR Tombstone Analysis', index=False)
                 
-                # 取得工作表並美化
+                # 美化 Excel
                 workbook = writer.book
                 worksheet = writer.sheets['ANR Tombstone Analysis']
                 
@@ -7853,7 +7876,7 @@ def export_excel_report():
                 column_widths = {
                     'A': 8,   # SN
                     'B': 20,  # Date
-                    'C': 20,  # 問題 set
+                    'C': 20,  # Problem set
                     'D': 12,  # Type
                     'E': 35,  # Process
                     'F': 30,  # AI result
@@ -7871,8 +7894,10 @@ def export_excel_report():
         file_info = {
             'excel_path': excel_path,
             'is_temp': True,
-            'original_filename': f"{datetime.now().strftime('%Y%m%d')}_anr_tombstone_result.xlsx",
-            'original_path': path
+            'original_filenames': [original_filename],  # 確保是列表格式
+            'original_paths': [f"分析結果: {path}"],   # 顯示分析的路徑
+            'is_merged': False,
+            'file_count': 1
         }
         
         analysis_cache.set(f"excel_report_{report_id}", file_info)
