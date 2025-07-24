@@ -117,22 +117,23 @@ EXCEL_REPORT_TEMPLATE = '''
             position: absolute;
             top: 30px;
             right: 30px;
-            background: white;
-            color: #2c5aa0;
-            border: none;
+            background: linear-gradient(135deg, #e8f0f8 0%, #d4e3f1 100%);  /* 北歐風淺藍灰漸層 */
+            color: #1e3a5f;  /* 深藍色文字 */
+            border: 1px solid #b8d2e8;  /* 淺藍邊框 */
             padding: 12px 24px;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
             font-weight: 600;
             transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 6px rgba(44, 90, 160, 0.15);
         }
         
         .export-html-btn:hover {
-            background: #f0f4f8;
+            background: linear-gradient(135deg, #d4e3f1 0%, #b8d2e8 100%);  /* hover 時稍深的漸層 */
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(44, 90, 160, 0.25);
+            border-color: #9db4d0;
         }
         
         .container {
@@ -142,7 +143,7 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .card {
-            background: white;
+            background: #fafbfc;  /* 非常淺的藍灰色，不是純白 */
             border-radius: 16px;
             box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
             margin-bottom: 25px;
@@ -168,7 +169,7 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .stat-card {
-            background: white;
+            background: #fafbfc;  /* 非常淺的藍灰色 */
             border-radius: 16px;
             box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
             padding: 28px;
@@ -234,7 +235,7 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         .chart-container {
-            background: white;
+            background: #fafbfc;  /* 非常淺的藍灰色 */
             border-radius: 12px;
             box-shadow: 0 2px 4px rgba(44, 90, 160, 0.08);
             padding: 25px;
@@ -276,7 +277,7 @@ EXCEL_REPORT_TEMPLATE = '''
 
         /* 表格樣式（與主頁面一致） */
         .logs-table {
-            background-color: white;
+            background-color: #fafbfc;  /* 非常淺的藍灰色 */
             border-radius: 12px;
             box-shadow: 0 2px 4px rgba(44, 90, 160, 0.08);
             overflow: hidden;
@@ -434,15 +435,15 @@ EXCEL_REPORT_TEMPLATE = '''
         }
         
         tr:hover {
-            background-color: #f5f8fb !important;
+            background-color: #f5f8fb !important;  /* 與樞紐分析表相同的 hover 效果 */
         }
         
         .anr-row {
-            background-color: #fffbf0 !important;  /* 淺黃色背景 */
+            background-color: #fff !important;
         }
         
         .tombstone-row {
-            background-color: #fff !important;
+            background-color: transparent !important;  /* 透明背景 */
         }
         
         /* 導航標籤 */
