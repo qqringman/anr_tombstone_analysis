@@ -1,2 +1,2 @@
-# anr_tombstone_analysis
-anr_tombstone_analysis
+pip freeze > requirements.txt
+pip3 install --break-system-packages -r requirements.txt
