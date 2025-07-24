@@ -9170,3 +9170,341 @@ def merge_multiple_excel():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/export-html-to-folder/<analysis_id>', methods=['POST'])
+def export_html_to_folder(analysis_id):
+    """將 HTML 報告儲存到指定資料夾"""
+    try:
+        data = request.json
+        output_path = data.get('output_path')
+        base_url = data.get('base_url', '')
+        
+        if not output_path:
+            return jsonify({'error': 'Missing output path'}), 400
+        
+        # 從快取獲取分析資料
+        analysis_data = analysis_cache.get(analysis_id)
+        if not analysis_data:
+            return jsonify({'error': 'Analysis data not found'}), 404
+        
+        # 獲取基礎路徑
+        base_path = ''
+        if analysis_data.get('path'):
+            base_path = analysis_data.get('path')
+        elif analysis_data.get('base_path'):
+            base_path = analysis_data.get('base_path')
+        
+        if not base_url:
+            base_url = f"{request.scheme}://{request.host}"
+        
+        # 創建 HTML 報告（使用與 export 函數相同的邏輯）
+        html_report = HTML_TEMPLATE
+        
+        # 在注入的腳本中修改檔案連結並自動載入資料
+        static_script = f'''
+<script>
+    // 靜態頁面標記
+    window.isStaticExport = true;
+    window.exportBaseUrl = "{base_url}";
+    window.basePath = "{base_path}";
+    
+    console.log('Initial basePath set to:', window.basePath);
+    
+    // 覆寫檔案連結點擊行為
+    window.addEventListener('click', function(e) {{
+        if (e.target.classList.contains('file-link') && !e.target.classList.contains('analyze-report-link')) {{
+            e.preventDefault();
+            const href = e.target.getAttribute('href');
+            if (href) {{
+                const fullUrl = href.startsWith('http') ? href : window.exportBaseUrl + href;
+                window.open(fullUrl, '_blank');
+            }}
+            return false;
+        }}
+    }}, true);
+</script>
+'''
+        
+        # Inject the data directly into the HTML
+        script_injection = static_script + f'''
+<script>
+    // 設定 base URL
+    window.exportBaseUrl = "{base_url}";
+    window.basePath = "{base_path}";
+    
+    // 保存分析報告相關資訊
+    window.vpAnalyzeOutputPath = {json.dumps(analysis_data.get('vp_analyze_output_path'))};
+    window.vpAnalyzeSuccess = {json.dumps(analysis_data.get('vp_analyze_success', False))};
+    
+    // 修改表格更新函數以使用完整 URL
+    const originalUpdateFilesTable = window.updateFilesTable;
+    const originalUpdateLogsTable = window.updateLogsTable;
+    
+    window.updateFilesTable = function() {{
+        if (originalUpdateFilesTable) {{
+            originalUpdateFilesTable.call(this);
+        }}
+        
+        // 替換所有檔案連結為完整連結
+        document.querySelectorAll('#filesTableBody .file-link').forEach(link => {{
+            const href = link.getAttribute('href');
+            if (href && !href.startsWith('http')) {{
+                link.setAttribute('href', window.exportBaseUrl + href);
+                link.setAttribute('target', '_blank');
+            }}
+        }});
+        
+        // 添加分析報告連結
+        if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {{
+            const startIndex = (filesPage - 1) * itemsPerPage;
+            const pageData = filteredFiles.slice(startIndex, startIndex + itemsPerPage);
+            
+            document.querySelectorAll('#filesTableBody tr').forEach((row, index) => {{
+                const fileCell = row.cells[5];
+                if (fileCell && !fileCell.querySelector('.analyze-report-link') && index < pageData.length) {{
+                    const fileData = pageData[index];
+                    const filePath = fileData.filepath || fileData.file;
+                    
+                    if (filePath) {{
+                        let relativePath = filePath;
+                        const normalizedBasePath = window.basePath.replace(/\\/+$/, '');
+                        const normalizedFilePath = filePath.replace(/\\/+$/, '');
+                        
+                        if (normalizedFilePath.includes(normalizedBasePath)) {{
+                            const basePathIndex = normalizedFilePath.indexOf(normalizedBasePath);
+                            relativePath = normalizedFilePath.substring(basePathIndex + normalizedBasePath.length);
+                        }}
+                        
+                        relativePath = relativePath.replace(/^\\/+/, '');
+                        const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                        const analyzeReportUrl = window.exportBaseUrl + '/view-file?path=' + encodeURIComponent(analyzedFilePath);
+                        
+                        const analyzeLink = document.createElement('a');
+                        analyzeLink.href = analyzeReportUrl;
+                        analyzeLink.target = '_blank';
+                        analyzeLink.className = 'file-link analyze-report-link';
+                        analyzeLink.textContent = ' (分析報告)';
+                        analyzeLink.style.cssText = 'color: #28a745; font-size: 0.9em;';
+                        fileCell.appendChild(analyzeLink);
+                    }}
+                }}
+            }});
+        }}
+    }};
+    
+    window.updateLogsTable = function() {{
+        if (originalUpdateLogsTable) {{
+            originalUpdateLogsTable.call(this);
+        }}
+        
+        // 替換所有檔案連結為完整連結
+        document.querySelectorAll('#logsTableBody .file-link').forEach(link => {{
+            const href = link.getAttribute('href');
+            if (href && !href.startsWith('http')) {{
+                link.setAttribute('href', window.exportBaseUrl + href);
+                link.setAttribute('target', '_blank');
+            }}
+        }});
+        
+        // 添加分析報告連結
+        if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {{
+            const startIndex = (logsPage - 1) * itemsPerPage;
+            const pageData = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+            
+            document.querySelectorAll('#logsTableBody tr').forEach((row, index) => {{
+                const fileCell = row.cells[6];
+                if (fileCell && !fileCell.querySelector('.analyze-report-link') && index < pageData.length) {{
+                    const logData = pageData[index];
+                    const filePath = logData.file;
+                    
+                    if (filePath) {{
+                        let relativePath = filePath;
+                        const normalizedBasePath = window.basePath.replace(/\\/+$/, '');
+                        const normalizedFilePath = filePath.replace(/\\/+$/, '');
+                        
+                        if (normalizedFilePath.includes(normalizedBasePath)) {{
+                            const basePathIndex = normalizedFilePath.indexOf(normalizedBasePath);
+                            relativePath = normalizedFilePath.substring(basePathIndex + normalizedBasePath.length);
+                        }}
+                        
+                        relativePath = relativePath.replace(/^\\/+/, '');
+                        const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                        const analyzeReportUrl = window.exportBaseUrl + '/view-file?path=' + encodeURIComponent(analyzedFilePath);
+                        
+                        const analyzeLink = document.createElement('a');
+                        analyzeLink.href = analyzeReportUrl;
+                        analyzeLink.target = '_blank';
+                        analyzeLink.className = 'file-link analyze-report-link';
+                        analyzeLink.textContent = ' (分析報告)';
+                        analyzeLink.style.cssText = 'color: #28a745; font-size: 0.9em;';
+                        fileCell.appendChild(analyzeLink);
+                    }}
+                }}
+            }});
+        }}
+    }};
+    
+    // Injected analysis data
+    window.injectedData = {json.dumps({
+        'analysis_id': analysis_data.get('analysis_id', analysis_id),
+        'total_files': analysis_data['total_files'],
+        'files_with_cmdline': analysis_data['files_with_cmdline'],
+        'anr_folders': analysis_data['anr_folders'],
+        'tombstone_folders': analysis_data['tombstone_folders'],
+        'statistics': analysis_data['statistics'],
+        'file_statistics': analysis_data['file_statistics'],
+        'logs': analysis_data['logs'],
+        'analysis_time': analysis_data['analysis_time'],
+        'used_grep': analysis_data['used_grep'],
+        'zip_files_extracted': analysis_data.get('zip_files_extracted', 0),
+        'anr_subject_count': analysis_data.get('anr_subject_count', 0),
+        'vp_analyze_output_path': analysis_data.get('vp_analyze_output_path'),
+        'vp_analyze_success': analysis_data.get('vp_analyze_success', False)
+    })};
+    
+    // Auto-load the data when page loads
+    window.addEventListener('DOMContentLoaded', function() {{
+        // 隱藏控制面板並顯示結果
+        document.querySelector('.control-panel').style.display = 'none';
+        document.getElementById('results').style.display = 'block';
+        
+        // 隱藏歷史區塊
+        const historySection = document.getElementById('historySection');
+        if (historySection) historySection.style.display = 'none';
+        
+        // 隱藏不需要的按鈕
+        document.getElementById('exportHtmlBtn').style.display = 'none';
+        ['exportExcelBtn', 'exportExcelReportBtn', 'mergeExcelBtn', 'downloadCurrentZipBtn'].forEach(id => {{
+            const btn = document.getElementById(id);
+            if (btn) btn.style.display = 'none';
+        }});
+        
+        // 設定並顯示分析結果按鈕
+        if (window.injectedData.vp_analyze_success && window.injectedData.vp_analyze_output_path) {{
+            const analysisBtn = document.getElementById('analysisResultBtn');
+            if (analysisBtn) {{
+                const reportUrl = window.exportBaseUrl + '/view-analysis-report?path=' + encodeURIComponent(window.injectedData.vp_analyze_output_path);
+                analysisBtn.href = reportUrl;
+                analysisBtn.target = '_blank';
+                analysisBtn.onclick = null;
+            }}
+        }}
+        
+        // 載入資料
+        currentAnalysisId = window.injectedData.analysis_id;
+        allLogs = window.injectedData.logs.sort((a, b) => {{
+            if (!a.timestamp && !b.timestamp) return 0;
+            if (!a.timestamp) return 1;
+            if (!b.timestamp) return -1;
+            return a.timestamp.localeCompare(b.timestamp);
+        }});
+        allSummary = window.injectedData.statistics.type_process_summary || [];
+        allFileStats = window.injectedData.file_statistics || [];
+        
+        // 生成程序統計資料
+        const processOnlyData = {{}};
+        window.injectedData.statistics.type_process_summary.forEach(item => {{
+            if (!processOnlyData[item.process]) {{
+                processOnlyData[item.process] = {{
+                    count: 0,
+                    problem_sets: new Set()
+                }};
+            }}
+            processOnlyData[item.process].count += item.count;
+            
+            if (item.problem_sets && Array.isArray(item.problem_sets)) {{
+                item.problem_sets.forEach(set => {{
+                    processOnlyData[item.process].problem_sets.add(set);
+                }});
+            }}
+        }});
+        
+        allProcessSummary = Object.entries(processOnlyData)
+            .map(([process, data]) => ({{ 
+                process, 
+                count: data.count,
+                problem_sets: Array.from(data.problem_sets).sort()
+            }}))
+            .sort((a, b) => b.count - a.count);
+        
+        // Reset filters and pagination
+        resetFiltersAndPagination();
+        
+        // Update UI
+        updateResults(window.injectedData);
+        
+        // 顯示導覽相關按鈕
+        setTimeout(() => {{
+            const navToggleBtn = document.getElementById('navToggleBtn');
+            if (navToggleBtn) navToggleBtn.classList.add('show');
+            
+            const globalToggleBtn = document.getElementById('globalToggleBtn');
+            if (globalToggleBtn) globalToggleBtn.classList.add('show');
+            
+            const backToTopBtn = document.getElementById('backToTop');
+            if (backToTopBtn) backToTopBtn.classList.add('show');
+            
+            const analysisResultBtn = document.getElementById('analysisResultBtn');
+            if (analysisResultBtn && window.injectedData.vp_analyze_success) {{
+                analysisResultBtn.classList.add('show');
+            }}
+        }}, 300);
+        
+        // 監聽滾動事件
+        window.addEventListener('scroll', function() {{
+            const analysisResultBtn = document.getElementById('analysisResultBtn');
+            if (analysisResultBtn && window.injectedData.vp_analyze_success) {{
+                if (window.pageYOffset > 300) {{
+                    analysisResultBtn.classList.add('show');
+                }} else {{
+                    analysisResultBtn.classList.remove('show');
+                }}
+            }}
+        }});
+        
+        // Show analysis info message
+        let message = `分析完成！共掃描 ${{window.injectedData.total_files}} 個檔案，找到 ${{window.injectedData.anr_subject_count || 0}} 個包含 ANR 的檔案，找到 ${{window.injectedData.files_with_cmdline - (window.injectedData.anr_subject_count || 0)}} 個包含 Tombstone 的檔案`;
+        message += `<br>分析耗時: ${{window.injectedData.analysis_time}} 秒`;
+        if (window.injectedData.used_grep) {{
+            message += '<span class="grep-badge">使用 grep 加速</span>';
+        }} else {{
+            message += '<span class="grep-badge no-grep-badge">未使用 grep</span>';
+        }}
+        
+        if (window.injectedData.vp_analyze_success) {{
+            message += '<br><span style="color: #28a745;">✓ 詳細分析報告已生成</span>';
+        }}
+        
+        message += `<br><br>報告生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`;
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'success';
+        infoDiv.innerHTML = message;
+        document.querySelector('.header').appendChild(infoDiv);
+        
+        document.getElementById('navBar').classList.remove('show');
+    }});
+</script>
+'''
+
+        # Insert the script before closing body tag
+        html_report = html_report.replace('</body>', script_injection + '</body>')
+        
+        # 儲存 HTML 到分析資料夾
+        html_save_path = os.path.join(output_path, 'all_anr_tombstone_result.html')
+        with open(html_save_path, 'w', encoding='utf-8') as f:
+            f.write(html_report)
+        
+        print(f"已儲存 HTML 檔案到: {html_save_path}")
+        
+        return jsonify({
+            'success': True,
+            'saved_path': html_save_path
+        })
+        
+    except Exception as e:
+        print(f"Error in export_html_to_folder: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+        
