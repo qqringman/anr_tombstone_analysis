@@ -4761,6 +4761,32 @@ HTML_TEMPLATE = r'''
                 if (data.files_with_cmdline === 0) {
                     showMessage('警告: 在 anr/ 和 tombstones/ 資料夾中沒有找到包含 Cmd line: 或 Cmdline: 的檔案', 'error');
                     document.getElementById('analyzeBtn').disabled = false;
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // 確保結果區域隱藏
+                    document.getElementById('results').style.display = 'none';
+                    
+                    // 確保所有匯出按鈕都隱藏
+                    const exportButtons = [
+                        'exportExcelBtn',
+                        'exportExcelReportBtn', 
+                        'mergeExcelBtn',
+                        'exportHtmlBtn',
+                        'downloadCurrentZipBtn'
+                    ];
+                    
+                    exportButtons.forEach(id => {
+                        const btn = document.getElementById(id);
+                        if (btn) btn.style.display = 'none';
+                    });
+                    
+                    // 確保導覽相關按鈕也隱藏
+                    const navButtons = ['backToTop', 'navToggleBtn', 'globalToggleBtn', 'analysisResultBtn'];
+                    navButtons.forEach(id => {
+                        const btn = document.getElementById(id);
+                        if (btn) btn.classList.remove('show');
+                    });
+                    
                     return;
                 }
                 
@@ -4849,8 +4875,33 @@ HTML_TEMPLATE = r'''
                 // Update UI
                 updateResults(data);
                 
-                // Enable export buttons
-                document.getElementById('exportHtmlBtn').style.display = 'block';
+                // 只有在有資料時才顯示匯出按鈕
+                if (data.files_with_cmdline > 0) {
+                    document.getElementById('exportHtmlBtn').style.display = 'block';
+                    
+                    // 其他按鈕的顯示邏輯也要加入條件判斷
+                    if (data.vp_analyze_success && data.vp_analyze_output_path) {
+                        const exportExcelBtn = document.getElementById('exportExcelBtn');
+                        if (exportExcelBtn) {
+                            exportExcelBtn.style.display = 'block';
+                        }
+                        
+                        const exportExcelReportBtn = document.getElementById('exportExcelReportBtn');
+                        if (exportExcelReportBtn) {
+                            exportExcelReportBtn.style.display = 'block';
+                        }
+                        
+                        const mergeExcelBtn = document.getElementById('mergeExcelBtn');
+                        if (mergeExcelBtn) {
+                            mergeExcelBtn.style.display = 'block';
+                        }
+                        
+                        const downloadCurrentZipBtn = document.getElementById('downloadCurrentZipBtn');
+                        if (downloadCurrentZipBtn) {
+                            downloadCurrentZipBtn.style.display = 'block';
+                        }
+                    }
+                }
                 
                 let message = `分析完成！共掃描 ${data.total_files} 個檔案，找到 ${data.anr_subject_count} 個包含 ANR 的檔案，找到 ${data.files_with_cmdline - data.anr_subject_count} 個包含 Tombstone 的檔案`;
                 message += `<br>分析耗時: ${data.analysis_time} 秒`;
@@ -5001,6 +5052,28 @@ HTML_TEMPLATE = r'''
 
         function updateResults(data) {
 
+            // 新增：檢查是否有資料
+            if (!data || data.files_with_cmdline === 0) {
+                console.log('No data to display');
+                document.getElementById('results').style.display = 'none';
+                
+                // 確保所有按鈕都隱藏
+                const allButtons = [
+                    'exportExcelBtn',
+                    'exportExcelReportBtn',
+                    'mergeExcelBtn',
+                    'exportHtmlBtn',
+                    'downloadCurrentZipBtn'
+                ];
+                
+                allButtons.forEach(id => {
+                    const btn = document.getElementById(id);
+                    if (btn) btn.style.display = 'none';
+                });
+                
+                return;
+            }
+            
             // === 確保 basePath 被設置 ===
             if (!window.basePath && data.path) {
                 window.basePath = data.path;
@@ -7761,6 +7834,23 @@ HTML_TEMPLATE = r'''
             } else if (tab === 'files') {
                 document.getElementById('filesTabBtn').classList.add('active');
                 document.getElementById('filesTabContent').classList.add('active');
+                
+                // 新增：切換到檔案選擇頁籤時，檢查是否應該顯示按鈕
+                if (!window.hasCurrentAnalysis) {
+                    // 如果沒有當前分析結果，確保按鈕隱藏
+                    const buttons = [
+                        'exportExcelBtn',
+                        'exportExcelReportBtn',
+                        'mergeExcelBtn',
+                        'exportHtmlBtn',
+                        'downloadCurrentZipBtn'
+                    ];
+                    
+                    buttons.forEach(id => {
+                        const btn = document.getElementById(id);
+                        if (btn) btn.style.display = 'none';
+                    });
+                }
             }
         }
 
@@ -7972,6 +8062,53 @@ HTML_TEMPLATE = r'''
                 return;
             }
             
+            // === 新增：重置狀態和隱藏按鈕 ===
+            window.hasCurrentAnalysis = false;
+            window.currentAnalysisExported = false;
+
+            // 隱藏所有匯出按鈕
+            const headerButtons = [
+                'exportExcelBtn',
+                'exportExcelReportBtn',
+                'mergeExcelBtn',
+                'exportHtmlBtn',
+                'downloadCurrentZipBtn'
+            ];
+
+            headerButtons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.style.display = 'none';
+                }
+            });
+
+            // 隱藏結果區域
+            document.getElementById('results').style.display = 'none';
+            
+            // 隱藏歷史區塊
+            document.getElementById('historySection').style.display = 'none';
+
+            // 隱藏所有浮動按鈕
+            const floatingButtons = [
+                'backToTop',
+                'navToggleBtn', 
+                'globalToggleBtn',
+                'analysisResultBtn'
+            ];
+            
+            floatingButtons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.classList.remove('show');
+                }
+            });
+            
+            // 確保導覽列也關閉
+            const navBar = document.getElementById('navBar');
+            if (navBar && navBar.classList.contains('show')) {
+                toggleNavBar();
+            }
+            
             const analyzeBtn = document.getElementById('mainFileAnalysisBtn');
             analyzeBtn.disabled = true;
             analyzeBtn.textContent = '準備中...';
@@ -8023,7 +8160,41 @@ HTML_TEMPLATE = r'''
                         const analyzeData = await analyzeResponse.json();
                         
                         if (analyzeResponse.ok) {
-                            // 直接處理分析結果
+                            // === 新增：檢查是否有找到資料 ===
+                            if (analyzeData.files_with_cmdline === 0) {
+                                // 隱藏所有匯出按鈕
+                                headerButtons.forEach(id => {
+                                    const btn = document.getElementById(id);
+                                    if (btn) {
+                                        btn.style.display = 'none';
+                                    }
+                                });
+                                
+                                // 隱藏導覽相關按鈕
+                                floatingButtons.forEach(id => {
+                                    const btn = document.getElementById(id);
+                                    if (btn) {
+                                        btn.classList.remove('show');
+                                    }
+                                });
+                                
+                                // 隱藏結果區域
+                                document.getElementById('results').style.display = 'none';
+                                
+                                // 顯示錯誤訊息
+                                showMessage('警告: 在選擇的檔案中沒有找到包含 Cmd line: 或 Cmdline: 的檔案', 'error');
+                                
+                                // 清除選擇
+                                clearMainFileSelection();
+                                
+                                // 重置狀態
+                                window.hasCurrentAnalysis = false;
+                                window.currentAnalysisExported = false;
+                                
+                                return; // 提早結束函數
+                            }
+                            
+                            // 只有在有資料時才繼續處理
                             currentAnalysisId = analyzeData.analysis_id;
                             
                             // === 重要：處理檔案路徑映射 ===
@@ -8089,102 +8260,109 @@ HTML_TEMPLATE = r'''
                             // Update UI
                             updateResults(analyzeData);
                             
-                            // === 新增：強制重新渲染表格以確保分析報告連結顯示 ===
-                            if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
-                                // 第一次渲染
-                                setTimeout(() => {
-                                    console.log('第一次重新渲染表格...');
-                                    updateFilesTable();
-                                    updateLogsTable();
-                                    
-                                    // 檢查是否成功添加了分析報告連結
-                                    const analyzeLinks = document.querySelectorAll('.analyze-report-link');
-                                    console.log('找到的分析報告連結數量:', analyzeLinks.length);
-                                    
-                                    // 如果沒有找到連結，再次嘗試
-                                    if (analyzeLinks.length === 0) {
-                                        setTimeout(() => {
-                                            console.log('第二次重新渲染表格...');
-                                            
-                                            // 確保路徑變數仍然正確
-                                            window.basePath = originalTempPath;
-                                            window.vpAnalyzeOutputPath = analyzeData.vp_analyze_output_path;
-                                            
-                                            updateFilesTable();
-                                            updateLogsTable();
-                                            
-                                            // 再次檢查
-                                            const retryLinks = document.querySelectorAll('.analyze-report-link');
-                                            console.log('重試後找到的分析報告連結數量:', retryLinks.length);
-                                        }, 1000);
-                                    }
-                                }, 500);
+                            // === 修改：只有在有資料且分析成功時才顯示按鈕 ===
+                            if (analyzeData.files_with_cmdline > 0) {
+                                // HTML 匯出按鈕只需要有資料就顯示
+                                document.getElementById('exportHtmlBtn').style.display = 'block';
                                 
-                                // 額外的除錯：檢查路徑計算
-                                setTimeout(() => {
-                                    console.log('=== 路徑計算除錯 ===');
-                                    if (allLogs.length > 0) {
-                                        const testLog = allLogs[0];
-                                        const testPath = testLog.file;
-                                        console.log('測試檔案路徑:', testPath);
+                                // 其他按鈕需要 vp_analyze 成功
+                                if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
+                                    analysisIndexPath = '/view-analysis-report?path=' + encodeURIComponent(analyzeData.vp_analyze_output_path);
+                                    const analysisBtn = document.getElementById('analysisResultBtn');
+                                    analysisBtn.href = analysisIndexPath;
+                                    
+                                    // 顯示匯出按鈕
+                                    document.getElementById('exportExcelBtn').style.display = 'block';
+                                    document.getElementById('exportExcelReportBtn').style.display = 'block';
+                                    document.getElementById('mergeExcelBtn').style.display = 'block';
+                                    document.getElementById('downloadCurrentZipBtn').style.display = 'block';
+                                    
+                                    // 自動產生各種格式的檔案
+                                    try {
+                                        await autoExportExcel(analyzeData.vp_analyze_output_path);
+                                        console.log('已自動產生 Excel 檔案');
+                                    } catch (error) {
+                                        console.error('自動產生 Excel 失敗:', error);
+                                    }
+                                    
+                                    try {
+                                        await autoExportHTML(analyzeData.vp_analyze_output_path);
+                                        console.log('已自動產生 HTML 檔案');
+                                    } catch (error) {
+                                        console.error('自動產生 HTML 失敗:', error);
+                                    }
+                                    
+                                    try {
+                                        await autoExportExcelReport(analyzeData.vp_analyze_output_path);
+                                        console.log('已自動產生 Excel 報表');
+                                    } catch (error) {
+                                        console.error('自動產生 Excel 報表失敗:', error);
+                                    }
+                                    
+                                    // === 新增：強制重新渲染表格以確保分析報告連結顯示 ===
+                                    // 第一次渲染
+                                    setTimeout(() => {
+                                        console.log('第一次重新渲染表格...');
+                                        updateFilesTable();
+                                        updateLogsTable();
                                         
-                                        // 模擬路徑計算
-                                        let relativePath = testPath;
-                                        const normalizedBasePath = window.basePath.replace(/\/+$/, '');
-                                        const normalizedFilePath = testPath.replace(/\/+$/, '');
+                                        // 檢查是否成功添加了分析報告連結
+                                        const analyzeLinks = document.querySelectorAll('.analyze-report-link');
+                                        console.log('找到的分析報告連結數量:', analyzeLinks.length);
                                         
-                                        console.log('normalizedBasePath:', normalizedBasePath);
-                                        console.log('normalizedFilePath:', normalizedFilePath);
-                                        
-                                        if (normalizedFilePath.includes(normalizedBasePath)) {
-                                            const basePathIndex = normalizedFilePath.indexOf(normalizedBasePath);
-                                            relativePath = normalizedFilePath.substring(basePathIndex + normalizedBasePath.length);
-                                            console.log('計算出的相對路徑:', relativePath);
+                                        // 如果沒有找到連結，再次嘗試
+                                        if (analyzeLinks.length === 0) {
+                                            setTimeout(() => {
+                                                console.log('第二次重新渲染表格...');
+                                                
+                                                // 確保路徑變數仍然正確
+                                                window.basePath = originalTempPath;
+                                                window.vpAnalyzeOutputPath = analyzeData.vp_analyze_output_path;
+                                                
+                                                updateFilesTable();
+                                                updateLogsTable();
+                                                
+                                                // 再次檢查
+                                                const retryLinks = document.querySelectorAll('.analyze-report-link');
+                                                console.log('重試後找到的分析報告連結數量:', retryLinks.length);
+                                            }, 1000);
                                         }
-                                        
-                                        relativePath = relativePath.replace(/^\/+/, '');
-                                        const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
-                                        console.log('預期的分析檔案路徑:', analyzedFilePath);
-                                    }
-                                }, 2000);
-                            }
-                            
-                            // 顯示相關按鈕
-                            if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
-                                analysisIndexPath = '/view-analysis-report?path=' + encodeURIComponent(analyzeData.vp_analyze_output_path);
-                                const analysisBtn = document.getElementById('analysisResultBtn');
-                                analysisBtn.href = analysisIndexPath;
-                                
-                                // 顯示匯出按鈕
-                                document.getElementById('exportExcelBtn').style.display = 'block';
-                                document.getElementById('exportExcelReportBtn').style.display = 'block';
-                                document.getElementById('mergeExcelBtn').style.display = 'block';
-                                document.getElementById('downloadCurrentZipBtn').style.display = 'block';
-                                
-                                // 自動產生各種格式的檔案
-                                try {
-                                    await autoExportExcel(analyzeData.vp_analyze_output_path);
-                                    console.log('已自動產生 Excel 檔案');
-                                } catch (error) {
-                                    console.error('自動產生 Excel 失敗:', error);
-                                }
-                                
-                                try {
-                                    await autoExportHTML(analyzeData.vp_analyze_output_path);
-                                    console.log('已自動產生 HTML 檔案');
-                                } catch (error) {
-                                    console.error('自動產生 HTML 失敗:', error);
-                                }
-                                
-                                try {
-                                    await autoExportExcelReport(analyzeData.vp_analyze_output_path);
-                                    console.log('已自動產生 Excel 報表');
-                                } catch (error) {
-                                    console.error('自動產生 Excel 報表失敗:', error);
+                                    }, 500);
+                                    
+                                    // 額外的除錯：檢查路徑計算
+                                    setTimeout(() => {
+                                        console.log('=== 路徑計算除錯 ===');
+                                        if (allLogs.length > 0) {
+                                            const testLog = allLogs[0];
+                                            const testPath = testLog.file;
+                                            console.log('測試檔案路徑:', testPath);
+                                            
+                                            // 模擬路徑計算
+                                            let relativePath = testPath;
+                                            const normalizedBasePath = window.basePath.replace(/\/+$/, '');
+                                            const normalizedFilePath = testPath.replace(/\/+$/, '');
+                                            
+                                            console.log('normalizedBasePath:', normalizedBasePath);
+                                            console.log('normalizedFilePath:', normalizedFilePath);
+                                            
+                                            // 如果檔案路徑包含基礎路徑，則提取相對路徑
+                                            if (normalizedFilePath.includes(normalizedBasePath)) {
+                                                // 找到基礎路徑的位置
+                                                const basePathIndex = normalizedFilePath.indexOf(normalizedBasePath);
+                                                console.log('basePathIndex:', basePathIndex);
+                                                
+                                                // 提取基礎路徑之後的部分
+                                                relativePath = normalizedFilePath.substring(basePathIndex + normalizedBasePath.length);
+                                                console.log('計算出的相對路徑:', relativePath);
+                                            }
+                                            
+                                            relativePath = relativePath.replace(/^\/+/, '');
+                                            const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                                            console.log('預期的分析檔案路徑:', analyzedFilePath);
+                                        }
+                                    }, 2000);
                                 }
                             }
-                            
-                            document.getElementById('exportHtmlBtn').style.display = 'block';
                             
                             let message = `分析完成！共掃描 ${analyzeData.total_files} 個檔案，找到 ${analyzeData.anr_subject_count || 0} 個包含 ANR 的檔案，找到 ${analyzeData.files_with_cmdline - (analyzeData.anr_subject_count || 0)} 個包含 Tombstone 的檔案`;
                             message += `<br>分析耗時: ${analyzeData.analysis_time} 秒`;
@@ -8532,6 +8710,26 @@ def analyze():
             # 執行分析
             results = analyzer.analyze_logs(path)
 
+            # 檢查是否有找到資料
+            if results.get('files_with_cmdline', 0) == 0:
+                # 立即釋放鎖
+                analysis_lock_manager.release_lock(path, owner_id)
+                
+                return jsonify({
+                    'analysis_id': analysis_id,
+                    'total_files': results['total_files'],
+                    'files_with_cmdline': 0,
+                    'anr_folders': 0,
+                    'tombstone_folders': 0,
+                    'statistics': {'type_process_summary': [], 'by_type': {}, 'by_date': {}, 'by_hour': {}},
+                    'file_statistics': [],
+                    'logs': [],
+                    'analysis_time': results.get('analysis_time', 0),
+                    'used_grep': results.get('used_grep', False),
+                    'anr_subject_count': 0,
+                    'message': '沒有找到包含 Cmd line: 或 Cmdline: 的檔案'
+                })
+                
             # 重要：保存基礎路徑到結果中
             results['path'] = path  # 確保保存原始輸入路徑
             results['base_path'] = path  # 也保存為 base_path
