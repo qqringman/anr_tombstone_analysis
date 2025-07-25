@@ -2500,6 +2500,99 @@ HTML_TEMPLATE = r'''
         background: #f0f0f0;
     }
 
+    /* ===== 精緻版頁籤樣式 (紫色主題) ===== */
+    .tabs-container {
+        display: flex;
+        margin-bottom: 30px;
+        padding: 5px;
+        background: #f0f2f5;
+        border-radius: 16px;
+        position: relative;
+    }
+
+    .tab-button {
+        flex: 1;
+        padding: 16px 24px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        color: #666;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        z-index: 2;
+        border-radius: 12px;
+        margin: 0 2px;
+    }
+
+    .tab-button:hover:not(.active) {
+        color: #667eea;
+        background: rgba(102, 126, 234, 0.08);
+    }
+
+    .tab-button.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    /* 移除滑動指示器，因為我們直接用漸變背景 */
+    .tabs-container::before {
+        display: none;
+    }
+
+    /* 為活動頁籤添加光澤效果 */
+    .tab-button.active::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 50%;
+        background: linear-gradient(to bottom, rgba(255,255,255,0.2), transparent);
+        border-radius: 12px 12px 0 0;
+        pointer-events: none;
+    }
+
+    /* 頁籤內容 */
+    .tab-content {
+        display: none;
+        padding: 30px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .tab-content.active {
+        display: block;
+        animation: slideIn 0.4s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* 響應式設計 */
+    @media (max-width: 768px) {
+        .tabs-container {
+            flex-direction: column;
+            padding: 8px;
+        }
+        
+        .tab-button {
+            margin: 4px 0;
+            width: 100%;
+        }
+    }
+
     </style>      
 </head>
 <body>
@@ -2541,35 +2634,86 @@ HTML_TEMPLATE = r'''
             <span class="nav-icon">☰</span>
         </div>        
         <div class="control-panel">
-            <div class="input-group">
-                <label for="pathInput">📁 <span style="margin-left: 5px;">選擇基礎路徑 (包含 anr/ 或 tombstones/ 子資料夾):</span></label>
-                <input type="text" id="pathInput" placeholder="/path/to/logs" value="/R306_ShareFolder/nightrun_log/Demo_stress_Test_log/2025" autocomplete="off">
-                <div id="pathAutocomplete" class="path-autocomplete"></div>
-            </div>
-            <small style="display: block; margin-top: 8px;">
-                <h2 style="margin-bottom:10px">✨ 功能特色</h2>
-                <ul>
-                    <li><span class="icon">🔍</span> <strong>路徑自動建議：</strong> 當您輸入時，工具會自動建議可用的子資料夾，讓您更輕鬆地導航到所需的目錄。</li>
-                    <li><span class="icon">📂</span> <strong>自動解壓縮 ZIP 檔案：</strong> 指定路徑下的所有 ZIP 檔案將會自動解壓縮，方便您的操作。</li>
-                    <li><span class="icon">🔄</span> <strong>遞迴資料夾搜尋：</strong> 工具會遞迴搜尋所有 <strong>anr</strong> 和 <strong>tombstones</strong> 資料夾，確保不會遺漏任何相關的紀錄檔資料。</li>
-                    <li><span class="icon">📜</span> <strong>彈性解析：</strong> ANR 檔案搜尋 "Subject:"，Tombstone 檔案搜尋 "Cmd line:" 或 "Cmdline:"</li>
-                    <li><span class="icon">👆</span> <strong>可點擊檔案名稱：</strong> 只需點擊檔案名稱，即可輕鬆查看任何紀錄檔的內容。</li>
-                </ul>
-                <h2 style="margin-top:10px;margin-bottom:10px">💻 支援路徑格式</h2>
-                <div class="path-format">
-                    <p><strong>Linux/Unix：</strong> <code>/R306_ShareFolder/nightrun_log/Demo_stress_Test_log</code></p>
-                </div>
-            </small>                
-            <div class="button-group">
-                <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
-                <button onclick="openLoadExcelDialog()" id="loadExcelBtn" class="load-excel-btn">📊 載入 Excel</button>
-                <button onclick="openMergeDialog()" id="mergeExcelMainBtn" class="merge-excel-btn" style="display: inline-flex; position: static; background: #17a2b8;">
-                    💹 合併 Excel
+            <!-- 頁籤按鈕 -->
+            <div class="tabs-container">
+                <button class="tab-button active" onclick="switchAnalysisTab('path')" id="pathTabBtn">
+                    📁 路徑分析
                 </button>
-                <button onclick="openFileSelectDialog()" id="selectFilesBtn" class="select-files-btn">
+                <!-- 加入第二個頁籤按鈕 -->
+                <button class="tab-button" onclick="switchAnalysisTab('files')" id="filesTabBtn">
                     📂 選擇檔案/資料夾
-                </button>                                
-            </div>    
+                </button>
+            </div>
+            
+            <!-- 路徑分析頁籤內容 -->
+            <div class="tab-content active" id="pathTabContent">
+                <div class="input-group">
+                    <label for="pathInput">📁 <span style="margin-left: 5px;">選擇基礎路徑 (包含 anr/ 或 tombstones/ 子資料夾):</span></label>
+                    <input type="text" id="pathInput" placeholder="/path/to/logs" value="/R306_ShareFolder/nightrun_log/Demo_stress_Test_log/2025" autocomplete="off">
+                    <div id="pathAutocomplete" class="path-autocomplete"></div>
+                </div>
+                <small style="display: block; margin-top: 8px;">
+                    <h2 style="margin-bottom:10px">✨ 功能特色</h2>
+                    <ul>
+                        <li><span class="icon">🔍</span> <strong>路徑自動建議：</strong> 當您輸入時，工具會自動建議可用的子資料夾，讓您更輕鬆地導航到所需的目錄。</li>
+                        <li><span class="icon">📂</span> <strong>自動解壓縮 ZIP 檔案：</strong> 指定路徑下的所有 ZIP 檔案將會自動解壓縮，方便您的操作。</li>
+                        <li><span class="icon">🔄</span> <strong>遞迴資料夾搜尋：</strong> 工具會遞迴搜尋所有 <strong>anr</strong> 和 <strong>tombstones</strong> 資料夾，確保不會遺漏任何相關的紀錄檔資料。</li>
+                        <li><span class="icon">📜</span> <strong>彈性解析：</strong> ANR 檔案搜尋 "Subject:"，Tombstone 檔案搜尋 "Cmd line:" 或 "Cmdline:"</li>
+                        <li><span class="icon">👆</span> <strong>可點擊檔案名稱：</strong> 只需點擊檔案名稱，即可輕鬆查看任何紀錄檔的內容。</li>
+                    </ul>
+                    <h2 style="margin-top:10px;margin-bottom:10px">💻 支援路徑格式</h2>
+                    <div class="path-format">
+                        <p><strong>Linux/Unix：</strong> <code>/R306_ShareFolder/nightrun_log/Demo_stress_Test_log</code></p>
+                    </div>
+                </small>
+                <div class="button-group">
+                    <button onclick="analyzeLogs()" id="analyzeBtn">開始分析</button>
+                    <button onclick="openLoadExcelDialog()" id="loadExcelBtn" class="load-excel-btn">📊 載入 Excel</button>
+                    <button onclick="openMergeDialog()" id="mergeExcelMainBtn" class="merge-excel-btn" style="display: inline-flex; position: static; background: #17a2b8;">
+                        💹 合併 Excel
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 選擇檔案/資料夾頁籤內容 -->
+            <div class="tab-content" id="filesTabContent">
+                <div class="files-selection-area">
+                    <!-- 拖曳區域 -->
+                    <div class="merge-drop-zone" id="mainFileSelectDropZone" style="margin-bottom: 20px;">
+                        <div class="drop-zone-content">
+                            <div class="drop-icon">📂</div>
+                            <p>拖曳檔案或資料夾到這裡</p>
+                            <p class="drop-zone-hint">支援任何檔案格式</p>
+                            <input type="file" id="mainFileSelectInput" style="display: none;" multiple>
+                            <input type="file" id="mainFolderSelectInput" style="display: none;" webkitdirectory directory multiple>
+                            <button class="btn-select-file" id="mainSelectLocalFilesBtn">選擇檔案</button>
+                            <button class="btn-select-file" id="mainSelectLocalFolderBtn" style="margin-left: 10px;">選擇資料夾</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 已選擇的檔案/資料夾列表 -->
+                    <div class="selected-items-section" id="mainSelectedItemsSection" style="display: none;">
+                        <h3>已選擇的項目</h3>
+                        <div class="selected-items-list" id="mainSelectedItemsList"></div>
+                    </div>
+                    
+                    <!-- 選項設定 -->
+                    <div class="options-section" style="margin-top: 20px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="mainAutoGroupFiles" checked style="margin-right: 8px;">
+                            自動將獨立的 ANR/Tombstone 檔案分組
+                        </label>
+                    </div>
+                </div>
+                <div class="button-group" style="margin-top: 20px;">
+                    <button onclick="executeMainFileAnalysis()" id="mainFileAnalysisBtn">開始分析</button>
+                    <button onclick="openLoadExcelDialog()" class="load-excel-btn">📊 載入 Excel</button>
+                    <button onclick="openMergeDialog()" class="merge-excel-btn" style="display: inline-flex; position: static; background: #17a2b8;">
+                        💹 合併 Excel
+                    </button>
+                </div>
+            </div>
+            
             <div class="loading" id="loading">
                 正在分析中
             </div>
@@ -6670,6 +6814,300 @@ HTML_TEMPLATE = r'''
                 handleFileSelect(files);
             }
         }
+
+        // 頁籤切換功能
+        function switchAnalysisTab(tab) {
+            // 更新頁籤按鈕狀態
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 更新內容顯示
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            if (tab === 'path') {
+                document.getElementById('pathTabBtn').classList.add('active');
+                document.getElementById('pathTabContent').classList.add('active');
+            } else if (tab === 'files') {
+                document.getElementById('filesTabBtn').classList.add('active');
+                document.getElementById('filesTabContent').classList.add('active');
+            }
+        }
+
+        // 主頁面的檔案選擇相關變數
+        let mainSelectedFiles = [];
+        let mainSelectedFolders = [];
+
+        // 清除主頁面選擇
+        function clearMainFileSelection() {
+            mainSelectedFiles = [];
+            mainSelectedFolders = [];
+            document.getElementById('mainSelectedItemsList').innerHTML = '';
+            document.getElementById('mainSelectedItemsSection').style.display = 'none';
+            document.getElementById('mainFileSelectInput').value = '';
+            document.getElementById('mainFolderSelectInput').value = '';
+        }
+
+        // 更新主頁面已選擇項目顯示
+        function updateMainSelectedItemsDisplay() {
+            const listDiv = document.getElementById('mainSelectedItemsList');
+            listDiv.innerHTML = '';
+            
+            let itemCount = 0;
+            
+            // 顯示選擇的檔案
+            mainSelectedFiles.forEach((file, index) => {
+                const item = createItemDisplay(file.name, 'file', () => removeMainItem('file', index));
+                listDiv.appendChild(item);
+                itemCount++;
+            });
+            
+            // 顯示選擇的資料夾
+            if (mainSelectedFolders.length > 0) {
+                const folderPaths = new Set();
+                mainSelectedFolders.forEach(file => {
+                    const pathParts = file.webkitRelativePath.split('/');
+                    if (pathParts.length > 1) {
+                        folderPaths.add(pathParts[0]);
+                    }
+                });
+                
+                folderPaths.forEach(folderName => {
+                    const item = createItemDisplay(folderName, 'folder', () => removeMainFolderByName(folderName));
+                    listDiv.appendChild(item);
+                    itemCount++;
+                });
+            }
+            
+            document.getElementById('mainSelectedItemsSection').style.display = itemCount > 0 ? 'block' : 'none';
+        }
+
+        // 移除主頁面項目
+        function removeMainItem(type, index) {
+            if (type === 'file') {
+                mainSelectedFiles.splice(index, 1);
+            }
+            updateMainSelectedItemsDisplay();
+        }
+
+        // 移除主頁面資料夾
+        function removeMainFolderByName(folderName) {
+            mainSelectedFolders = mainSelectedFolders.filter(file => {
+                const pathParts = file.webkitRelativePath.split('/');
+                return pathParts[0] !== folderName;
+            });
+            updateMainSelectedItemsDisplay();
+        }
+
+        // 處理主頁面檔案選擇
+        function handleMainFileSelect(files) {
+            if (!files || files.length === 0) return;
+            
+            const fileArray = Array.from(files);
+            fileArray.forEach(file => {
+                const exists = mainSelectedFiles.some(f => 
+                    f.name === file.name && f.size === file.size
+                );
+                if (!exists) {
+                    mainSelectedFiles.push(file);
+                }
+            });
+            
+            updateMainSelectedItemsDisplay();
+        }
+
+        // 處理主頁面資料夾選擇
+        function handleMainFolderSelect(files) {
+            if (!files || files.length === 0) return;
+            mainSelectedFolders = Array.from(files);
+            updateMainSelectedItemsDisplay();
+        }
+
+        // 執行主頁面檔案分析
+        async function executeMainFileAnalysis() {
+            const totalFiles = mainSelectedFiles.length + mainSelectedFolders.length;
+            
+            if (totalFiles === 0) {
+                showMessage('請選擇要分析的檔案或資料夾', 'error');
+                return;
+            }
+            
+            const analyzeBtn = document.getElementById('mainFileAnalysisBtn');
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = '準備中...';
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const formData = new FormData();
+                
+                // 添加單獨的檔案
+                mainSelectedFiles.forEach(file => {
+                    formData.append('files', file);
+                });
+                
+                // 添加資料夾中的檔案
+                mainSelectedFolders.forEach(file => {
+                    formData.append('folder_files', file, file.webkitRelativePath);
+                });
+                
+                // 添加選項
+                formData.append('auto_group', document.getElementById('mainAutoGroupFiles').checked);
+                
+                // 發送請求
+                const response = await fetch('/analyze-selected-items', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // 設定路徑並執行分析
+                    if (data.temp_path) {
+                        // 使用臨時路徑直接呼叫 analyze 端點
+                        const analyzeResponse = await fetch('/analyze', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ path: data.temp_path })
+                        });
+                        
+                        const analyzeData = await analyzeResponse.json();
+                        
+                        if (analyzeResponse.ok) {
+                            // 直接處理分析結果
+                            currentAnalysisId = analyzeData.analysis_id;
+                            
+                            const sortedLogs = analyzeData.logs.sort((a, b) => {
+                                if (!a.timestamp && !b.timestamp) return 0;
+                                if (!a.timestamp) return 1;
+                                if (!b.timestamp) return -1;
+                                return a.timestamp.localeCompare(b.timestamp);
+                            });
+                            
+                            allLogs = sortedLogs;
+                            allSummary = analyzeData.statistics.type_process_summary || [];
+                            allFileStats = analyzeData.file_statistics || [];
+                            
+                            // Reset filters and pagination
+                            resetFiltersAndPagination();
+                            
+                            // 保存分析輸出路徑和狀態
+                            window.vpAnalyzeOutputPath = analyzeData.vp_analyze_output_path;
+                            window.vpAnalyzeSuccess = analyzeData.vp_analyze_success;
+                            window.hasCurrentAnalysis = true;
+                            
+                            // Update UI
+                            updateResults(analyzeData);
+                            
+                            // 顯示相關按鈕
+                            if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
+                                analysisIndexPath = '/view-analysis-report?path=' + encodeURIComponent(analyzeData.vp_analyze_output_path);
+                                const analysisBtn = document.getElementById('analysisResultBtn');
+                                analysisBtn.href = analysisIndexPath;
+                                
+                                // 顯示匯出按鈕
+                                document.getElementById('exportExcelBtn').style.display = 'block';
+                                document.getElementById('exportExcelReportBtn').style.display = 'block';
+                                document.getElementById('mergeExcelBtn').style.display = 'block';
+                                document.getElementById('downloadCurrentZipBtn').style.display = 'block';
+                            }
+                            
+                            document.getElementById('exportHtmlBtn').style.display = 'block';
+                            
+                            let message = `分析完成！共掃描 ${analyzeData.total_files} 個檔案`;
+                            showMessage(message, 'success');
+                            
+                            // 清除選擇
+                            clearMainFileSelection();
+                            
+                        } else {
+                            throw new Error(analyzeData.error || 'Analysis failed');
+                        }
+                    }
+                } else {
+                    const error = await response.json();
+                    showMessage('準備失敗: ' + (error.error || '未知錯誤'), 'error');
+                }
+            } catch (error) {
+                showMessage('分析失敗: ' + error.message, 'error');
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '開始分析';
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // 在 DOMContentLoaded 中添加主頁面的事件監聽器
+        document.addEventListener('DOMContentLoaded', function() {
+            // 主頁面檔案選擇按鈕
+            const mainSelectFilesBtn = document.getElementById('mainSelectLocalFilesBtn');
+            if (mainSelectFilesBtn) {
+                mainSelectFilesBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('mainFileSelectInput').click();
+                });
+            }
+            
+            // 主頁面資料夾選擇按鈕
+            const mainSelectFolderBtn = document.getElementById('mainSelectLocalFolderBtn');
+            if (mainSelectFolderBtn) {
+                mainSelectFolderBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('mainFolderSelectInput').click();
+                });
+            }
+            
+            // 主頁面檔案輸入變化事件
+            const mainFileInput = document.getElementById('mainFileSelectInput');
+            if (mainFileInput) {
+                mainFileInput.addEventListener('change', function(e) {
+                    handleMainFileSelect(e.target.files);
+                });
+            }
+            
+            // 主頁面資料夾輸入變化事件
+            const mainFolderInput = document.getElementById('mainFolderSelectInput');
+            if (mainFolderInput) {
+                mainFolderInput.addEventListener('change', function(e) {
+                    handleMainFolderSelect(e.target.files);
+                });
+            }
+            
+            // 主頁面拖曳功能
+            const mainDropZone = document.getElementById('mainFileSelectDropZone');
+            if (mainDropZone) {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    mainDropZone.addEventListener(eventName, preventDefaults, false);
+                });
+                
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    mainDropZone.addEventListener(eventName, function() {
+                        mainDropZone.classList.add('drag-over');
+                    }, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    mainDropZone.addEventListener(eventName, function() {
+                        mainDropZone.classList.remove('drag-over');
+                    }, false);
+                });
+                
+                mainDropZone.addEventListener('drop', function(e) {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    if (files.length > 0) {
+                        handleMainFileSelect(files);
+                    }
+                }, false);
+            }
+        });
+
     </script>
 </body>
 </html>
@@ -9917,7 +10355,7 @@ def analyze_selected_items():
 
         # 每次分析前清理舊的臨時檔案
         cleanup_old_temp_dirs()
-        
+
         import tempfile
         import shutil
         import zipfile

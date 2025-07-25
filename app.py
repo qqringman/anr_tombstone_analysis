@@ -39,7 +39,7 @@ app.register_blueprint(main_page_bp)
 app.register_blueprint(view_analysis_bp)
 app.register_blueprint(excel_report_bp)
 
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 app.config['JSON_AS_ASCII'] = False
 
 if __name__ == '__main__':
