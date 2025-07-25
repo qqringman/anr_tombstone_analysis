@@ -9,7 +9,7 @@ class AnalysisLockManager:
     def __init__(self):
         self._locks: Dict[str, Dict] = {}  # 路徑 -> {lock: threading.Lock, owner: str, start_time: datetime}
         self._manager_lock = threading.Lock()  # 用於保護 _locks 字典的鎖
-        self._lock_timeout = 3600  # 鎖的超時時間（秒）
+        self._lock_timeout = 360  # 鎖的超時時間（秒）
     
     def acquire_lock(self, path: str, owner_id: str = None) -> tuple[bool, Optional[str]]:
         """

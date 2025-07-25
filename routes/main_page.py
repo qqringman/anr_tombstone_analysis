@@ -2776,6 +2776,180 @@ HTML_TEMPLATE = r'''
         animation: pulse 2s ease-in-out infinite;
     }
 
+    /* 修改合併對話框的檔案資訊區域 */
+    .merge-file-info {
+        background: transparent;
+        padding: 0;
+        border: none;
+        margin-top: 15px;
+    }
+
+    .merge-file-info .file-info-content {
+        display: block;
+    }
+
+    .merge-file-info .file-info-content strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 16px;
+        color: #333;
+    }
+
+    /* 確保選擇項目的樣式一致 */
+    .merge-dialog .selected-item {
+        padding: 10px;
+        background: white;
+        margin: 5px 0;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #e1e4e8;
+        transition: all 0.2s;
+    }
+
+    .merge-dialog .selected-item:hover {
+        background: #f0f0f0;
+        border-color: #d0d0d0;
+    }
+
+    .merge-dialog .selected-item label {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        cursor: pointer;
+        margin: 0;
+    }
+
+    .merge-dialog .selected-item input[type="checkbox"] {
+        cursor: pointer;
+    }
+
+    /* 清除按鈕樣式一致性 */
+    .merge-dialog .btn-clear {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .merge-dialog .btn-clear:hover {
+        background: #c82333;
+        transform: translateY(-1px);
+    }
+
+    /* 全選按鈕樣式 */
+    .merge-dialog .btn-select-all {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .merge-dialog .btn-select-all:hover {
+        background: #138496;
+        transform: translateY(-1px);
+    }
+
+    .merge-dialog .btn-remove-selected {
+        background: #ffc107;
+        color: #212529;
+        border: none;
+        padding: 5px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    .merge-dialog .btn-remove-selected:hover {
+        background: #e0a800;
+        transform: translateY(-1px);
+    }
+
+    /* 主頁面選擇區域的按鈕樣式 */
+    #mainSelectedItemsSection .btn-select-all {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    #mainSelectedItemsSection .btn-select-all:hover {
+        background: #138496;
+        transform: translateY(-1px);
+    }
+
+    #mainSelectedItemsSection .btn-remove-selected {
+        background: #ffc107;
+        color: #212529;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    #mainSelectedItemsSection .btn-remove-selected:hover {
+        background: #e0a800;
+        transform: translateY(-1px);
+    }
+
+    #mainSelectedItemsSection .btn-clear {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+
+    #mainSelectedItemsSection .btn-clear:hover {
+        background: #c82333;
+        transform: translateY(-1px);
+    }
+
+    /* 確保選擇項目有正確的樣式 */
+    #mainSelectedItemsList .selected-item {
+        padding: 10px;
+        background: white;
+        margin: 5px 0;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #e1e4e8;
+        transition: all 0.2s;
+    }
+
+    #mainSelectedItemsList .selected-item:hover {
+        background: #f0f0f0;
+        border-color: #d0d0d0;
+    }
+
+    #mainSelectedItemsList .selected-item label {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        cursor: pointer;
+        margin: 0;
+    }
+
     </style>      
 </head>
 <body>
@@ -2876,7 +3050,14 @@ HTML_TEMPLATE = r'''
                     
                     <!-- 已選擇的檔案/資料夾列表 -->
                     <div class="selected-items-section" id="mainSelectedItemsSection" style="display: none;">
-                        <h3>已選擇的項目</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h3 style="margin: 0;">已選擇的項目</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-select-all" onclick="toggleAllMainFiles()">全選</button>
+                                <button class="btn-remove-selected" onclick="removeSelectedMainFiles()">移除選中</button>
+                                <button class="btn-clear" onclick="clearMainFileSelection()">清除全部</button>
+                            </div>
+                        </div>
                         <div class="selected-items-list" id="mainSelectedItemsList"></div>
                     </div>
                     
@@ -3279,9 +3460,15 @@ HTML_TEMPLATE = r'''
                     <!-- 檔案資訊顯示 -->
                     <div class="merge-file-info" id="mergeFileInfo" style="display: none;">
                         <div class="file-info-content">
-                            <strong>已選擇檔案：</strong>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <strong>已選擇的項目</strong>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn-select-all" onclick="toggleAllMergeFiles()">全選</button>
+                                    <button class="btn-remove-selected" onclick="removeSelectedFiles()">移除選中</button>
+                                    <button class="btn-clear" onclick="clearMergeSelection()">清除全部</button>
+                                </div>
+                            </div>
                             <div id="selectedMergeFiles"></div>
-                            <button class="btn-clear" onclick="clearMergeSelection()">清除全部</button>
                         </div>
                     </div>
                     
@@ -3382,21 +3569,125 @@ HTML_TEMPLATE = r'''
         // 全域變數
         let lockDialogResolver = null;
         let waitingForUnlock = false;
+        let countdownInterval = null;  // 新增：倒數計時器
+
+        // 全選/取消全選所有檔案
+        function toggleAllMergeFiles() {
+            const checkboxes = document.querySelectorAll('#selectedMergeFiles input[type="checkbox"]');
+            
+            if (checkboxes.length === 0) return;
+            
+            // 檢查是否全部已選中
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            // 切換選擇狀態
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            // 更新按鈕文字（可選）
+            updateSelectAllButtonText();
+        }
+
+        // 更新全選按鈕的文字
+        function updateSelectAllButtonText() {
+            const checkboxes = document.querySelectorAll('#selectedMergeFiles input[type="checkbox"]');
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            const button = document.querySelector('.btn-select-all');
+            
+            if (button) {
+                if (checkedCount === 0) {
+                    button.textContent = '全選';
+                } else if (checkedCount === checkboxes.length) {
+                    button.textContent = '取消全選';
+                } else {
+                    button.textContent = `全選 (${checkedCount}/${checkboxes.length})`;
+                }
+            }
+        }
+
+        // 取得選中的檔案索引
+        function getSelectedMergeFiles() {
+            const selectedIndices = {
+                local: [],
+                path: []
+            };
+            
+            const items = document.querySelectorAll('#selectedMergeFiles .selected-item');
+            items.forEach((item, index) => {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                if (checkbox && checkbox.checked) {
+                    // 判斷是本地檔案還是路徑檔案
+                    const removeBtn = item.querySelector('.btn-clear');
+                    if (removeBtn && removeBtn.onclick) {
+                        const onclickStr = removeBtn.onclick.toString();
+                        if (onclickStr.includes("'local'")) {
+                            selectedIndices.local.push(index);
+                        } else if (onclickStr.includes("'path'")) {
+                            selectedIndices.path.push(index - selectedMergeFiles.length);
+                        }
+                    }
+                }
+            });
+            
+            return selectedIndices;
+        }
+
+        // 批量移除選中的檔案
+        function removeSelectedFiles() {
+            const selectedIndices = getSelectedMergeFiles();
+            
+            // 從後往前刪除，避免索引錯位
+            selectedIndices.local.sort((a, b) => b - a).forEach(index => {
+                selectedMergeFiles.splice(index, 1);
+            });
+            
+            selectedIndices.path.sort((a, b) => b - a).forEach(index => {
+                selectedMergeFilePaths.splice(index, 1);
+            });
+            
+            // 更新顯示
+            updateSelectedFilesDisplay();
+        }
 
         // 顯示鎖定對話框
         function showLockDialog(remainingTime) {
             const overlay = document.getElementById('lockDialogOverlay');
             const timeElement = document.getElementById('remainingTime');
             
-            // 格式化時間顯示
-            const minutes = Math.floor(remainingTime / 60);
-            const seconds = remainingTime % 60;
-            
-            if (minutes > 0) {
-                timeElement.textContent = `${minutes} 分 ${seconds} 秒`;
-            } else {
-                timeElement.textContent = `${seconds} 秒`;
+            // 清除之前的計時器
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
             }
+            
+            let currentTime = remainingTime;
+            
+            // 更新時間顯示的函數
+            function updateTimeDisplay() {
+                const minutes = Math.floor(currentTime / 60);
+                const seconds = currentTime % 60;
+                
+                if (minutes > 0) {
+                    timeElement.textContent = `${minutes} 分 ${seconds} 秒`;
+                } else {
+                    timeElement.textContent = `${seconds} 秒`;
+                }
+                
+                // 倒數
+                currentTime--;
+                
+                // 如果時間到了，停止倒數
+                if (currentTime < 0) {
+                    clearInterval(countdownInterval);
+                    timeElement.textContent = '即將完成...';
+                }
+            }
+            
+            // 初始顯示
+            updateTimeDisplay();
+            
+            // 每秒更新
+            countdownInterval = setInterval(updateTimeDisplay, 1000);
             
             overlay.style.display = 'flex';
             
@@ -3410,6 +3701,13 @@ HTML_TEMPLATE = r'''
         function confirmWait() {
             const overlay = document.getElementById('lockDialogOverlay');
             overlay.style.display = 'none';
+            
+            // 清除計時器
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            
             if (lockDialogResolver) {
                 lockDialogResolver(true);
                 lockDialogResolver = null;
@@ -3421,6 +3719,13 @@ HTML_TEMPLATE = r'''
             const overlay = document.getElementById('lockDialogOverlay');
             overlay.style.display = 'none';
             waitingForUnlock = false;
+            
+            // 清除計時器
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            
             if (lockDialogResolver) {
                 lockDialogResolver(false);
                 lockDialogResolver = null;
@@ -3481,7 +3786,7 @@ HTML_TEMPLATE = r'''
         // 修改 waitForAnalysisUnlock 函數，改善錯誤處理
         async function waitForAnalysisUnlock(path, maxWaitTime = 300000) {
             const startTime = Date.now();
-            const pollInterval = 5000;
+            const pollInterval = 1000;
             waitingForUnlock = true;
             let initialRemainingTime = 0;
             
@@ -3573,6 +3878,30 @@ HTML_TEMPLATE = r'''
                 
                 checkLock();
             });
+        }
+
+        // 切換所有檔案的選擇狀態
+        function toggleAllFiles() {
+            const checkboxes = document.querySelectorAll('#selectedMergeFiles input[type="checkbox"]');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+        }
+
+        // 取得選中的檔案
+        function getSelectedFiles() {
+            const checkboxes = document.querySelectorAll('#selectedMergeFiles input[type="checkbox"]:checked');
+            const selectedIndices = [];
+            
+            checkboxes.forEach((cb, index) => {
+                if (cb.checked) {
+                    selectedIndices.push(index);
+                }
+            });
+            
+            return selectedIndices;
         }
 
     </script>
@@ -4303,12 +4632,17 @@ HTML_TEMPLATE = r'''
                             await waitForAnalysisUnlock(path);
                             // 等待成功，繼續執行分析
                         } catch (error) {
+                            // 檢查是否為使用者取消
+                            if (error.message === '使用者取消等待') {
+                                // 不顯示錯誤，直接返回
+                                return;
+                            }
                             console.error('等待失敗:', error);
                             showMessage('等待過程中發生錯誤', 'error');
                             return;
                         }
                     } else {
-                        // 使用者選擇不等待
+                        // 使用者選擇不等待，直接返回，不顯示錯誤
                         return;
                     }
                 }
@@ -4656,108 +4990,13 @@ HTML_TEMPLATE = r'''
             return progressHtml;
         }
 
-        // 修改 waitForAnalysisUnlock 包含進度條 (支援取消)
-        async function waitForAnalysisUnlock(path, maxWaitTime = 300000) {
-            const startTime = Date.now();
-            const pollInterval = 5000;
-            waitingForUnlock = true;
-            let initialRemainingTime = 0;
-            
-            showMessage(
-                '其他使用者正在分析此路徑，系統將自動等待...<br>' +
-                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>' +
-                createWaitingProgressBar(),
-                'info'
-            );
-            
-            return new Promise((resolve, reject) => {
-                const checkLock = async () => {
-                    if (!waitingForUnlock) {
-                        showMessage('已取消等待', 'info');
-                        reject(new Error('使用者取消等待'));
-                        return;
-                    }
-                    
-                    try {
-                        const response = await fetch('/check-analysis-lock', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ path: path })
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        
-                        const data = await response.json();
-                        
-                        if (!data.locked) {
-                            showMessage('分析鎖已釋放，開始進行分析...', 'success');
-                            resolve();
-                        } else {
-                            const remainingTime = data.remaining_time || 0;
-                            const minutes = Math.floor(remainingTime / 60);
-                            const seconds = remainingTime % 60;
-                            
-                            // 初始化初始剩餘時間
-                            if (initialRemainingTime === 0) {
-                                initialRemainingTime = remainingTime;
-                            }
-                            
-                            // 計算進度
-                            const progress = Math.max(0, Math.min(100, 
-                                ((initialRemainingTime - remainingTime) / initialRemainingTime) * 100
-                            ));
-                            
-                            // 更新進度條
-                            const progressBar = document.getElementById('waitingProgressBar');
-                            const progressText = document.getElementById('waitingProgressText');
-                            
-                            if (progressBar) {
-                                progressBar.style.width = progress + '%';
-                            }
-                            
-                            if (progressText) {
-                                progressText.textContent = `${Math.round(progress)}%`;
-                            }
-                            
-                            const message = '正在等待其他分析完成...<br>' +
-                                '預計剩餘時間: ' + minutes + ' 分 ' + seconds + ' 秒<br>' +
-                                '<small>系統會自動開始分析，請勿關閉此頁面</small><br>' +
-                                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>';
-                            
-                            showMessage(message, 'info');
-                            
-                            // 檢查是否超時
-                            if (Date.now() - startTime > maxWaitTime) {
-                                throw new Error('等待超時');
-                            }
-                            
-                            setTimeout(checkLock, pollInterval);
-                        }
-                    } catch (error) {
-                        console.error('檢查鎖狀態時發生錯誤:', error);
-                        // 不要立即失敗，繼續重試
-                        if (Date.now() - startTime < maxWaitTime) {
-                            setTimeout(checkLock, pollInterval);
-                        } else {
-                            showMessage('檢查鎖狀態失敗，已超過最大等待時間', 'error');
-                            reject(error);
-                        }
-                    }
-                };
-                
-                checkLock();
-            });
-        }
-
-        // 取消等待函數
+        // 修改 cancelWaiting 函數
         function cancelWaiting() {
             waitingForUnlock = false;
             document.getElementById('analyzeBtn').disabled = false;
             document.getElementById('loading').style.display = 'none';
+            // 顯示取消訊息
+            showMessage('已取消等待', 'info');
         }
 
         function updateResults(data) {
@@ -6077,6 +6316,8 @@ HTML_TEMPLATE = r'''
         // 打開合併對話框
         function openMergeDialog() {
             // 重置對話框狀態
+            loadExcelMode = false;  // 確保不在載入模式
+            
             const dialog = document.getElementById('mergeDialogOverlay');
             const dialogHeader = dialog.querySelector('.merge-dialog-header h3');
             const executeBtn = document.getElementById('mergeExecuteBtn');
@@ -6085,6 +6326,32 @@ HTML_TEMPLATE = r'''
             dialogHeader.innerHTML = '💹 合併 Excel 檔案';
             executeBtn.textContent = '匯出';
             executeBtn.onclick = executeMerge;  // 確保綁定正確的函數
+            
+            // === 修改：確保檔案輸入的 change 事件正確綁定 ===
+            const mergeFileInput = document.getElementById('mergeFileInput');
+            if (mergeFileInput) {
+                // 先移除舊的事件監聽器
+                const newMergeFileInput = mergeFileInput.cloneNode(true);
+                mergeFileInput.parentNode.replaceChild(newMergeFileInput, mergeFileInput);
+                
+                // 重新綁定 change 事件
+                document.getElementById('mergeFileInput').addEventListener('change', function(e) {
+                    if (e.target.files && e.target.files.length > 0) {
+                        handleMergeFileSelect(e.target.files);
+                    }
+                });
+            }
+            
+            // === 重要：重新綁定檔案選擇按鈕事件 ===
+            const selectFileBtn = document.getElementById('selectFileBtn');
+            if (selectFileBtn) {
+                // 不要替換元素，直接重新綁定事件
+                selectFileBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('mergeFileInput').click();
+                };
+            }
             
             // 防止背景滾動
             document.body.style.overflow = 'hidden';
@@ -6099,14 +6366,6 @@ HTML_TEMPLATE = r'''
             if (mainPath) {
                 document.getElementById('mergePathInput').value = mainPath;
             }
-            
-            // 設置焦點到選擇檔案按鈕
-            setTimeout(() => {
-                const selectFileBtn = document.querySelector('.btn-select-file');
-                if (selectFileBtn) {
-                    selectFileBtn.focus();
-                }
-            }, 100);
         }
 
         // 關閉合併對話框
@@ -6271,8 +6530,8 @@ HTML_TEMPLATE = r'''
             }
         }
 
-        // 處理檔案選擇（支援多檔）
-        function handleFileSelect(files) {
+        // 處理檔案選擇（支援多檔）- 用於合併對話框
+        function handleMergeFileSelect(files) {
             if (!files || files.length === 0) {
                 showMessage('請選擇 .xlsx 格式的 Excel 檔案', 'error');
                 return;
@@ -6300,31 +6559,47 @@ HTML_TEMPLATE = r'''
             const filesDiv = document.getElementById('selectedMergeFiles');
             filesDiv.innerHTML = '';
             
+            // 建立檔案列表容器
+            const listContainer = document.createElement('div');
+            listContainer.style.cssText = 'max-height: 300px; overflow-y: auto;';
+            
             // 顯示本地檔案
             selectedMergeFiles.forEach((file, index) => {
                 const fileItem = document.createElement('div');
-                fileItem.style.cssText = 'padding: 5px; background: #f0f0f0; margin: 2px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
+                fileItem.className = 'selected-item';
                 fileItem.innerHTML = `
-                    <span>${file.name}</span>
+                    <label style="display: flex; align-items: center; flex: 1; cursor: pointer;">
+                        <input type="checkbox" checked style="margin-right: 10px;" onchange="updateSelectAllButtonText()">
+                        <span>📄 ${file.name}</span>
+                    </label>
                     <button class="btn-clear" style="padding: 2px 8px; font-size: 12px;" onclick="removeFile(${index}, 'local')">移除</button>
                 `;
-                filesDiv.appendChild(fileItem);
+                listContainer.appendChild(fileItem);
             });
             
             // 顯示伺服器路徑檔案
             selectedMergeFilePaths.forEach((path, index) => {
                 const fileItem = document.createElement('div');
-                fileItem.style.cssText = 'padding: 5px; background: #e8f4f8; margin: 2px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
+                fileItem.className = 'selected-item';
+                const fileName = path.split('/').pop().split('\\').pop();
                 fileItem.innerHTML = `
-                    <span>${path}</span>
+                    <label style="display: flex; align-items: center; flex: 1; cursor: pointer;">
+                        <input type="checkbox" checked style="margin-right: 10px;" onchange="updateSelectAllButtonText()">
+                        <span>📊 ${fileName}</span>
+                    </label>
                     <button class="btn-clear" style="padding: 2px 8px; font-size: 12px;" onclick="removeFile(${index}, 'path')">移除</button>
                 `;
-                filesDiv.appendChild(fileItem);
+                listContainer.appendChild(fileItem);
             });
+            
+            filesDiv.appendChild(listContainer);
             
             // 顯示或隱藏檔案資訊區域
             document.getElementById('mergeFileInfo').style.display = 
                 (selectedMergeFiles.length > 0 || selectedMergeFilePaths.length > 0) ? 'block' : 'none';
+            
+            // 更新全選按鈕文字
+            updateSelectAllButtonText();
             
             // 清空路徑輸入
             if (selectedMergeFiles.length > 0) {
@@ -6541,10 +6816,14 @@ HTML_TEMPLATE = r'''
             // 檔案輸入事件
             const mergeFileInput = document.getElementById('mergeFileInput');
             if (mergeFileInput) {
-                mergeFileInput.addEventListener('change', function(e) {
+                // 移除舊的事件監聽器
+                const newMergeFileInput = mergeFileInput.cloneNode(true);
+                mergeFileInput.parentNode.replaceChild(newMergeFileInput, mergeFileInput);
+                
+                // 綁定新的事件
+                document.getElementById('mergeFileInput').addEventListener('change', function(e) {
                     if (e.target.files && e.target.files.length > 0) {
-                        // 修正：傳遞整個 FileList
-                        handleFileSelect(e.target.files);  // 原本是 handleFileSelect(e.target.files[0])
+                        handleMergeFileSelect(e.target.files);
                     }
                 });
             }
@@ -6552,26 +6831,7 @@ HTML_TEMPLATE = r'''
             // 拖曳功能
             const dropZone = document.getElementById('mergeDropZone');
             if (dropZone) {
-                // 為選擇檔案按鈕綁定事件
-                const selectFileBtn = dropZone.querySelector('.btn-select-file');
-                if (selectFileBtn) {
-                    selectFileBtn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        document.getElementById('mergeFileInput').click();
-                    });
-                }
-                
-                // 拖曳區域的點擊事件（只綁定一次）
-                dropZone.addEventListener('click', function(e) {
-                    // 如果點擊的是按鈕或按鈕內的元素，不處理
-                    if (e.target.classList.contains('btn-select-file') || 
-                        e.target.closest('.btn-select-file')) {
-                        return;
-                    }
-                    // 點擊其他區域時觸發檔案選擇
-                    document.getElementById('mergeFileInput').click();
-                });
+                // 不要替換 dropZone，直接綁定事件
                 
                 // 拖曳相關事件
                 dropZone.addEventListener('dragover', function(e) {
@@ -6593,8 +6853,7 @@ HTML_TEMPLATE = r'''
                     
                     const files = e.dataTransfer.files;
                     if (files.length > 0) {
-                        // 修正：傳遞整個 FileList，而不是單一檔案
-                        handleFileSelect(files);  // 原本是 handleFileSelect(files[0])
+                        handleMergeFileSelect(files);
                     }
                 });
             }
@@ -6636,6 +6895,32 @@ HTML_TEMPLATE = r'''
                 dropZoneText.textContent = '拖曳 Excel 檔案到這裡（支援多檔）';
             }
             
+            // === 修改：確保檔案輸入的 change 事件正確綁定 ===
+            const mergeFileInput = document.getElementById('mergeFileInput');
+            if (mergeFileInput) {
+                // 先移除舊的事件監聽器
+                const newMergeFileInput = mergeFileInput.cloneNode(true);
+                mergeFileInput.parentNode.replaceChild(newMergeFileInput, mergeFileInput);
+                
+                // 重新綁定 change 事件
+                document.getElementById('mergeFileInput').addEventListener('change', function(e) {
+                    if (e.target.files && e.target.files.length > 0) {
+                        handleMergeFileSelect(e.target.files);
+                    }
+                });
+            }
+            
+            // === 重要：重新綁定檔案選擇按鈕事件 ===
+            const selectFileBtn = document.getElementById('selectFileBtn');
+            if (selectFileBtn) {
+                // 不要替換元素，直接重新綁定事件
+                selectFileBtn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('mergeFileInput').click();
+                };
+            }
+            
             // 隱藏匯出相關按鈕
             const exportBtns = document.querySelectorAll('.export-html-btn, .export-excel-btn, .merge-excel-btn');
             exportBtns.forEach(btn => {
@@ -6654,14 +6939,6 @@ HTML_TEMPLATE = r'''
             if (mainPath) {
                 document.getElementById('mergePathInput').value = mainPath;
             }
-            
-            // 設置焦點到選擇檔案按鈕
-            setTimeout(() => {
-                const selectFileBtn = document.querySelector('.btn-select-file');
-                if (selectFileBtn) {
-                    selectFileBtn.focus();
-                }
-            }, 100);
         }
 
         // 執行載入 Excel
@@ -7510,7 +7787,7 @@ HTML_TEMPLATE = r'''
             
             // 顯示選擇的檔案
             mainSelectedFiles.forEach((file, index) => {
-                const item = createItemDisplay(file.name, 'file', () => removeMainItem('file', index));
+                const item = createMainItemDisplay(file.name, 'file', index);
                 listDiv.appendChild(item);
                 itemCount++;
             });
@@ -7525,14 +7802,124 @@ HTML_TEMPLATE = r'''
                     }
                 });
                 
+                let folderIndex = 0;
                 folderPaths.forEach(folderName => {
-                    const item = createItemDisplay(folderName, 'folder', () => removeMainFolderByName(folderName));
+                    const item = createMainItemDisplay(folderName, 'folder', folderIndex);
                     listDiv.appendChild(item);
                     itemCount++;
+                    folderIndex++;
                 });
             }
             
             document.getElementById('mainSelectedItemsSection').style.display = itemCount > 0 ? 'block' : 'none';
+            
+            // 更新全選按鈕文字
+            updateMainSelectAllButtonText();
+        }
+
+        // 建立主頁面項目顯示元素
+        function createMainItemDisplay(name, type, index) {
+            const div = document.createElement('div');
+            div.className = 'selected-item';
+            
+            const icon = type === 'file' ? '📄' : '📁';
+            div.innerHTML = `
+                <label style="display: flex; align-items: center; flex: 1; cursor: pointer;">
+                    <input type="checkbox" checked style="margin-right: 10px;" onchange="updateMainSelectAllButtonText()">
+                    <span>${icon} ${name}</span>
+                </label>
+                <button class="btn-clear" style="padding: 2px 8px; font-size: 12px;" 
+                        onclick="removeMainItem('${type}', ${index})">移除</button>
+            `;
+            
+            return div;
+        }
+
+        // 全選/取消全選主頁面所有檔案
+        function toggleAllMainFiles() {
+            const checkboxes = document.querySelectorAll('#mainSelectedItemsList input[type="checkbox"]');
+            
+            if (checkboxes.length === 0) return;
+            
+            // 檢查是否全部已選中
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            // 切換選擇狀態
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            // 更新按鈕文字
+            updateMainSelectAllButtonText();
+        }
+
+        // 更新主頁面全選按鈕的文字
+        function updateMainSelectAllButtonText() {
+            const checkboxes = document.querySelectorAll('#mainSelectedItemsList input[type="checkbox"]');
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            const button = document.querySelector('#mainSelectedItemsSection .btn-select-all');
+            
+            if (button) {
+                if (checkedCount === 0) {
+                    button.textContent = '全選';
+                } else if (checkedCount === checkboxes.length) {
+                    button.textContent = '取消全選';
+                } else {
+                    button.textContent = `全選 (${checkedCount}/${checkboxes.length})`;
+                }
+            }
+        }
+
+        // 批量移除選中的主頁面檔案
+        function removeSelectedMainFiles() {
+            const items = document.querySelectorAll('#mainSelectedItemsList .selected-item');
+            const toRemove = {
+                files: [],
+                folders: []
+            };
+            
+            // 收集要移除的項目
+            items.forEach((item, index) => {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                if (checkbox && checkbox.checked) {
+                    const icon = item.querySelector('span').textContent.trim();
+                    if (icon.startsWith('📄')) {
+                        toRemove.files.push(index);
+                    } else if (icon.startsWith('📁')) {
+                        const folderName = icon.substring(2).trim(); // 移除圖示
+                        toRemove.folders.push(folderName);
+                    }
+                }
+            });
+            
+            // 從後往前刪除檔案，避免索引錯位
+            toRemove.files.sort((a, b) => b - a).forEach(index => {
+                if (index < mainSelectedFiles.length) {
+                    mainSelectedFiles.splice(index, 1);
+                }
+            });
+            
+            // 移除資料夾
+            if (toRemove.folders.length > 0) {
+                mainSelectedFolders = mainSelectedFolders.filter(file => {
+                    const pathParts = file.webkitRelativePath.split('/');
+                    const folderName = pathParts[0];
+                    return !toRemove.folders.includes(folderName);
+                });
+            }
+            
+            // 更新顯示
+            updateMainSelectedItemsDisplay();
+        }
+
+        // 清除主頁面所有選擇
+        function clearMainFileSelection() {
+            mainSelectedFiles = [];
+            mainSelectedFolders = [];
+            document.getElementById('mainSelectedItemsList').innerHTML = '';
+            document.getElementById('mainSelectedItemsSection').style.display = 'none';
+            document.getElementById('mainFileSelectInput').value = '';
+            document.getElementById('mainFolderSelectInput').value = '';
         }
 
         // 移除主頁面項目
