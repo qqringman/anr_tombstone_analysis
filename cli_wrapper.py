@@ -17,6 +17,10 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 import io
+# 導入 JIRA 相關模組
+from jira.jira_config import JiraConfig
+from jira.jira_client import JiraClient
+from jira.jira_file_manager import JiraFileManager
 
 # 將當前目錄加入 Python 路徑
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,12 +44,15 @@ Examples:
     
     # 自動分組獨立檔案
     python3.12 cli_wrapper.py -i anr1.txt,anr2.txt -o result.zip --auto-group
+    
+    # 只從 JIRA 下載並分析
+    python3.12 cli_wrapper.py --jira-instance rtk --jira-issues MAC8QQC-3660 -o result.zip
         '''
     )
     
     parser.add_argument(
         '-i', '--input',
-        required=True,
+        required=False,  # 改為非必需
         help='輸入檔案或資料夾，多個項目用逗號分隔'
     )
     
@@ -62,9 +69,50 @@ Examples:
     )
     
     parser.add_argument(
+        '--upload-issue',
+        help='指定要上傳結果的 JIRA issue（如果與下載的 issue 不同）'
+    )
+
+    parser.add_argument(
         '--keep-temp',
         action='store_true',
         help='保留臨時檔案（用於除錯）'
+    )
+
+    parser.add_argument(
+        '--no-auto-reopen',
+        action='store_true',
+        help='不要自動重新開啟已關閉的 JIRA issues'
+    )
+
+    # 新增 JIRA 相關參數
+    jira_group = parser.add_argument_group('JIRA 選項')
+    
+    jira_group.add_argument(
+        '--jira-instance',
+        help='JIRA 實例名稱（在 jira_config.json 中配置）'
+    )
+    
+    jira_group.add_argument(
+        '--jira-issues',
+        help='要下載附件的 JIRA issue keys，用逗號分隔（如 ANR-123,ANR-456）'
+    )
+    
+    jira_group.add_argument(
+        '--jira-file-patterns',
+        help='要下載的檔案模式，用逗號分隔（如 *.zip,*.txt）。不指定則下載全部'
+    )
+    
+    jira_group.add_argument(
+        '--upload-to-jira',
+        action='store_true',
+        help='將分析結果上傳回 JIRA'
+    )
+    
+    jira_group.add_argument(
+        '--jira-config-file',
+        default='jira_config.json',
+        help='JIRA 配置檔案路徑（預設：jira_config.json）'
     )
     
     return parser.parse_args()
@@ -98,8 +146,35 @@ def prepare_analysis_directory(input_items, temp_dir, auto_group=True):
                 except Exception as e:
                     print(f"解壓縮 {item} 失敗: {e}")
             
+            # 檢查是否為 7z 檔案
+            elif item.endswith('.7z'):
+                # 使用系統命令解壓縮 7z 檔案
+                try:
+                    # 建立解壓縮目錄（以檔名命名，去掉 .7z）
+                    extract_dir = os.path.join(temp_dir, os.path.splitext(filename)[0])
+                    os.makedirs(extract_dir, exist_ok=True)
+                    
+                    # 使用 7z 命令解壓縮
+                    cmd = ['7z', 'x', item, f'-o{extract_dir}', '-y']
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"已解壓縮 7z: {item}")
+                    else:
+                        print(f"解壓縮 7z 失敗: {result.stderr}")
+                        # 嘗試解壓到 temp_dir 根目錄
+                        cmd = ['7z', 'x', item, f'-o{temp_dir}', '-y']
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print(f"已解壓縮 7z 到根目錄: {item}")
+                        else:
+                            print(f"第二次嘗試解壓縮 7z 失敗: {result.stderr}")
+                    continue
+                except Exception as e:
+                    print(f"執行 7z 命令失敗: {e}")
+            
             # 檢查是否為 ANR 或 Tombstone 檔案
-            if 'anr' in file_lower or 'tombstone' in file_lower:
+            elif 'anr' in file_lower or 'tombstone' in file_lower:
                 dest_path = os.path.join(temp_dir, filename)
                 shutil.copy2(item, dest_path)
                 
@@ -119,6 +194,27 @@ def prepare_analysis_directory(input_items, temp_dir, auto_group=True):
     
     # 自動分組處理
     if auto_group:
+
+        # 重新掃描 temp_dir 中的所有 ANR 和 Tombstone 檔案
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                file_lower = file.lower()
+                if 'anr' in file_lower or 'tombstone' in file_lower:
+                    file_path = os.path.join(root, file)
+                    # 檢查是否已經在合適的目錄結構中
+                    rel_path = os.path.relpath(file_path, temp_dir)
+                    path_parts = rel_path.split(os.sep)
+                    
+                    # 如果不在 GroupX/anr 或 GroupX/tombstones 結構中
+                    if not (len(path_parts) >= 2 and 
+                            path_parts[0].startswith('Group') and 
+                            path_parts[1] in ['anr', 'tombstones']):
+                        # 加入待分組列表
+                        if 'anr' in file_lower:
+                            anr_files.append((file_path, file))
+                        else:
+                            tombstone_files.append((file_path, file))
+                                    
         # 處理 ANR 檔案
         if anr_files:
             print(f"找到 {len(anr_files)} 個獨立的 ANR 檔案，自動分組中...")
@@ -478,9 +574,61 @@ def main():
     """主程式"""
     args = parse_arguments()
     
+    # 檢查是否至少有一個輸入來源
+    if not args.input and not (args.jira_instance and args.jira_issues):
+        print("錯誤：必須提供至少一個輸入來源")
+        print("  使用 -i/--input 指定本地檔案/資料夾")
+        print("  或使用 --jira-instance 和 --jira-issues 從 JIRA 下載")
+        return 1
+            
     # 解析輸入項目
-    input_items = [item.strip() for item in args.input.split(',')]
+    input_items = [item.strip() for item in args.input.split(',') if item.strip()] if args.input else []
     
+    # 處理 JIRA 下載
+    jira_downloads = []
+    jira_client = None
+    jira_file_manager = None
+    
+    if args.jira_instance and args.jira_issues:
+        print("\n處理 JIRA 下載...")
+        
+        # 載入 JIRA 配置
+        jira_config = JiraConfig(args.jira_config_file)
+        config = jira_config.get_jira_config(args.jira_instance)
+        
+        if not config:
+            print(f"錯誤：找不到 JIRA 實例 '{args.jira_instance}' 的配置")
+            print(f"可用的實例：{', '.join(jira_config.list_instances())}")
+            return 1
+        
+        # 建立 JIRA 客戶端
+        jira_client = JiraClient(
+            config['url'], 
+            config['token'], 
+            config.get('username')
+        )
+        jira_file_manager = JiraFileManager(jira_client)
+        
+        # 解析 issue keys 和檔案模式
+        issue_keys = [key.strip() for key in args.jira_issues.split(',')]
+        file_patterns = None
+        if args.jira_file_patterns:
+            file_patterns = [p.strip() for p in args.jira_file_patterns.split(',')]
+        
+        # 下載檔案
+        temp_jira_dir = tempfile.mkdtemp(prefix='jira_downloads_')
+        for issue_key in issue_keys:
+            downloaded = jira_file_manager.download_issue_attachments(
+                issue_key, file_patterns, 
+                os.path.join(temp_jira_dir, issue_key)
+            )
+            jira_downloads.extend(downloaded)
+        
+        # 將下載的檔案加入輸入項目
+        if jira_downloads:
+            print(f"\n從 JIRA 下載了 {len(jira_downloads)} 個檔案")
+            input_items.extend(jira_downloads)
+
     print("="*60)
     print("Android ANR/Tombstone Analyzer CLI")
     print("="*60)
@@ -565,6 +713,73 @@ def main():
         # 建立輸出 ZIP
         output_path_abs = os.path.abspath(args.output)
         create_output_zip(output_path, output_path_abs)
+        
+        # 上傳結果到 JIRA（如果需要）
+        if args.upload_to_jira and jira_client and jira_file_manager:
+            print("\n上傳分析結果到 JIRA...")
+            
+            # 決定上傳到哪些 issues
+            if args.upload_issue:
+                # 如果指定了特定的上傳 issue
+                upload_issues = [args.upload_issue.strip()]
+                print(f"將上傳到指定的 issue: {args.upload_issue}")
+            else:
+                # 否則上傳到下載來源的 issues
+                if args.jira_issues:
+                    upload_issues = [key.strip() for key in args.jira_issues.split(',')]
+                    print(f"將上傳到來源 issues: {', '.join(upload_issues)}")
+                else:
+                    upload_issues = []
+                    print("警告：沒有指定要上傳的 issue")
+            
+            # 執行上傳
+            upload_failed = []
+            upload_success = []
+            
+            for issue_key in upload_issues:
+                try:
+                    success = jira_file_manager.upload_analysis_result(
+                        issue_key, 
+                        output_path_abs, 
+                        add_comment=True,
+                        auto_reopen=not args.no_auto_reopen
+                    )
+                    if success:
+                        upload_success.append(issue_key)
+                    else:
+                        upload_failed.append(issue_key)
+                except Exception as e:
+                    print(f"錯誤：處理 {issue_key} 時發生異常: {e}")
+                    upload_failed.append(issue_key)
+                    
+                    # 詳細的錯誤處理
+                    if "403" in str(e) or "permission" in str(e).lower():
+                        print(f"  ⚠️  權限問題：您沒有權限上傳附件到 {issue_key}")
+                        print(f"     請聯繫 JIRA 管理員或專案負責人授予附件上傳權限")
+                    elif "401" in str(e):
+                        print(f"  ⚠️  認證問題：請檢查 JIRA token 是否正確")
+                    elif "404" in str(e):
+                        print(f"  ⚠️  找不到 issue: {issue_key}")
+                    elif "415" in str(e):
+                        print(f"  ⚠️  不支援的檔案類型或 issue 狀態問題")
+            
+            # 顯示上傳結果摘要
+            print("\n上傳結果摘要:")
+            if upload_success:
+                print(f"✓ 成功上傳到: {', '.join(upload_success)}")
+            if upload_failed:
+                print(f"✗ 上傳失敗: {', '.join(upload_failed)}")
+                if args.upload_issue and args.upload_issue in upload_failed:
+                    print(f"\n提示：指定的上傳 issue {args.upload_issue} 上傳失敗")
+                    print("     可能原因：")
+                    print("     1. Issue 已關閉且您沒有 reopen 權限")
+                    print("     2. 您沒有該 issue 的附件上傳權限")
+                    print("     3. Issue 不存在或 key 錯誤")
+            
+            if not upload_success and not upload_failed:
+                print("沒有執行任何上傳操作")
+            
+            print(f"\n分析結果已儲存在本地：{output_path_abs}")
         
         print("\n分析完成！")
         print(f"已生成以下檔案：")

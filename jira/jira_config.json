@@ -1,0 +1,12 @@
+{
+    "rtk": {
+      "url": "https://jira.realtek.com",
+      "token": "your-token",
+      "username": "vince_lin@realtek.com"
+    },
+    "vendor": {
+      "url": "https://vendorjira.realtek.com",
+      "token": "your-token",
+      "username": "vince_lin@realtek.com"
+    }
+  }
