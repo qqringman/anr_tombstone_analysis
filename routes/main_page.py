@@ -8647,8 +8647,8 @@ def analyze():
                 path = os.path.expanduser(path)
                 path = os.path.abspath(path)
             
-            print(f"Analyzing path: {path}")
-            print(f"Original input: {original_path}")
+            # print(f"Analyzing path: {path}")
+            # print(f"Original input: {original_path}")
             
             if not os.path.exists(path):
                 return jsonify({
@@ -8678,7 +8678,7 @@ def analyze():
             
             # 如果輸出目錄存在
             if os.path.exists(output_path):
-                print(f"發現已存在的輸出目錄: {output_path}")
+                # print(f"發現已存在的輸出目錄: {output_path}")
                 
                 # 備份 all_anr_tombstone_result.xlsx 到上一層目錄
                 if os.path.exists(all_excel_path_in_output):
@@ -8686,7 +8686,7 @@ def analyze():
                         # 備份到上一層目錄（使用 .backup 後綴避免衝突）
                         shutil.copy2(all_excel_path_in_output, all_excel_backup_path)
                         all_excel_exists = True
-                        print(f"已備份 all_anr_tombstone_result.xlsx 到: {all_excel_backup_path}")
+                        # print(f"已備份 all_anr_tombstone_result.xlsx 到: {all_excel_backup_path}")
                     except Exception as e:
                         print(f"備份 all_anr_tombstone_result.xlsx 失敗: {e}")
                         all_excel_exists = False
@@ -8694,7 +8694,7 @@ def analyze():
                 # 刪除輸出目錄
                 try:
                     shutil.rmtree(output_path)
-                    print(f"已刪除舊的輸出目錄: {output_path}")
+                    # print(f"已刪除舊的輸出目錄: {output_path}")
                 except Exception as e:
                     print(f"刪除輸出目錄失敗: {e}")
                     # 如果刪除失敗，清理備份
@@ -8743,8 +8743,8 @@ def analyze():
                 vp_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vp_analyze_logs.py')
                 
                 if os.path.exists(vp_script_path):
-                    print(f"找到 vp_analyze_logs.py: {vp_script_path}")
-                    print(f"執行命令: python3.12 {vp_script_path} {path} {output_path}")
+                    # print(f"找到 vp_analyze_logs.py: {vp_script_path}")
+                    # print(f"執行命令: python3.12 {vp_script_path} {path} {output_path}")
                     
                     # 使用 python3.12 執行 vp_analyze_logs.py
                     cmd = ['python3.12', vp_script_path, path, output_path]
@@ -8758,32 +8758,32 @@ def analyze():
                         cwd=os.path.dirname(vp_script_path)  # 設定工作目錄
                     )
                     
-                    print(f"Return code: {result.returncode}")
-                    print(f"STDOUT: {result.stdout}")
-                    print(f"STDERR: {result.stderr}")
+                    # print(f"Return code: {result.returncode}")
+                    # print(f"STDOUT: {result.stdout}")
+                    # print(f"STDERR: {result.stderr}")
                     
                     if result.returncode == 0:
                         vp_analyze_success = True
-                        print("vp_analyze_logs.py 執行成功")
-                        print(f"分析結果輸出到: {output_path}")
+                        # print("vp_analyze_logs.py 執行成功")
+                        # print(f"分析結果輸出到: {output_path}")
                         
                         # 確保輸出目錄存在
                         if os.path.exists(output_path):
-                            print(f"確認輸出目錄已建立: {output_path}")
+                            # print(f"確認輸出目錄已建立: {output_path}")
                             
                             # 還原備份的 all_anr_tombstone_result.xlsx
                             if all_excel_exists and os.path.exists(all_excel_backup_path):
                                 try:
                                     # 將備份檔案移回輸出目錄
                                     shutil.move(all_excel_backup_path, all_excel_path_in_output)
-                                    print(f"已還原 all_anr_tombstone_result.xlsx 到: {all_excel_path_in_output}")
+                                    # print(f"已還原 all_anr_tombstone_result.xlsx 到: {all_excel_path_in_output}")
                                 except Exception as e:
                                     print(f"還原 all_anr_tombstone_result.xlsx 失敗: {e}")
                                     # 如果移動失敗，嘗試複製
                                     try:
                                         shutil.copy2(all_excel_backup_path, all_excel_path_in_output)
                                         os.unlink(all_excel_backup_path)
-                                        print(f"已複製並還原 all_anr_tombstone_result.xlsx")
+                                        # print(f"已複製並還原 all_anr_tombstone_result.xlsx")
                                     except Exception as e2:
                                         print(f"複製 all_anr_tombstone_result.xlsx 也失敗: {e2}")
                             
@@ -8872,7 +8872,7 @@ def analyze():
             results['has_all_excel'] = os.path.exists(all_excel_path_in_output)
             results['all_excel_path'] = all_excel_path_in_output if results['has_all_excel'] else None
             
-            print(f"最終檢查 all_anr_tombstone_result.xlsx: {results['has_all_excel']}")
+            # print(f"最終檢查 all_anr_tombstone_result.xlsx: {results['has_all_excel']}")
             
             # 使用新的 cache
             analysis_cache.set(analysis_id, results)
@@ -9385,7 +9385,7 @@ def export_ai_excel():
                 ws_copy.freeze_panes = 'A2'
                 
                 wb_copy.save(excel_save_path)
-                print(f"已儲存 Excel 檔案到: {excel_save_path}")
+                # print(f"已儲存 Excel 檔案到: {excel_save_path}")
             except Exception as e:
                 print(f"儲存 Excel 檔案到分析資料夾失敗: {str(e)}")
                         
@@ -9473,11 +9473,11 @@ def check_existing_analysis():
             excel_report_path = os.path.join(analysis_path, 'all_anr_tombstone_excel_result.html')
             
             # 詳細記錄檢查結果
-            print(f"檢查分析資料夾: {analysis_path}")
-            print(f"  index.html 存在: {os.path.exists(index_path)}")
-            print(f"  Excel 存在: {os.path.exists(excel_path)}")
-            print(f"  HTML 存在: {os.path.exists(html_path)}")
-            print(f"  Excel 報表存在: {os.path.exists(excel_report_path)}")
+            # print(f"檢查分析資料夾: {analysis_path}")
+            # print(f"  index.html 存在: {os.path.exists(index_path)}")
+            # print(f"  Excel 存在: {os.path.exists(excel_path)}")
+            # print(f"  HTML 存在: {os.path.exists(html_path)}")
+            # print(f"  Excel 報表存在: {os.path.exists(excel_report_path)}")
             
             result['has_index'] = os.path.exists(index_path)
             result['has_excel'] = os.path.exists(excel_path)
@@ -9488,7 +9488,7 @@ def check_existing_analysis():
             result['html_path'] = html_path if result['has_html'] else None
             result['excel_report_path'] = excel_report_path if result['has_excel_report'] else None
             
-            print(f"回傳結果: {result}")
+            # print(f"回傳結果: {result}")
         
         return jsonify(result)
         
@@ -9744,8 +9744,8 @@ def export_all_history_excel():
         if includes_current:
             try:
                 wb.save(all_excel_path)
-                print(f"Updated original all_anr_tombstone_result.xlsx at: {all_excel_path}")
-                print(f"Added {records_added} new records")
+                # print(f"Updated original all_anr_tombstone_result.xlsx at: {all_excel_path}")
+                # print(f"Added {records_added} new records")
             except Exception as e:
                 print(f"Failed to update original file: {str(e)}")
         
@@ -10391,7 +10391,7 @@ def export(format, analysis_id):
                     if '_anr_tombstones_analyze' in output_path:
                         base_path = os.path.dirname(output_path)
         
-        print(f"Export HTML - base_path: {base_path}")  # 調試輸出
+        # print(f"Export HTML - base_path: {base_path}")  # 調試輸出
         
         # 創建 HTML 報告
         html_report = HTML_TEMPLATE
@@ -10762,7 +10762,7 @@ def export(format, analysis_id):
                 html_save_path = os.path.join(data.get('vp_analyze_output_path'), 'all_anr_tombstone_result.html')
                 with open(html_save_path, 'w', encoding='utf-8') as f:
                     f.write(html_report)
-                print(f"已儲存 HTML 檔案到: {html_save_path}")
+                # print(f"已儲存 HTML 檔案到: {html_save_path}")
             except Exception as e:
                 print(f"儲存 HTML 檔案到分析資料夾失敗: {str(e)}")
                         
@@ -10912,7 +10912,7 @@ def export_excel_to_folder():
         excel_save_path = os.path.join(output_folder, 'all_anr_tombstone_result.xlsx')
         wb.save(excel_save_path)
         
-        print(f"已儲存 Excel 檔案到: {excel_save_path}")
+        # print(f"已儲存 Excel 檔案到: {excel_save_path}")
         
         return jsonify({
             'success': True,
@@ -11124,7 +11124,7 @@ def export_excel_report_to_folder():
         with open(report_save_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
         
-        print(f"已儲存 Excel 報表到: {report_save_path}")
+        # print(f"已儲存 Excel 報表到: {report_save_path}")
         
         # 清理臨時檔案
         try:
@@ -11738,7 +11738,7 @@ def export_html_to_folder(analysis_id):
         with open(html_save_path, 'w', encoding='utf-8') as f:
             f.write(html_report)
         
-        print(f"已儲存 HTML 檔案到: {html_save_path}")
+        # print(f"已儲存 HTML 檔案到: {html_save_path}")
         
         return jsonify({
             'success': True,
@@ -11773,9 +11773,9 @@ def analyze_selected_items():
         folder_files = request.files.getlist('folder_files')
         auto_group = request.form.get('auto_group') == 'true'
         
-        print(f"接收到 {len(files)} 個單獨檔案")
-        print(f"接收到 {len(folder_files)} 個資料夾檔案")
-        print(f"自動分組: {auto_group}")
+        # print(f"接收到 {len(files)} 個單獨檔案")
+        # print(f"接收到 {len(folder_files)} 個資料夾檔案")
+        # print(f"自動分組: {auto_group}")
         
         # === 修改：簡化排除邏輯 - 排除所有隱藏資料夾 ===
         def should_exclude_path(path):
@@ -11966,7 +11966,7 @@ def analyze_selected_items():
         
         # === 新增：如果沒有自動分組，且需要建立資料夾結構 ===
         elif needs_folder_structure and not auto_group:
-            print("檢測到需要建立 anr/tombstones 資料夾結構")
+            # print("檢測到需要建立 anr/tombstones 資料夾結構")
             
             # 移動所有散落的 ANR/Tombstone 檔案到正確的資料夾
             for root, dirs, files in os.walk(temp_dir):
@@ -11985,7 +11985,7 @@ def analyze_selected_items():
                         dest_path = os.path.join(anr_folder, filename)
                         if not os.path.exists(dest_path):
                             shutil.move(file_path, dest_path)
-                            print(f"移動 ANR 檔案: {filename} -> anr/")
+                            # print(f"移動 ANR 檔案: {filename} -> anr/")
                     elif 'tombstone' in file_lower:
                         # 移動到 tombstones 資料夾
                         tombstones_folder = os.path.join(temp_dir, 'tombstones')
@@ -11993,7 +11993,7 @@ def analyze_selected_items():
                         dest_path = os.path.join(tombstones_folder, filename)
                         if not os.path.exists(dest_path):
                             shutil.move(file_path, dest_path)
-                            print(f"移動 Tombstone 檔案: {filename} -> tombstones/")
+                            # print(f"移動 Tombstone 檔案: {filename} -> tombstones/")
         
         # === 新增：清理空目錄 ===
         def remove_empty_dirs(root_dir):
@@ -12003,7 +12003,7 @@ def analyze_selected_items():
                 if not dirnames and not filenames and dirpath != root_dir:
                     try:
                         os.rmdir(dirpath)
-                        print(f"刪除空目錄: {dirpath}")
+                        # print(f"刪除空目錄: {dirpath}")
                     except:
                         pass
         

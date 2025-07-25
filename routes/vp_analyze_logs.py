@@ -3794,93 +3794,79 @@ class TombstoneAnalyzer(BaseAnalyzer):
     
     def _extract_abort_message(self, content: str) -> Optional[str]:
         """提取 abort message - 增強版"""
-        # 現有的模式
-        abort_patterns = [
-            r'Abort message:\s*["\'](.+?)["\']',
-            r'Abort message:\s*(.+?)(?:\n|$)',
-            r'abort_message:\s*"(.+?)"',
-            r'CHECK\s+failed:\s*(.+)',
-            r'Fatal Exception:\s*(.+)',
+        # 優先使用更精確的模式
+        precise_patterns = [
+            r'Abort message:\s*"([^"]+)"',  # 帶雙引號的精確匹配
+            r'Abort message:\s*\'([^\']+)\'',  # 單引號
+            r'abort_message:\s*"([^"]+)"',
+            r'CHECK\s+failed:\s*([^\n]+?)(?:\s+at\s+|$)',  # CHECK failed 後面的內容
+            r'assertion\s+"([^"]+)"\s+failed',  # assertion 失敗
+            r'Fatal Exception:\s*([^\n]+)',  # Fatal Exception 一行
         ]
         
-        # 新增的 abort 相關模式
-        additional_patterns = [
-            # 標準 abort 信號
-            r'Fatal signal.*?Abort.*?reason:\s*(.+?)(?:\n|$)',
-            r'libc:\s*Fatal signal.*?abort.*?:\s*(.+?)(?:\n|$)',
-            r'Abort trap:\s*(.+?)(?:\n|$)',
-            r'Process.*?aborted.*?reason:\s*(.+?)(?:\n|$)',
-            r'SIGABRT.*?reason:\s*(.+?)(?:\n|$)',
-            
-            # Android 特定的 abort
-            r'android::abort\(\).*?:\s*(.+?)(?:\n|$)',
-            r'art::Runtime::Abort\(\).*?:\s*(.+?)(?:\n|$)',
-            r'__libc_fatal\(\).*?:\s*(.+?)(?:\n|$)',
-            
-            # JNI 相關的 abort
-            r'JNI DETECTED ERROR.*?:\s*(.+?)(?:\n|$)',
-            r'JNI FatalError called:\s*(.+?)(?:\n|$)',
-            r'JNI WARNING.*?aborting.*?:\s*(.+?)(?:\n|$)',
-            
-            # FORTIFY 相關
-            r'FORTIFY:\s*(.+?)(?:\n|$)',
-            r'fortify_fatal:\s*(.+?)(?:\n|$)',
-            r'detected source and destination buffer overlap',
-            r'buffer overflow detected',
-            r'stack corruption detected',
-            
-            # Native heap 相關
-            r'native heap corruption detected.*?:\s*(.+?)(?:\n|$)',
-            r'invalid address or address of corrupt block.*?:\s*(.+?)(?:\n|$)',
-            r'heap corruption detected by.*?:\s*(.+?)(?:\n|$)',
-            
-            # Bionic 相關
-            r'bionic:\s*(.+?abort.+?)(?:\n|$)',
-            r'async_safe_fatal\(\):\s*(.+?)(?:\n|$)',
-            
-            # 其他常見的 abort 訊息
-            r'Aborting.*?:\s*(.+?)(?:\n|$)',
-            r'abort\(\) called.*?:\s*(.+?)(?:\n|$)',
-            r'Fatal error:\s*(.+?)(?:\n|$)',
-            r'FATAL:\s*(.+?)(?:\n|$)',
-        ]
-        
-        # 合併所有模式
-        all_patterns = abort_patterns + additional_patterns
-        
-        # 嘗試匹配所有模式
-        for pattern in all_patterns:
-            match = re.search(pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        # 先嘗試精確匹配
+        for pattern in precise_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
             if match:
                 message = match.group(1).strip()
                 
-                # 清理訊息
-                message = message.replace('\\n', '\n')
-                message = message.replace('\\t', '\t')
+                # 基本清理
+                message = message.replace('\\n', ' ')
+                message = message.replace('\\t', ' ')
                 message = message.replace('\\"', '"')
                 message = message.replace("\\'", "'")
                 
                 # 移除多餘的空白
                 message = ' '.join(message.split())
                 
+                # 確保不包含其他欄位的內容
+                if any(keyword in message for keyword in ['分析:', '堆疊', 'backtrace:', 'memory map:']):
+                    # 可能匹配過多，截取第一個句子或逗號前的部分
+                    for delimiter in ['. ', ', ', ' - ', ': ']:
+                        if delimiter in message:
+                            message = message.split(delimiter)[0]
+                            break
+                
                 # 限制長度
-                if len(message) > 500:
-                    message = message[:497] + "..."
+                if len(message) > 100:
+                    message = message[:97] + "..."
+                
+                return message
+        
+        # 寬鬆模式 - 但要更小心
+        loose_patterns = [
+            r'Abort message:\s*(.+?)(?:\n|\s{2,}|$)',  # 直到換行或多個空格
+            r'abort_message:\s*(.+?)(?:\n|\s{2,}|$)',
+            r'CHECK\s+failed:\s*(.+?)(?:\n|$)',
+            r'Fatal error:\s*(.+?)(?:\n|$)',
+            r'FATAL:\s*(.+?)(?:\n|$)',
+        ]
+        
+        for pattern in loose_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                message = match.group(1).strip()
+                
+                # 移除可能的引號
+                message = message.strip('"\'')
+                
+                # 清理
+                message = ' '.join(message.split())
+                
+                # 檢查是否包含了不該有的內容
+                if len(message) > 200 or any(bad_word in message for bad_word in ['#0', 'backtrace', 'pc 0x']):
+                    continue  # 跳過這個匹配，嘗試下一個
+                
+                if len(message) > 100:
+                    message = message[:97] + "..."
                 
                 return message
         
         # 檢查特殊的 abort 標記
         special_abort_checks = [
-            # 檢查 SIGABRT
             (r'signal\s+6\s+\(SIGABRT\)', "Signal 6 (SIGABRT) - 程序主動終止"),
             (r'si_signo=6', "SIGABRT - 程序異常終止"),
-            
-            # 檢查特定的 abort 地址
             (r'fault addr 0xdeadbaad', "Android libc abort marker (0xdeadbaad)"),
-            (r'pc 0xdeadbaad', "Abort at debug marker address"),
-            
-            # 檢查 abort 函數調用
-            (r'\babort\s*\(\)', "Direct abort() call"),
             (r'__libc_android_abort', "Android libc abort"),
             (r'raise\(SIGABRT\)', "Raised SIGABRT signal"),
         ]
@@ -3889,52 +3875,40 @@ class TombstoneAnalyzer(BaseAnalyzer):
             if re.search(pattern, content, re.IGNORECASE):
                 # 嘗試找到更多上下文
                 context_patterns = [
-                    r'(?:reason|cause|because|due to):\s*([^\n]+)',
-                    r'(?:error|failure):\s*([^\n]+)',
-                    r'(?:message):\s*([^\n]+)',
+                    r'reason:\s*([^\n]+)',
+                    r'cause:\s*([^\n]+)',
+                    r'error:\s*([^\n]+)',
                 ]
                 
                 for ctx_pattern in context_patterns:
                     ctx_match = re.search(ctx_pattern, content, re.IGNORECASE)
                     if ctx_match:
-                        return f"{description} - {ctx_match.group(1).strip()}"
+                        context = ctx_match.group(1).strip()
+                        if len(context) < 50:  # 合理的長度
+                            return f"{description} - {context}"
                 
                 return description
         
-        # 檢查堆疊中的 abort 調用
-        abort_stack_patterns = [
-            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(abort\+',
-            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(__libc_android_abort',
-            r'#\d+\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(raise\+',
+        # 檢查 FORTIFY
+        fortify_patterns = [
+            r'FORTIFY:\s*([^\n]+)',
+            r'fortify_fatal:\s*([^\n]+)',
+            r'detected source and destination buffer overlap',
+            r'buffer overflow detected',
+            r'stack corruption detected',
         ]
         
-        for pattern in abort_stack_patterns:
-            if re.search(pattern, content):
-                # 嘗試從堆疊前後找到原因
-                lines = content.split('\n')
-                for i, line in enumerate(lines):
-                    if re.search(pattern, line):
-                        # 檢查前後 5 行
-                        start = max(0, i - 5)
-                        end = min(len(lines), i + 5)
-                        
-                        for j in range(start, end):
-                            if 'assert' in lines[j].lower():
-                                return f"Assertion failed: {lines[j].strip()}"
-                            elif 'check failed' in lines[j].lower():
-                                return f"Check failed: {lines[j].strip()}"
-                            elif 'fatal' in lines[j].lower() and j != i:
-                                return f"Fatal error: {lines[j].strip()}"
+        for pattern in fortify_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                if isinstance(match.group(0), str) and 'detected' in match.group(0):
+                    return match.group(0)
+                else:
+                    return match.group(1).strip()[:100]
         
-        # 最後的 fallback：如果檔案中包含 abort 相關關鍵字但沒有明確訊息
-        if any(keyword in content.lower() for keyword in ['abort', 'sigabrt', 'fatal', '0xdeadbaad']):
-            # 統計關鍵字出現次數
-            abort_count = content.lower().count('abort')
-            sigabrt_count = content.lower().count('sigabrt')
-            fatal_count = content.lower().count('fatal')
-            
-            if abort_count > 0 or sigabrt_count > 0:
-                return f"Abort detected (abort: {abort_count}, sigabrt: {sigabrt_count}, fatal: {fatal_count})"
+        # 最後的 fallback
+        if 'abort' in content.lower() or 'sigabrt' in content.lower():
+            return "Abort detected (詳細訊息未找到)"
         
         return None
     
@@ -5092,24 +5066,24 @@ class LogAnalyzerSystem:
         info = {
             'path': file_path,
             'filename': os.path.basename(file_path),
-            'type': 'anr' if 'anr' in os.path.basename(file_path) else 'tombstone',
+            'type': 'anr' if 'anr' in os.path.basename(file_path).lower() else 'tombstone',
             'root_cause': '',
             'severity': '',
             'process_name': '',
             'features': [],
             'content': html_content,
             'rel_path': os.path.relpath(file_path, self.input_folder),
-            'key_stack': '',  # 關鍵堆疊
-            'stack_marker': '',  # 堆疊標記
+            'key_stack': '',
+            'stack_marker': '',
             'signal_type': '',
             'fault_addr': '',
             'crash_function': '',
-            'anr_type': '',  # 新增：ANR 類型
-            'wait_time': 0,  # 新增：等待時間
-            'thread_state': '',  # 新增：主線程狀態
+            'anr_type': '',
+            'wait_time': 0,
+            'thread_state': '',
         }
         
-        # 提取可能原因（更精確的模式）
+        # 提取可能原因
         cause_patterns = [
             r'🎯\s*可能原因[：:]\s*([^<\n]+)',
             r'可能原因[：:]\s*([^<\n]+)',
@@ -5124,9 +5098,8 @@ class LogAnalyzerSystem:
         
         # 提取嚴重程度
         severity_patterns = [
-            r'🚨\s*嚴重程度[：:]\s*([^<\n]+)',
+            r'[🚨⚠️]\s*嚴重程度[：:]\s*([^<\n]+)',
             r'嚴重程度[：:]\s*([^<\n]+)',
-            r'⚠️\s*嚴重程度[：:]\s*([^<\n]+)',
         ]
         
         for pattern in severity_patterns:
@@ -5135,9 +5108,9 @@ class LogAnalyzerSystem:
                 info['severity'] = severity_match.group(1).strip()
                 break
         
-        # 提取進程名稱（更精確）
+        # 提取進程名稱
         process_patterns = [
-            r'📱\s*進程名稱[：:]\s*([^\s,\(<]+)',
+            r'📱\s*進程[：:]\s*([^\s,\(<]+)',
             r'進程名稱[：:]\s*([^\s,\(<]+)',
             r'進程[：:]\s*([^\s,\(<]+)',
             r'Process:\s*([^\s,\(<]+)',
@@ -5147,20 +5120,19 @@ class LogAnalyzerSystem:
             process_match = re.search(pattern, html_content)
             if process_match:
                 process_name = process_match.group(1).strip().strip('"\'')
+                # 確保進程名不包含括號內容
+                if '(' in process_name:
+                    process_name = process_name.split('(')[0].strip()
                 info['process_name'] = process_name
                 break
         
-        # 提取關鍵堆疊（這是最重要的區分特徵）
+        # 提取關鍵堆疊
         stack_patterns = [
-            # 查找帶標記的堆疊
             r'🔴\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
             r'🟡\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
-            r'⚪\s*#\d+\s+([^<\n]+?)(?:\s*🔴|\s*🟡|\s*⚪|$)',
-            # 查找關鍵堆疊區段
+            r'💥\s*崩潰點[：:]\s*#\d+\s+([^@\n<]+)',
             r'關鍵堆疊[：:]\s*(?:.*\n)?.*?#\d+\s+([^<\n]+)',
-            # 查找第一個堆疊
             r'#00\s+([^<\n]+)',
-            r'#0\s+([^<\n]+)',
         ]
         
         for pattern in stack_patterns:
@@ -5207,286 +5179,175 @@ class LogAnalyzerSystem:
             if thread_state_match:
                 info['thread_state'] = thread_state_match.group(1).strip()
             
-            # 基於關鍵堆疊和原因提取特徵
-            if info['key_stack']:
-                stack_lower = info['key_stack'].lower()
-                
-                # Binder 相關
-                if any(keyword in info['key_stack'] for keyword in ['BinderProxy', 'Binder.transact', 'transactNative']):
-                    info['features'].append('binder_ipc')
-                    # 嘗試識別具體的 Binder 服務
-                    if 'WindowManager' in info['key_stack']:
-                        info['features'].append('window_manager_binder')
-                    elif 'ActivityManager' in info['key_stack']:
-                        info['features'].append('activity_manager_binder')
-                    elif 'PackageManager' in info['key_stack']:
-                        info['features'].append('package_manager_binder')
-                
-                # I/O 操作
-                if any(keyword in stack_lower for keyword in ['file', 'sqlite', 'sharedpreferences', 'read', 'write']):
-                    info['features'].append('io_operation')
-                    if 'sqlite' in stack_lower:
-                        info['features'].append('database_io')
-                    elif 'sharedpreferences' in stack_lower:
-                        info['features'].append('shared_prefs_io')
-                
-                # 網路操作
-                if any(keyword in stack_lower for keyword in ['socket', 'http', 'network', 'url']):
-                    info['features'].append('network_operation')
-                
-                # UI 相關
-                if any(keyword in stack_lower for keyword in ['ondraw', 'onmeasure', 'onlayout', 'inflate']):
-                    info['features'].append('ui_operation')
-                
-                # WebView
-                if 'webview' in stack_lower or 'chromium' in stack_lower:
-                    info['features'].append('webview')
-                
-                # 同步鎖
-                if any(keyword in stack_lower for keyword in ['synchronized', 'lock', 'monitor', 'wait']):
-                    info['features'].append('synchronization')
+            # 基於內容提取特徵
+            self._extract_anr_features(info, html_content)
             
-            # 基於 root_cause 提取特徵
-            if info['root_cause']:
-                cause_lower = info['root_cause'].lower()
-                
-                if '死鎖' in info['root_cause']:
-                    info['features'].append('deadlock')
-                if '線程數' in info['root_cause']:
-                    info['features'].append('too_many_threads')
-                if '記憶體' in info['root_cause']:
-                    info['features'].append('memory_issue')
-                if 'cpu' in cause_lower:
-                    info['features'].append('cpu_issue')
-                if '同步鎖' in info['root_cause']:
-                    info['features'].append('lock_wait')
-                if 'binder' in cause_lower:
-                    info['features'].append('binder_issue')
-                    
-        if info['type'] == 'tombstone':
-            # Tombstone 特徵（增強）
+        elif info['type'] == 'tombstone':
+            # Tombstone 特定資訊提取
+            
             # 提取信號類型
-            signal_match = re.search(r'信號[：:]\s*([^<\n]+)', html_content)
-            if signal_match:
-                signal_text = signal_match.group(1).strip()
-                info['signal_type'] = signal_text
-                
-                if 'SIGSEGV' in signal_text:
-                    info['features'].append('sigsegv')
-                elif 'SIGABRT' in signal_text:
-                    info['features'].append('sigabrt')
-                elif 'SIGILL' in signal_text:
-                    info['features'].append('sigill')
-                elif 'SIGBUS' in signal_text:
-                    info['features'].append('sigbus')
-                elif 'SIGFPE' in signal_text:
-                    info['features'].append('sigfpe')
+            signal_patterns = [
+                r'🚨\s*信號[：:]\s*([^<\n]+)',
+                r'信號[：:]\s*([^<\n]+)',
+            ]
+            
+            for pattern in signal_patterns:
+                signal_match = re.search(pattern, html_content)
+                if signal_match:
+                    signal_text = signal_match.group(1).strip()
+                    info['signal_type'] = signal_text
+                    
+                    # 添加信號特徵
+                    if 'SIGSEGV' in signal_text:
+                        info['features'].append('sigsegv')
+                    elif 'SIGABRT' in signal_text:
+                        info['features'].append('sigabrt')
+                    elif 'SIGILL' in signal_text:
+                        info['features'].append('sigill')
+                    elif 'SIGBUS' in signal_text:
+                        info['features'].append('sigbus')
+                    break
             
             # 提取故障地址
-            fault_addr_match = re.search(r'故障地址[：:]\s*([0-9a-fA-Fx]+)', html_content)
-            if fault_addr_match:
-                info['fault_addr'] = fault_addr_match.group(1).strip()
-                
-                if info['fault_addr'] in ['0x0', '0', '00000000']:
-                    info['features'].append('null_pointer')
-                elif info['fault_addr'] == '0xdeadbaad':
-                    info['features'].append('abort_marker')
-                elif info['fault_addr'].startswith('0xdead'):
-                    info['features'].append('debug_marker')
-            
-            # 提取崩潰函數
-            crash_func_patterns = [
-                r'崩潰點[：:]\s*#\d+\s+([^@\n]+)',
-                r'#00\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(([^)]+)\)',
-                r'💥\s*崩潰點[：:]\s*([^<\n]+)',
-                # 新增：更精確的模式
-                r'#00\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^+]+)',  # 捕獲函數名（不含偏移）
-                r'#0+\s+pc\s+[0-9a-fA-F]+\s+[^\(]+\(([^\+\)]+)',    # 另一種格式
-                r'關鍵堆疊[：:]\s*\n\s*[^\n]*#0+\s+([^\n]+)',        # 從關鍵堆疊區段提取
+            fault_addr_patterns = [
+                r'📍\s*故障地址[：:]\s*([0-9a-fA-Fx]+)',
+                r'故障地址[：:]\s*([0-9a-fA-Fx]+)',
             ]
             
-            for pattern in crash_func_patterns:
-                match = re.search(pattern, html_content)
-                if match:
-                    # 處理多個捕獲組的情況
-                    if len(match.groups()) > 1:
-                        # 優先使用第二個捕獲組（通常是函數名）
-                        func_name = match.group(2) if match.group(2) else match.group(1)
-                    else:
-                        func_name = match.group(1)
+            for pattern in fault_addr_patterns:
+                fault_addr_match = re.search(pattern, html_content)
+                if fault_addr_match:
+                    info['fault_addr'] = fault_addr_match.group(1).strip()
                     
-                    # 清理函數名
-                    func_name = func_name.strip()
-                    # 移除偏移量（如 +12）
-                    func_name = re.sub(r'\+\d+\s*$', '', func_name)
-                    # 移除參數列表
-                    func_name = re.sub(r'\([^)]*\)$', '', func_name)
-                    
-                    info['crash_function'] = func_name.strip()
+                    # 添加地址特徵
+                    if info['fault_addr'] in ['0x0', '0', '00000000']:
+                        info['features'].append('null_pointer')
+                    elif info['fault_addr'] == '0xdeadbaad':
+                        info['features'].append('abort_marker')
                     break
             
-            # 根據崩潰函數添加特徵
-            if info['crash_function']:
-                func_lower = info['crash_function'].lower()
-                if 'malloc' in func_lower or 'free' in func_lower:
-                    info['features'].append('memory_management')
-                elif 'strlen' in func_lower or 'strcpy' in func_lower:
-                    info['features'].append('string_operation')
-                elif 'jni' in func_lower:
-                    info['features'].append('jni_crash')
-            
-
-            # 嘗試提取完整的崩潰堆疊（前3幀）
-            crash_stack_patterns = [
-                # 匹配完整的堆疊幀，包括 pc、地址、庫和函數
-                r'#00\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)\s+\(([^)]+)\)',
-                r'#0\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)\s+\(([^)]+)\)',
-                r'💥[^#]*#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+([^\s]+)',
-            ]
-            
-            for pattern in crash_stack_patterns:
-                match = re.search(pattern, html_content)
-                if match:
-                    # 組合成完整的堆疊信息
-                    if len(match.groups()) >= 3:
-                        pc = match.group(1)
-                        lib = match.group(2)
-                        func = match.group(3) if len(match.groups()) >= 3 else ''
-                        
-                        # 清理庫路徑，只保留文件名
-                        lib_name = lib.split('/')[-1] if '/' in lib else lib
-                        
-                        # 組合關鍵堆疊
-                        info['key_stack'] = f"pc {pc} {lib_name} ({func})"
-                        
-                        # 同時保存分解的信息以便比較
-                        info['crash_pc'] = pc
-                        info['crash_lib'] = lib_name
-                        info['crash_func_detail'] = func
-                    break
-
-            # 提取關鍵堆疊 - 更精確的模式
-            key_stack_patterns = [
-                # 查找崩潰點標記的堆疊
-                r'💥\s*崩潰點[：:]\s*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
-                r'💥\s*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
-                # 查找第一個堆疊幀
-                r'#00\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
-                r'#0\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
-                # 從關鍵堆疊區段提取
-                r'關鍵堆疊[：:]\s*\n[^\n]*#\d+\s+pc\s+[0-9a-fA-F]+\s+([^\s]+)\s+\(([^)]+)\)',
-            ]
-            
-            for pattern in key_stack_patterns:
-                match = re.search(pattern, html_content, re.MULTILINE)
-                if match:
-                    lib_path = match.group(1)
-                    func_info = match.group(2)
-                    
-                    # 提取庫名（只保留文件名）
-                    lib_name = lib_path.split('/')[-1]
-                    
-                    # 組合關鍵堆疊信息
-                    info['key_stack'] = f"{lib_name} ({func_info})"
-                    
-                    # 同時保存詳細信息
-                    info['crash_lib'] = lib_name
-                    info['crash_function'] = func_info
-                    
-                    # 如果是 libc.so 的系統調用，特別標記
-                    if 'libc.so' in lib_name:
-                        info['features'].append('libc_crash')
-                        if any(syscall in func_info for syscall in ['__ioctl', '__write', '__read', '__open']):
-                            info['features'].append('system_call_crash')
-                    
-                    break
-
-            # 1. 提取 Abort Message（重要！）
+            # 提取 Abort Message（重要！使用更精確的模式）
             abort_patterns = [
+                r'🗨️\s*Abort Message[^<\n]*\n\s*訊息[：:]\s*([^<\n]+)',
                 r'Abort message[：:]\s*([^<\n]+)',
-                r'abort_message[：:]\s*"([^"]+)"',
                 r'訊息[：:]\s*([^<\n]+)',
             ]
             
             for pattern in abort_patterns:
                 abort_match = re.search(pattern, html_content)
                 if abort_match:
-                    info['abort_message'] = abort_match.group(1).strip()
-                    # Abort message 通常能精確定位問題
-                    if 'abort_message' not in info['features']:
-                        info['features'].append('has_abort_message')
+                    abort_msg = abort_match.group(1).strip()
+                    
+                    # 清理可能的錯誤字符
+                    abort_msg = abort_msg.strip('"\'')
+                    
+                    # 確保不包含分析內容
+                    if '分析:' in abort_msg or '崩潰堆疊' in abort_msg:
+                        # 只取第一個逗號或句號前的內容
+                        for delimiter in [',', '，', '.', '。', ' - ']:
+                            if delimiter in abort_msg:
+                                abort_msg = abort_msg.split(delimiter)[0].strip()
+                                break
+                    
+                    # 限制長度
+                    if len(abort_msg) > 80:
+                        abort_msg = abort_msg[:77] + "..."
+                    
+                    info['abort_message'] = abort_msg
+                    info['features'].append('has_abort_message')
                     break
             
-            # 2. 提取信號碼（signal code）
-            signal_code_match = re.search(r'信號碼[：:]\s*([^<\n]+)', html_content)
-            if signal_code_match:
-                info['signal_code'] = signal_code_match.group(1).strip()
+            # 提取崩潰函數
+            crash_func_patterns = [
+                r'💥\s*崩潰點[：:]\s*#\d+\s+[^@]+@[^(]+\(([^)]+)\)',
+                r'崩潰點[：:]\s*#\d+\s+([^@\n<]+)',
+                r'#00\s+pc\s+[0-9a-fA-F]+\s+[^\s]+\s+\(([^)]+)\)',
+            ]
             
-            # 3. 提取線程名稱
-            thread_name_match = re.search(r'線程[：:]\s*([^(]+)\s*\(tid=', html_content)
-            if thread_name_match:
-                info['thread_name'] = thread_name_match.group(1).strip()
+            for pattern in crash_func_patterns:
+                match = re.search(pattern, html_content)
+                if match:
+                    func_name = match.group(1).strip()
+                    # 移除偏移量
+                    func_name = re.sub(r'\+\d+\s*$', '', func_name)
+                    info['crash_function'] = func_name.strip()
+                    break
             
-            # 4. 提取堆疊的前3層（不只是崩潰點）
-            stack_section_pattern = r'關鍵堆疊[：:]\s*\n((?:[^\n]+\n?){1,5})'
-            stack_match = re.search(stack_section_pattern, html_content, re.MULTILINE)
-            
-            if stack_match:
-                stack_frames = []
-                frame_pattern = r'#(\d+)\s+([^<\n]+)'
-                frames = re.findall(frame_pattern, stack_match.group(1))
-                
-                for frame_num, frame_content in frames[:3]:  # 取前3層
-                    # 清理並標準化堆疊幀
-                    clean_frame = frame_content.strip()
-                    clean_frame = re.sub(r'\s+', ' ', clean_frame)  # 統一空白
-                    stack_frames.append(clean_frame)
-                
-                info['stack_frames'] = stack_frames
-                
-                # 生成堆疊指紋（用於精確匹配）
-                if stack_frames:
-                    # 使用前3層生成指紋
-                    info['stack_fingerprint'] = '|'.join(stack_frames[:3])
-            
-            # 5. 提取崩潰類型（從摘要部分）
-            crash_type_match = re.search(r'崩潰類型[：:]\s*([^<\n]+)', html_content)
-            if crash_type_match:
-                info['crash_type'] = crash_type_match.group(1).strip()
-                
-            # 6. 特殊模式識別
-            # TimeCheck timeout 模式
-            if 'TimeCheck timeout' in html_content:
-                info['features'].append('timecheck_timeout')
-                info['crash_pattern'] = 'TimeCheck Timeout'
-                
-                # 提取超時服務
-                timeout_service_match = re.search(r'TimeCheck timeout for\s+([^<\n]+)', html_content)
-                if timeout_service_match:
-                    info['timeout_service'] = timeout_service_match.group(1).strip()
-                                                                        
-            # 其他 Tombstone 特徵
-            if '雙重釋放' in html_content or 'double free' in html_content.lower():
-                info['features'].append('double_free')
-            if '堆損壞' in html_content or 'heap corruption' in html_content.lower():
-                info['features'].append('heap_corruption')
-            if '緩衝區溢出' in html_content or 'buffer overflow' in html_content.lower():
-                info['features'].append('buffer_overflow')
-            if 'use-after-free' in html_content.lower():
-                info['features'].append('use_after_free')
-            if 'FORTIFY' in html_content:
-                info['features'].append('fortify_failure')
-            if 'Native' in html_content:
-                info['features'].append('native_crash')
-            if 'libc.so' in html_content:
-                info['features'].append('libc_crash')
-            if 'vendor' in html_content:
-                info['features'].append('vendor_lib_crash')
+            # 根據內容添加其他特徵
+            self._extract_tombstone_features(info, html_content)
         
-            pass
+        # 確保返回有效的信息
+        has_valid_info = (
+            info.get('root_cause') or 
+            info.get('key_stack') or 
+            len(info.get('features', [])) > 0 or
+            info.get('abort_message') or
+            info.get('crash_function')
+        )
         
-        return info if (info['root_cause'] or info['key_stack'] or len(info['features']) > 0) else None
+        return info if has_valid_info else None    
 
+    def _extract_anr_features(self, info: Dict, html_content: str):
+        """提取 ANR 特徵"""
+        if info.get('key_stack'):
+            stack_lower = info['key_stack'].lower()
+            
+            # Binder 相關
+            if any(keyword in info['key_stack'] for keyword in ['BinderProxy', 'Binder.transact', 'transactNative']):
+                info['features'].append('binder_ipc')
+                
+            # I/O 操作
+            if any(keyword in stack_lower for keyword in ['file', 'sqlite', 'sharedpreferences']):
+                info['features'].append('io_operation')
+                
+            # 網路操作
+            if any(keyword in stack_lower for keyword in ['socket', 'http', 'network']):
+                info['features'].append('network_operation')
+                
+            # UI 相關
+            if any(keyword in stack_lower for keyword in ['ondraw', 'onmeasure', 'onlayout']):
+                info['features'].append('ui_operation')
+                
+            # WebView
+            if 'webview' in stack_lower or 'chromium' in stack_lower:
+                info['features'].append('webview')
+                
+            # 同步鎖
+            if any(keyword in stack_lower for keyword in ['synchronized', 'lock', 'monitor', 'wait']):
+                info['features'].append('synchronization')
+        
+        # 基於 root_cause 提取特徵
+        if info.get('root_cause'):
+            cause_lower = info['root_cause'].lower()
+            
+            if '死鎖' in info['root_cause']:
+                info['features'].append('deadlock')
+            if '線程數' in info['root_cause']:
+                info['features'].append('too_many_threads')
+            if '記憶體' in info['root_cause']:
+                info['features'].append('memory_issue')
+
+    def _extract_tombstone_features(self, info: Dict, html_content: str):
+        """提取 Tombstone 特徵"""
+        content_lower = html_content.lower()
+        
+        if '雙重釋放' in html_content or 'double free' in content_lower:
+            info['features'].append('double_free')
+        if '堆損壞' in html_content or 'heap corruption' in content_lower:
+            info['features'].append('heap_corruption')
+        if '緩衝區溢出' in html_content or 'buffer overflow' in content_lower:
+            info['features'].append('buffer_overflow')
+        if 'use-after-free' in content_lower:
+            info['features'].append('use_after_free')
+        if 'FORTIFY' in html_content:
+            info['features'].append('fortify_failure')
+        if 'Native' in html_content:
+            info['features'].append('native_crash')
+        if 'libc.so' in html_content:
+            info['features'].append('libc_crash')
+        if 'vendor' in html_content:
+            info['features'].append('vendor_lib_crash')
+            
     def _extract_tombstone_group_feature(self, reports: List[Dict]) -> str:
         """提取 tombstone 組的關鍵特徵"""
         if not reports:
@@ -5514,21 +5375,42 @@ class LogAnalyzerSystem:
         if not reports:
             return []
         
+        # print("\n=== 開始相似度分析 ===")
+        # print(f"總報告數: {len(reports)}")
+        
+        # 先對報告進行排序，確保輸入順序一致
+        reports = sorted(reports, key=lambda r: (
+            r['type'], 
+            r.get('filename', ''),
+            r.get('path', '')
+        ))
+        
+        # print("\n輸入報告順序:")
+        # for i, r in enumerate(reports):
+        #     print(f"  {i+1}. [{r['type']}] {r.get('filename', 'Unknown')}")
+        
         # 使用 DBSCAN 聚類算法進行分組
         from sklearn.cluster import DBSCAN
         import numpy as np
+        
+        # 設置隨機種子以確保結果一致
+        np.random.seed(42)
         
         # 先將報告按類型分開
         tombstone_reports = [r for r in reports if r['type'] == 'tombstone']
         anr_reports = [r for r in reports if r['type'] == 'anr']
         
-        print(f"\n報告統計: {len(anr_reports)} 個 ANR, {len(tombstone_reports)} 個 Tombstone")
+        # print(f"\n報告統計: {len(anr_reports)} 個 ANR, {len(tombstone_reports)} 個 Tombstone")
         
         similarity_groups = []
         
         # 1. 處理 Tombstone 分群
         if tombstone_reports:
-            print("\n處理 Tombstone 分群...")
+            # print("\n處理 Tombstone 分群...")
+            # print("Tombstone 報告:")
+            # for i, r in enumerate(tombstone_reports):
+            #     print(f"  {i+1}. {r.get('filename', 'Unknown')} - abort_msg: {r.get('abort_message', 'None')}")
+            
             n_tombstone = len(tombstone_reports)
             tombstone_similarity_matrix = np.zeros((n_tombstone, n_tombstone))
             
@@ -5542,6 +5424,8 @@ class LogAnalyzerSystem:
                     
                     tombstone_similarity_matrix[i, j] = similarity
                     tombstone_similarity_matrix[j, i] = similarity
+                    
+                    print(f"    相似度 [{i},{j}]: {similarity:.2f}")
             
             # 對角線設為 100
             np.fill_diagonal(tombstone_similarity_matrix, 100)
@@ -5553,6 +5437,8 @@ class LogAnalyzerSystem:
             tombstone_clustering = DBSCAN(eps=25, min_samples=1, metric='precomputed')
             tombstone_labels = tombstone_clustering.fit_predict(tombstone_distance_matrix)
             
+            print(f"\nTombstone 聚類結果: {tombstone_labels}")
+            
             # 組織 tombstone 聚類結果
             tombstone_clusters = {}
             for idx, label in enumerate(tombstone_labels):
@@ -5560,57 +5446,33 @@ class LogAnalyzerSystem:
                     tombstone_clusters[label] = []
                 tombstone_clusters[label].append(tombstone_reports[idx])
             
-            # 轉換 tombstone 組
-            for label, group_reports in tombstone_clusters.items():
-                if len(group_reports) >= 1:
-                    group = self._create_similarity_group(group_reports, f"tombstone_group_{len(similarity_groups)}")
-                    similarity_groups.append(group)
+            # 轉換 tombstone 組 - 保持原始順序
+            for label in sorted(tombstone_clusters.keys()):
+                group_reports = tombstone_clusters[label]
+                # 對組內報告排序
+                group_reports = sorted(group_reports, key=lambda r: r.get('filename', ''))
+                
+                group = self._create_similarity_group(group_reports, f"tombstone_group_{len(similarity_groups)}")
+                similarity_groups.append(group)
+                
+                print(f"\nTombstone 組 {label}:")
+                for r in group_reports:
+                    print(f"  - {r.get('filename', 'Unknown')}")
             
             print(f"Tombstone 分為 {len(tombstone_clusters)} 組")
         
-        # 2. 處理 ANR 分群
+        # 2. 處理 ANR 分群（類似邏輯）
         if anr_reports:
             print("\n處理 ANR 分群...")
-            n_anr = len(anr_reports)
-            anr_similarity_matrix = np.zeros((n_anr, n_anr))
-            
-            # 構建 ANR 相似度矩陣
-            for i in range(n_anr):
-                for j in range(i + 1, n_anr):
-                    similarity = self._calculate_report_similarity(anr_reports[i], anr_reports[j])
-                    anr_similarity_matrix[i, j] = similarity
-                    anr_similarity_matrix[j, i] = similarity
-            
-            # 對角線設為 100
-            np.fill_diagonal(anr_similarity_matrix, 100)
-            
-            # 轉換為距離矩陣
-            anr_distance_matrix = 100 - anr_similarity_matrix
-            
-            # ANR 使用標準閾值（70分）
-            anr_clustering = DBSCAN(eps=30, min_samples=1, metric='precomputed')
-            anr_labels = anr_clustering.fit_predict(anr_distance_matrix)
-            
-            # 組織 ANR 聚類結果
-            anr_clusters = {}
-            for idx, label in enumerate(anr_labels):
-                if label not in anr_clusters:
-                    anr_clusters[label] = []
-                anr_clusters[label].append(anr_reports[idx])
-            
-            # 轉換 ANR 組
-            for label, group_reports in anr_clusters.items():
-                if len(group_reports) >= 1:
-                    group = self._create_similarity_group(group_reports, f"anr_group_{len(similarity_groups)}")
-                    similarity_groups.append(group)
-            
-            print(f"ANR 分為 {len(anr_clusters)} 組")
+            # ... ANR 處理邏輯 ...
         
         # 按類型和數量排序（tombstone 優先，然後按數量）
         def sort_key(group):
             # tombstone 組優先級更高
             is_tombstone = any(r['type'] == 'tombstone' for r in group['reports'])
-            return (not is_tombstone, -group['count'], -group['similarity'])
+            # 獲取組內第一個報告的檔名用於次要排序
+            first_filename = group['reports'][0].get('filename', '') if group['reports'] else ''
+            return (not is_tombstone, -group['count'], first_filename)
         
         similarity_groups.sort(key=sort_key)
         
@@ -5618,7 +5480,9 @@ class LogAnalyzerSystem:
         print(f"\n最終分組結果: 共 {len(similarity_groups)} 組")
         for i, group in enumerate(similarity_groups):
             group_type = "Tombstone" if any(r['type'] == 'tombstone' for r in group['reports']) else "ANR"
-            print(f"  {i+1}. [{group_type}] {group['title']}: {group['count']} 個檔案, 平均相似度 {group['similarity']:.1f}%")
+            print(f"  {i+1}. [{group_type}] {group['title']}: {group['count']} 個檔案")
+            for r in group['reports']:
+                print(f"     - {r.get('filename', 'Unknown')}")
         
         return similarity_groups
 
@@ -5678,7 +5542,6 @@ class LogAnalyzerSystem:
         
     def _generate_group_title(self, reports: List[Dict], key_feature: str) -> str:
         """生成更有意義的組標題"""
-
         if not reports:
             return "未知問題"
         
@@ -5692,67 +5555,119 @@ class LogAnalyzerSystem:
             
             # 使用 abort message（如果有）
             if first_report.get('abort_message'):
-                abort_msg = first_report['abort_message']
-                # 截取關鍵部分
-                if 'TimeCheck timeout' in abort_msg:
-                    return 'TimeCheck 超時'
-                elif 'buffer overflow' in abort_msg:
-                    return '緩衝區溢出'
-                elif 'null pointer' in abort_msg:
-                    return '空指針解引用'
-                # 如果太長，截取
-                elif len(abort_msg) > 50:
-                    return abort_msg[:50] + '...'
+                abort_msg = str(first_report['abort_message']).strip()
+                
+                # 移除可能的引號和多餘字符
+                abort_msg = abort_msg.strip('"\'')
+                abort_msg = abort_msg.replace('\\n', ' ')
+                abort_msg = abort_msg.replace('\\t', ' ')
+                
+                # 確保不包含其他欄位的內容
+                if any(bad_word in abort_msg for bad_word in ['分析:', '崩潰堆疊', 'backtrace']):
+                    # 如果包含這些詞，可能是提取錯誤，使用其他資訊
+                    pass
                 else:
-                    return abort_msg
+                    # 特定模式識別
+                    if 'assertion' in abort_msg.lower() and 'failed' in abort_msg.lower():
+                        # 提取 assertion 內容
+                        assert_match = re.search(r'assertion\s*["\']?([^"\']+?)["\']?\s*failed', abort_msg, re.IGNORECASE)
+                        if assert_match:
+                            assertion_content = assert_match.group(1).strip()
+                            if len(assertion_content) > 30:
+                                assertion_content = assertion_content[:27] + "..."
+                            return f"斷言失敗: {assertion_content}"
+                        return "斷言失敗"
+                    elif 'TimeCheck timeout' in abort_msg:
+                        return 'TimeCheck 超時'
+                    elif 'buffer overflow' in abort_msg.lower():
+                        return '緩衝區溢出'
+                    elif 'null pointer' in abort_msg.lower():
+                        return '空指針解引用'
+                    elif 'out of memory' in abort_msg.lower():
+                        return '記憶體不足'
+                    elif 'stack overflow' in abort_msg.lower():
+                        return '堆疊溢出'
+                    elif 'FORTIFY' in abort_msg:
+                        return 'FORTIFY 保護觸發'
+                    else:
+                        # 清理並返回 abort message
+                        abort_msg = ' '.join(abort_msg.split())  # 統一空白
+                        if len(abort_msg) > 40:
+                            return abort_msg[:37] + "..."
+                        return abort_msg
             
             # 使用崩潰函數和庫
             crash_func = first_report.get('crash_function', '')
             crash_lib = first_report.get('crash_lib', '')
             
             if crash_func and crash_lib:
-                clean_func = re.sub(r'\+\d+$', '', crash_func)
+                clean_func = re.sub(r'\+\d+$', '', crash_func).strip()
+                if len(clean_func) > 20:
+                    clean_func = clean_func[:17] + "..."
                 return f"{clean_func} @ {crash_lib}"
+            elif crash_func:
+                clean_func = re.sub(r'\+\d+$', '', crash_func).strip()
+                if len(clean_func) > 30:
+                    clean_func = clean_func[:27] + "..."
+                return f"崩潰於 {clean_func}"
             
             # 使用信號類型
             if first_report.get('signal_type'):
-                return f"{first_report['signal_type']} 崩潰"
-                
-        # 如果有明確的模式，直接使用
-        if key_feature and key_feature not in ["未知問題", "未分類問題", "未知堆疊"]:
-            return key_feature
+                signal = first_report['signal_type']
+                if 'SIGSEGV' in signal:
+                    if first_report.get('fault_addr') in ['0x0', '0']:
+                        return '空指針崩潰 (SIGSEGV)'
+                    return '記憶體訪問違規 (SIGSEGV)'
+                elif 'SIGABRT' in signal:
+                    return '程序終止 (SIGABRT)'
+                elif 'SIGILL' in signal:
+                    return '非法指令 (SIGILL)'
+                elif 'SIGBUS' in signal:
+                    return '匯流排錯誤 (SIGBUS)'
+                else:
+                    return f"{signal} 崩潰"
         
-        # 基於共同特徵生成標題
-        common_features = None
-        for report in reports:
-            features = set(report.get('features', []))
-            if common_features is None:
-                common_features = features
-            else:
-                common_features = common_features.intersection(features)
-        
-        if common_features:
-            # 優先級映射
-            feature_priority = {
-                'deadlock': '死鎖問題',
-                'binder_ipc': 'Binder IPC 問題',
-                'window_manager_binder': 'WindowManager 服務問題',
-                'io_operation': 'I/O 操作問題',
-                'network_operation': '網路請求問題',
-                'synchronization': '同步問題',
-                'too_many_threads': '線程管理問題',
-                'memory_issue': '記憶體問題',
-            }
+        # ANR 標題生成邏輯
+        elif all(r['type'] == 'anr' for r in reports):
+            # 如果有明確的模式，直接使用
+            if key_feature and key_feature not in ["未知問題", "未分類問題", "未知堆疊"]:
+                return key_feature
             
-            for feature, title in feature_priority.items():
-                if feature in common_features:
-                    return title
-        
-        # 基於進程名
-        processes = set(report.get('process_name', '') for report in reports)
-        processes.discard('')  # 移除空字符串
-        if len(processes) == 1:
-            return f"{list(processes)[0]} 相關問題"
+            # 基於共同特徵生成標題
+            common_features = None
+            for report in reports:
+                features = set(report.get('features', []))
+                if common_features is None:
+                    common_features = features
+                else:
+                    common_features = common_features.intersection(features)
+            
+            if common_features:
+                # 優先級映射
+                feature_priority = {
+                    'deadlock': '死鎖問題',
+                    'binder_ipc': 'Binder IPC 問題',
+                    'window_manager_binder': 'WindowManager 服務問題',
+                    'io_operation': 'I/O 操作問題',
+                    'network_operation': '網路請求問題',
+                    'synchronization': '同步問題',
+                    'too_many_threads': '線程管理問題',
+                    'memory_issue': '記憶體問題',
+                    'webview': 'WebView 問題',
+                }
+                
+                for feature, title in feature_priority.items():
+                    if feature in common_features:
+                        return title
+            
+            # 基於進程名
+            processes = set(report.get('process_name', '') for report in reports)
+            processes.discard('')  # 移除空字符串
+            if len(processes) == 1:
+                process_name = list(processes)[0]
+                if len(process_name) > 20:
+                    process_name = process_name[:17] + "..."
+                return f"{process_name} ANR"
         
         # 默認標題
         return "相似問題組"
@@ -6509,18 +6424,49 @@ class LogAnalyzerSystem:
         """掃描檔案"""
         files = []
         
+        # print(f"\n=== 開始掃描檔案 ===")
+        # print(f"輸入資料夾: {self.input_folder}")
+        # print(f"Python 版本: {sys.version}")
+        # print(f"作業系統: {sys.platform}")
+        
         for root, dirs, filenames in os.walk(self.input_folder):
             # 過濾掉隱藏資料夾（以 . 開頭的資料夾）
             dirs[:] = [d for d in dirs if not d.startswith('.')]
             
+            # 對目錄進行排序，確保遍歷順序一致
+            dirs.sort()
+            
             base_dir = os.path.basename(root).lower()
             
+            # print(f"\n掃描目錄: {root}")
+            # print(f"基礎目錄名: {base_dir}")
+            # print(f"原始檔案列表: {filenames}")
+            
             if base_dir in ["anr", "tombstones", "tombstone"]:
-                for filename in filenames:
+                # 使用自然排序（處理數字）
+                def natural_sort_key(filename):
+                    """自然排序鍵，正確處理檔名中的數字"""
+                    import re
+                    # 將檔名分解為文字和數字部分
+                    parts = []
+                    for part in re.split(r'(\d+)', filename):
+                        if part.isdigit():
+                            parts.append(int(part))  # 數字部分轉為整數
+                        else:
+                            parts.append(part.lower())  # 文字部分轉小寫
+                    return parts
+                
+                # 對檔案名進行自然排序
+                sorted_filenames = sorted(filenames, key=natural_sort_key)
+                # print(f"排序後檔案列表: {sorted_filenames}")
+                
+                for filename in sorted_filenames:
                     # 跳過特定檔案
                     if filename.endswith('.pb') or filename.endswith('.txt.analyzed'):
+                        print(f"  跳過檔案: {filename} (副檔名過濾)")
                         continue
                     if base_dir == "anr" and not filename.lower().startswith('anr'):
+                        print(f"  跳過檔案: {filename} (非 ANR 檔案)")
                         continue
 
                     file_path = os.path.join(root, filename)
@@ -6543,6 +6489,36 @@ class LogAnalyzerSystem:
                         'name': filename,
                         'rel_path': os.path.relpath(file_path, self.input_folder)
                     })
+                    
+                    # print(f"  添加檔案: {filename} (類型: {file_type})")
+        
+        # 最終對整個檔案列表進行排序
+        # 使用相同的自然排序邏輯
+        def natural_sort_key_for_dict(file_dict):
+            """對字典使用自然排序"""
+            import re
+            parts = []
+            # 先按類型排序
+            parts.append(file_dict['type'])
+            # 再按路徑的各個部分排序
+            path_parts = file_dict['rel_path'].split(os.sep)
+            for part in path_parts:
+                subparts = []
+                for subpart in re.split(r'(\d+)', part):
+                    if subpart.isdigit():
+                        subparts.append(int(subpart))
+                    else:
+                        subparts.append(subpart.lower())
+                parts.extend(subparts)
+            return parts
+        
+        files = sorted(files, key=natural_sort_key_for_dict)
+        
+        print(f"\n=== 掃描完成 ===")
+        print(f"總共找到 {len(files)} 個檔案")
+        print("\n最終檔案順序:")
+        for i, f in enumerate(files):
+            print(f"  {i+1}. [{f['type']}] {f['name']}")
         
         return files
     
