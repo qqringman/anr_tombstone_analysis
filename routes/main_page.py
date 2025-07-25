@@ -2950,6 +2950,33 @@ HTML_TEMPLATE = r'''
         margin: 0;
     }
 
+    /* 對話框內的訊息樣式 */
+    #mergeMessage {
+        padding: 10px 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        display: none;
+        font-size: 14px;
+    }
+
+    #mergeMessage.error {
+        color: #e53e3e;
+        background-color: #fff5f5;
+        border: 1px solid #feb2b2;
+    }
+
+    #mergeMessage.success {
+        color: #38a169;
+        background-color: #f0fff4;
+        border: 1px solid #9ae6b4;
+    }
+
+    #mergeMessage.info {
+        color: #3182ce;
+        background-color: #ebf8ff;
+        border: 1px solid #90cdf4;
+    }
+
     </style>      
 </head>
 <body>
@@ -3434,6 +3461,8 @@ HTML_TEMPLATE = r'''
                 </div>
                 <!-- 合併 Excel 彈出視窗的 HTML -->
                 <div class="merge-dialog-body">
+                    <!-- 訊息顯示區域 -->
+                    <div id="mergeMessage" style="margin-bottom: 15px;"></div>                
                     <!-- 拖曳區域 -->
                     <div class="merge-drop-zone" id="mergeDropZone">
                         <div class="drop-zone-content">
@@ -3648,6 +3677,33 @@ HTML_TEMPLATE = r'''
             
             // 更新顯示
             updateSelectedFilesDisplay();
+        }
+
+        // 對話框專用的訊息顯示函數
+        function showDialogMessage(message, type, dialogId = 'mergeMessage') {
+            const messageDiv = document.getElementById(dialogId);
+            if (messageDiv) {
+                messageDiv.className = type;
+                messageDiv.innerHTML = message;
+                messageDiv.style.display = 'block';
+                
+                // 3秒後自動隱藏成功訊息
+                if (type === 'success') {
+                    setTimeout(() => {
+                        messageDiv.style.display = 'none';
+                    }, 3000);
+                }
+            }
+        }
+
+        // 清除對話框訊息
+        function clearDialogMessage(dialogId = 'mergeMessage') {
+            const messageDiv = document.getElementById(dialogId);
+            if (messageDiv) {
+                messageDiv.innerHTML = '';
+                messageDiv.className = '';
+                messageDiv.style.display = 'none';
+            }
         }
 
         // 顯示鎖定對話框
@@ -6443,6 +6499,9 @@ HTML_TEMPLATE = r'''
 
         // 關閉合併對話框
         function closeMergeDialog() {
+            // 清除對話框中的訊息
+            clearDialogMessage();
+            
             // 恢復背景滾動
             document.body.style.overflow = '';
             document.body.style.position = '';
@@ -6606,22 +6665,24 @@ HTML_TEMPLATE = r'''
         // 處理檔案選擇（支援多檔）- 用於合併對話框
         function handleMergeFileSelect(files) {
             if (!files || files.length === 0) {
-                showMessage('請選擇 .xlsx 格式的 Excel 檔案', 'error');
+                showDialogMessage('請選擇 .xlsx 格式的 Excel 檔案', 'error');
                 return;
             }
             
-            // 清除之前的選擇 (如果需要累加檔案，可以註解掉這兩行）
-            //selectedMergeFiles = [];
-            //selectedMergeFilePaths = [];
+            // 清除之前的訊息
+            clearDialogMessage();
             
             // 驗證所有檔案
             for (let file of files) {
                 if (!file.name.endsWith('.xlsx')) {
-                    showMessage(`檔案 ${file.name} 不是 .xlsx 格式`, 'error');
+                    showDialogMessage(`檔案 ${file.name} 不是 .xlsx 格式`, 'error');
                     return;
                 }
                 selectedMergeFiles.push(file);
             }
+            
+            // 顯示成功訊息
+            showDialogMessage(`成功添加 ${files.length} 個檔案`, 'success');
             
             // 顯示檔案資訊
             updateSelectedFilesDisplay();
@@ -6694,7 +6755,7 @@ HTML_TEMPLATE = r'''
         // 執行合併（支援多檔）
         async function executeMerge() {
             if (selectedMergeFiles.length === 0 && selectedMergeFilePaths.length === 0) {
-                showMessage('請選擇要合併的 Excel 檔案', 'error');
+                showDialogMessage('請選擇要合併的 Excel 檔案', 'error');
                 return;
             }
             
@@ -6759,20 +6820,22 @@ HTML_TEMPLATE = r'''
                     const message = hasCurrentAnalysis ? 
                         `成功合併 ${fileCount} 個 Excel 檔案與當前分析結果` : 
                         `成功合併 ${fileCount} 個 Excel 檔案`;
-                    showMessage(message, 'success');
-                    closeMergeDialog();
-                    
+                    showDialogMessage(message, 'success');
+                    // 延遲關閉對話框，讓用戶看到成功訊息
+                    setTimeout(() => {
+                        closeMergeDialog();
+                    }, 1000);
                 } else {
                     const error = await response.text();
                     try {
                         const errorData = JSON.parse(error);
-                        showMessage('合併失敗: ' + (errorData.error || '未知錯誤'), 'error');
+                        showDialogMessage('合併失敗: ' + (errorData.error || '未知錯誤'), 'error');
                     } catch {
-                        showMessage('合併失敗: ' + error, 'error');
+                        showDialogMessage('合併失敗: ' + error, 'error');
                     }
                 }
             } catch (error) {
-                showMessage('合併失敗: ' + error.message, 'error');
+                showDialogMessage('合併失敗: ' + error.message, 'error');
             } finally {
                 executeBtn.disabled = false;
                 executeBtn.textContent = '匯出';
@@ -7017,7 +7080,7 @@ HTML_TEMPLATE = r'''
         // 執行載入 Excel
         async function executeLoadExcel() {
             if (selectedMergeFiles.length === 0 && selectedMergeFilePaths.length === 0) {
-                showMessage('請選擇要載入的 Excel 檔案', 'error');
+                showDialogMessage('請選擇要載入的 Excel 檔案', 'error');
                 return;
             }
 
@@ -7125,14 +7188,18 @@ HTML_TEMPLATE = r'''
                         const message = fileCount > 1 ? 
                             `已合併 ${fileCount} 個 Excel 檔案並生成報告` : 
                             'Excel 載入成功，報告已在新視窗開啟';
-                        showMessage(message, 'success');
+                        showDialogMessage(message, 'success');
+                        // 延遲關閉對話框
+                        setTimeout(() => {
+                            closeMergeDialog();
+                        }, 1000);
                     }
                 } else {
                     const error = await response.json();
-                    showMessage('載入失敗: ' + (error.error || '未知錯誤'), 'error');
+                    showDialogMessage('載入失敗: ' + (error.error || '未知錯誤'), 'error');
                 }
             } catch (error) {
-                showMessage('載入失敗: ' + error.message, 'error');
+                showDialogMessage('載入失敗: ' + error.message, 'error');
             } finally {
                 executeBtn.disabled = false;
                 executeBtn.textContent = '分析 Report';

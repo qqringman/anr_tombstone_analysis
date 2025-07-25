@@ -1,5 +1,6 @@
 # 設定檔案
 jira_config.json
+jira/jira_config.json
 config/secrets.json
 .env
 .env.local
