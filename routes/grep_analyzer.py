@@ -72,7 +72,7 @@ class AndroidLogAnalyzer:
                                 text=True, 
                                 timeout=2)
             available = result.returncode == 0
-            print("✓ unzip is {}".format('available' if available else 'not available'))
+            # print("✓ unzip is {}".format('available' if available else 'not available'))
             return available
         except Exception as e:
             print("✗ unzip not available: {}".format(e))
@@ -86,7 +86,7 @@ class AndroidLogAnalyzer:
             print("✗ unzip not available, skipping zip file extraction")
             return extracted_paths
         
-        print(f"\nSearching for zip files to extract...")
+        # print(f"\nSearching for zip files to extract...")
         
         # Find all zip files
         zip_files_found = []
@@ -107,11 +107,11 @@ class AndroidLogAnalyzer:
             
             # Skip if already extracted
             if os.path.exists(extract_dir):
-                print(f"  ✓ Already extracted: {file}")
+                # print(f"  ✓ Already extracted: {file}")
                 extracted_paths.append(extract_dir)
                 continue
             
-            print(f"  Extracting: {file}")
+            # print(f"  Extracting: {file}")
             try:
                 # Create extraction directory
                 os.makedirs(extract_dir, exist_ok=True)
@@ -121,10 +121,10 @@ class AndroidLogAnalyzer:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
                 
                 if result.returncode == 0:
-                    print(f"    ✓ Successfully extracted to: {extract_dir}")
+                    # print(f"    ✓ Successfully extracted to: {extract_dir}")
                     extracted_paths.append(extract_dir)
                 else:
-                    print(f"    ✗ Failed to extract: {result.stderr}")
+                    # print(f"    ✗ Failed to extract: {result.stderr}")
                     # Clean up failed extraction
                     if os.path.exists(extract_dir) and not os.listdir(extract_dir):
                         os.rmdir(extract_dir)
@@ -213,7 +213,7 @@ class AndroidLogAnalyzer:
                                 text=True, 
                                 timeout=2)
             available = result.returncode == 0
-            print(f"grep availability: {available}")
+            # print(f"grep availability: {available}")
             return available
         except Exception as e:
             print(f"grep not available: {e}")
@@ -224,7 +224,7 @@ class AndroidLogAnalyzer:
         anr_folders = []
         tombstone_folders = []
         
-        print(f"Searching for anr/ and tombstones/ folders in: {base_path}")
+        # print(f"Searching for anr/ and tombstones/ folders in: {base_path}")
         
         # Walk through all directories recursively
         for root, dirs, files in os.walk(base_path):
@@ -237,21 +237,21 @@ class AndroidLogAnalyzer:
                 
                 if dir_lower == 'anr':
                     anr_folders.append(full_path)
-                    print(f"  Found ANR folder: {full_path}")
+                    # print(f"  Found ANR folder: {full_path}")
                 elif dir_lower in ['tombstones', 'tombstone']:
                     tombstone_folders.append(full_path)
-                    print(f"  Found tombstone folder: {full_path}")
+                    # print(f"  Found tombstone folder: {full_path}")
         
         # Also check if the base_path itself is anr or tombstones
         base_name = os.path.basename(base_path).lower()
         if base_name == 'anr' and base_path not in anr_folders:
             anr_folders.append(base_path)
-            print(f"  Base path is ANR folder: {base_path}")
+            # print(f"  Base path is ANR folder: {base_path}")
         elif base_name in ['tombstones', 'tombstone'] and base_path not in tombstone_folders:
             tombstone_folders.append(base_path)
-            print(f"  Base path is tombstone folder: {base_path}")
+            # print(f"  Base path is tombstone folder: {base_path}")
         
-        print(f"Total found: {len(anr_folders)} ANR folders, {len(tombstone_folders)} tombstone folders")
+        # print(f"Total found: {len(anr_folders)} ANR folders, {len(tombstone_folders)} tombstone folders")
         return anr_folders, tombstone_folders
     
     def grep_cmdline_files(self, folder_path: str) -> List[Tuple[str, str, int]]:
@@ -310,7 +310,7 @@ class AndroidLogAnalyzer:
                                     cmdline = cmdline_match.group(1).strip()
                                     results.append((filepath, cmdline, line_number))
             
-            print(f"grep found {len(results)} files in {folder_path}")
+            # print(f"grep found {len(results)} files in {folder_path}")
             
         except subprocess.TimeoutExpired:
             print(f"grep timeout in {folder_path}, falling back to file reading")
@@ -534,8 +534,8 @@ class AndroidLogAnalyzer:
         all_anr_folders = list(set(all_anr_folders))
         all_tombstone_folders = list(set(all_tombstone_folders))
         
-        print(f"Total found: {len(all_anr_folders)} ANR folders, {len(all_tombstone_folders)} tombstone folders")
-        print(f"Using grep: {self.use_grep}")
+        # print(f"Total found: {len(all_anr_folders)} ANR folders, {len(all_tombstone_folders)} tombstone folders")
+        # print(f"Using grep: {self.use_grep}")
         
         all_logs = []
         files_with_cmdline = 0
@@ -546,7 +546,7 @@ class AndroidLogAnalyzer:
         for anr_folder in all_anr_folders:
             if os.path.exists(anr_folder):
                 folder_start = time.time()
-                print(f"\nProcessing ANR folder: {anr_folder}")
+                # print(f"\nProcessing ANR folder: {anr_folder}")
                 
                 if self.use_grep:
                     # Use grep to quickly find files with Cmdline
@@ -568,7 +568,7 @@ class AndroidLogAnalyzer:
                                     anr_subject_count += 1                                
                     else:
                         # Fallback to file reading if grep didn't find anything
-                        print(f"  No grep results, falling back to file reading")
+                        # print(f"  No grep results, falling back to file reading")
                         for file_name in os.listdir(anr_folder):
                             file_path = os.path.join(anr_folder, file_name)
                             if os.path.isfile(file_path):
@@ -591,13 +591,13 @@ class AndroidLogAnalyzer:
                                 if log_info['type'] == 'ANR':  # 確保是 ANR 類型
                                     anr_subject_count += 1                                
                 
-                print(f"  Processed in {time.time() - folder_start:.2f} seconds")
+                # print(f"  Processed in {time.time() - folder_start:.2f} seconds")
         
         # Process tombstone folders
         for tombstone_folder in all_tombstone_folders:
             if os.path.exists(tombstone_folder):
                 folder_start = time.time()
-                print(f"\nProcessing tombstone folder: {tombstone_folder}")
+                # print(f"\nProcessing tombstone folder: {tombstone_folder}")
                 
                 if self.use_grep:
                     # Use grep to quickly find files with Cmdline
@@ -617,7 +617,7 @@ class AndroidLogAnalyzer:
                                 files_with_cmdline += 1
                     else:
                         # Fallback to file reading
-                        print(f"  No grep results, falling back to file reading")
+                        # print(f"  No grep results, falling back to file reading")
                         for file_name in os.listdir(tombstone_folder):
                             file_path = os.path.join(tombstone_folder, file_name)
                             if os.path.isfile(file_path):
@@ -638,15 +638,15 @@ class AndroidLogAnalyzer:
                                 if log_info['type'] == 'ANR':  # 確保是 ANR 類型
                                     anr_subject_count += 1
                 
-                print(f"  Processed in {time.time() - folder_start:.2f} seconds")
+                # print(f"  Processed in {time.time() - folder_start:.2f} seconds")
 
         total_time = time.time() - start_time
-        print(f"\nTotal analysis time: {total_time:.2f} seconds")
-        print(f"Total files scanned: {total_files_scanned}")
-        print(f"Files with cmdline: {files_with_cmdline}")
+        # print(f"\nTotal analysis time: {total_time:.2f} seconds")
+        # print(f"Total files scanned: {total_files_scanned}")
+        # print(f"Files with cmdline: {files_with_cmdline}")
         
         # 🔍 在這裡調用調試函數
-        self.debug_top_processes(all_logs)
+        # self.debug_top_processes(all_logs)
     
         # Generate statistics
         stats = self.generate_statistics(all_logs)
@@ -820,14 +820,14 @@ class AndroidLogAnalyzer:
         
         # Get unique process names
         unique_processes = sorted(list(process_count.keys()))
-        print(f"\nFound {len(unique_processes)} unique process names:")
-        for proc in unique_processes[:20]:  # Show first 20
-            print(f"  - {proc}: {process_count[proc]} occurrences")
-        if len(unique_processes) > 20:
-            print(f"  ... and {len(unique_processes) - 20} more")
+        # print(f"\nFound {len(unique_processes)} unique process names:")
+        # for proc in unique_processes[:20]:  # Show first 20
+        #     print(f"  - {proc}: {process_count[proc]} occurrences")
+        # if len(unique_processes) > 20:
+        #     print(f"  ... and {len(unique_processes) - 20} more")
         
         # Debug: Check if by_process and type_process_summary are consistent
-        print("\n=== DEBUG: Checking data consistency ===")
+        # print("\n=== DEBUG: Checking data consistency ===")
         # Sum up counts from type_process_summary by process
         process_sum_from_type = defaultdict(int)
         for key, count in type_process_count.items():
@@ -835,13 +835,13 @@ class AndroidLogAnalyzer:
             process_sum_from_type[process_name] += count
 
         # Compare top 10 from both sources
-        print("\nTop 10 from by_process:")
-        for i, (proc, count) in enumerate(sorted(process_count.items(), key=lambda x: x[1], reverse=True)[:10], 1):
-            print(f"  {i}. {proc}: {count}")
+        # print("\nTop 10 from by_process:")
+        # for i, (proc, count) in enumerate(sorted(process_count.items(), key=lambda x: x[1], reverse=True)[:10], 1):
+        #     print(f"  {i}. {proc}: {count}")
 
-        print("\nTop 10 from type_process_summary (summed):")
-        for i, (proc, count) in enumerate(sorted(process_sum_from_type.items(), key=lambda x: x[1], reverse=True)[:10], 1):
-            print(f"  {i}. {proc}: {count}")            
+        # print("\nTop 10 from type_process_summary (summed):")
+        # for i, (proc, count) in enumerate(sorted(process_sum_from_type.items(), key=lambda x: x[1], reverse=True)[:10], 1):
+        #     print(f"  {i}. {proc}: {count}")            
             
         # Format type_process_count for display
         type_process_summary = []
