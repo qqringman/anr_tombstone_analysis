@@ -10764,6 +10764,7 @@ def analyze_selected_items():
         
         print(f"接收到 {len(files)} 個單獨檔案")
         print(f"接收到 {len(folder_files)} 個資料夾檔案")
+        print(f"自動分組: {auto_group}")
         
         # === 修改：簡化排除邏輯 - 排除所有隱藏資料夾 ===
         def should_exclude_path(path):
@@ -10781,6 +10782,11 @@ def analyze_selected_items():
         tombstone_files = []
         zip_files_to_extract = []
         
+        # === 新增：追蹤是否需要強制建立資料夾結構 ===
+        needs_folder_structure = False
+        has_anr_files = False
+        has_tombstone_files = False
+        
         # 處理單獨上傳的檔案
         for file in files:
             filename = file.filename
@@ -10794,15 +10800,37 @@ def analyze_selected_items():
                 continue
             
             # 檢查是否為 ANR 或 Tombstone 檔案
-            if 'anr' in file_lower or 'tombstone' in file_lower:
-                # 儲存到臨時目錄
-                temp_file_path = os.path.join(temp_dir, filename)
-                file.save(temp_file_path)
-                
-                if 'anr' in file_lower:
-                    anr_files.append((temp_file_path, filename))
+            is_anr_file = 'anr' in file_lower
+            is_tombstone_file = 'tombstone' in file_lower
+            
+            if is_anr_file or is_tombstone_file:
+                if is_anr_file:
+                    has_anr_files = True
                 else:
-                    tombstone_files.append((temp_file_path, filename))
+                    has_tombstone_files = True
+                
+                if auto_group:
+                    # 自動分組：儲存到臨時目錄，稍後移動
+                    temp_file_path = os.path.join(temp_dir, filename)
+                    file.save(temp_file_path)
+                    
+                    if is_anr_file:
+                        anr_files.append((temp_file_path, filename))
+                    else:
+                        tombstone_files.append((temp_file_path, filename))
+                else:
+                    # === 修改：不自動分組時，也建立適當的資料夾結構 ===
+                    needs_folder_structure = True
+                    if is_anr_file:
+                        # 放入 anr 資料夾
+                        anr_folder = os.path.join(temp_dir, 'anr')
+                        os.makedirs(anr_folder, exist_ok=True)
+                        file.save(os.path.join(anr_folder, filename))
+                    else:
+                        # 放入 tombstones 資料夾
+                        tombstones_folder = os.path.join(temp_dir, 'tombstones')
+                        os.makedirs(tombstones_folder, exist_ok=True)
+                        file.save(os.path.join(tombstones_folder, filename))
             else:
                 # 其他檔案直接儲存
                 file.save(os.path.join(temp_dir, filename))
@@ -10832,11 +10860,22 @@ def analyze_selected_items():
             
             # 檢查是否需要分組（只對根目錄的檔案）
             path_parts = relative_path.split('/')
-            if len(path_parts) == 2:  # 只有一層目錄
-                filename = path_parts[1]
-                file_lower = filename.lower()
-                
-                if auto_group and ('anr' in file_lower or 'tombstone' in file_lower):
+            filename = os.path.basename(relative_path)
+            file_lower = filename.lower()
+            
+            # === 修改：即使不在根目錄，也檢查是否為 ANR/Tombstone 檔案 ===
+            if 'anr' in file_lower or 'tombstone' in file_lower:
+                if 'anr' in file_lower:
+                    has_anr_files = True
+                else:
+                    has_tombstone_files = True
+                    
+                # 如果路徑中沒有 anr/ 或 tombstones/ 資料夾，且不是自動分組
+                folder_lower = relative_path.lower()
+                if not auto_group and '/anr/' not in folder_lower and '/tombstones/' not in folder_lower and '/tombstone/' not in folder_lower:
+                    needs_folder_structure = True
+                    
+                if auto_group and len(path_parts) <= 2:  # 只對淺層檔案進行分組
                     if 'anr' in file_lower:
                         anr_files.append((file_path, filename))
                     else:
@@ -10862,13 +10901,23 @@ def analyze_selected_items():
                         # 解壓檔案
                         zip_ref.extract(file_info, extract_dir)
                         
-                        # 檢查是否為 ANR 或 Tombstone 檔案（用於自動分組）
-                        if auto_group:
-                            file_lower = file_info.lower()
-                            if 'anr' in file_lower or 'tombstone' in file_lower:
-                                full_path = os.path.join(extract_dir, file_info)
-                                if os.path.isfile(full_path):
-                                    filename = os.path.basename(file_info)
+                        # 檢查是否為 ANR 或 Tombstone 檔案
+                        file_lower = file_info.lower()
+                        if 'anr' in file_lower or 'tombstone' in file_lower:
+                            if 'anr' in file_lower:
+                                has_anr_files = True
+                            else:
+                                has_tombstone_files = True
+                                
+                            full_path = os.path.join(extract_dir, file_info)
+                            if os.path.isfile(full_path):
+                                filename = os.path.basename(file_info)
+                                
+                                # 檢查路徑結構
+                                if not auto_group and '/anr/' not in file_lower and '/tombstones/' not in file_lower and '/tombstone/' not in file_lower:
+                                    needs_folder_structure = True
+                                
+                                if auto_group:
                                     if 'anr' in file_lower:
                                         anr_files.append((full_path, filename))
                                     else:
@@ -10903,6 +10952,37 @@ def analyze_selected_items():
                     if os.path.exists(file_path):
                         shutil.move(file_path, os.path.join(group_folder, filename))
                         group_counter += 1
+        
+        # === 新增：如果沒有自動分組，且需要建立資料夾結構 ===
+        elif needs_folder_structure and not auto_group:
+            print("檢測到需要建立 anr/tombstones 資料夾結構")
+            
+            # 移動所有散落的 ANR/Tombstone 檔案到正確的資料夾
+            for root, dirs, files in os.walk(temp_dir):
+                for filename in files:
+                    file_lower = filename.lower()
+                    file_path = os.path.join(root, filename)
+                    
+                    # 跳過已經在正確資料夾中的檔案
+                    if '/anr/' in root or '/tombstones/' in root or '/tombstone/' in root:
+                        continue
+                    
+                    if 'anr' in file_lower:
+                        # 移動到 anr 資料夾
+                        anr_folder = os.path.join(temp_dir, 'anr')
+                        os.makedirs(anr_folder, exist_ok=True)
+                        dest_path = os.path.join(anr_folder, filename)
+                        if not os.path.exists(dest_path):
+                            shutil.move(file_path, dest_path)
+                            print(f"移動 ANR 檔案: {filename} -> anr/")
+                    elif 'tombstone' in file_lower:
+                        # 移動到 tombstones 資料夾
+                        tombstones_folder = os.path.join(temp_dir, 'tombstones')
+                        os.makedirs(tombstones_folder, exist_ok=True)
+                        dest_path = os.path.join(tombstones_folder, filename)
+                        if not os.path.exists(dest_path):
+                            shutil.move(file_path, dest_path)
+                            print(f"移動 Tombstone 檔案: {filename} -> tombstones/")
         
         # === 新增：清理空目錄 ===
         def remove_empty_dirs(root_dir):
