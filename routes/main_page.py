@@ -24,6 +24,8 @@ from routes.grep_analyzer import AndroidLogAnalyzer, LimitedCache
 import shutil
 import pandas as pd
 import requests
+import atexit
+import tempfile
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
@@ -32,6 +34,9 @@ main_page_bp = Blueprint('main_page_bp', __name__)
 analysis_cache = LimitedCache(max_size=100, max_age_hours=24)
 analyzer = AndroidLogAnalyzer()
 analysis_lock = threading.Lock()
+
+# 全域變數追蹤臨時目錄
+temp_directories = set()
 
 # HTML template with beautiful charts
 HTML_TEMPLATE = r'''
@@ -2450,6 +2455,51 @@ HTML_TEMPLATE = r'''
         right: 200px;
     }
 
+    .select-files-btn {
+        background: #6f42c1;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .select-files-btn:hover {
+        background: #5a32a3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(111, 66, 193, 0.4);
+    }
+
+    .selected-items-list {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #e1e4e8;
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8f9fa;
+    }
+
+    .selected-item {
+        padding: 10px;
+        background: white;
+        margin: 5px 0;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #e1e4e8;
+    }
+
+    .selected-item:hover {
+        background: #f0f0f0;
+    }
+
     </style>      
 </head>
 <body>
@@ -2515,7 +2565,10 @@ HTML_TEMPLATE = r'''
                 <button onclick="openLoadExcelDialog()" id="loadExcelBtn" class="load-excel-btn">📊 載入 Excel</button>
                 <button onclick="openMergeDialog()" id="mergeExcelMainBtn" class="merge-excel-btn" style="display: inline-flex; position: static; background: #17a2b8;">
                     💹 合併 Excel
-                </button>                
+                </button>
+                <button onclick="openFileSelectDialog()" id="selectFilesBtn" class="select-files-btn">
+                    📂 選擇檔案/資料夾
+                </button>                                
             </div>    
             <div class="loading" id="loading">
                 正在分析中
@@ -2922,7 +2975,48 @@ HTML_TEMPLATE = r'''
                     <button class="btn-secondary" onclick="closeMergeDialog()">取消</button>
                 </div>
             </div>
-        </div>        
+        </div>
+        <!-- 選擇檔案/資料夾彈出視窗 -->
+        <div class="merge-dialog-overlay" id="fileSelectDialogOverlay" style="display: none;">
+            <div class="merge-dialog">
+                <div class="merge-dialog-header">
+                    <h3>📂 選擇檔案/資料夾</h3>
+                    <button class="merge-dialog-close" onclick="closeFileSelectDialog()">×</button>
+                </div>
+                <div class="merge-dialog-body">
+                    <!-- 拖曳區域 -->
+                    <div class="merge-drop-zone" id="fileSelectDropZone">
+                        <div class="drop-zone-content">
+                            <div class="drop-icon">📂</div>
+                            <p>拖曳檔案或資料夾到這裡</p>
+                            <p class="drop-zone-hint">支援任何檔案格式</p>
+                            <input type="file" id="fileSelectInput" style="display: none;" multiple>
+                            <input type="file" id="folderSelectInput" style="display: none;" webkitdirectory directory multiple>
+                            <button class="btn-select-file" id="selectLocalFilesBtn">選擇檔案</button>
+                            <button class="btn-select-file" id="selectLocalFolderBtn" style="margin-left: 10px;">選擇資料夾</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 已選擇的檔案/資料夾列表 -->
+                    <div class="selected-items-section" id="selectedItemsSection" style="display: none; margin-top: 20px;">
+                        <h2>已選擇的項目</h2>
+                        <div class="selected-items-list" id="selectedItemsList"></div>
+                    </div>
+                    
+                    <!-- 選項設定 -->
+                    <div class="options-section" style="margin-top: 20px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="autoGroupFiles" checked style="margin-right: 8px;">
+                            自動將獨立的 ANR/Tombstone 檔案分組
+                        </label>
+                    </div>
+                </div>
+                <div class="merge-dialog-footer">
+                    <button class="btn-primary" onclick="executeFileAnalysis()" id="fileAnalysisExecuteBtn">開始分析</button>
+                    <button class="btn-secondary" onclick="closeFileSelectDialog()">取消</button>
+                </div>
+            </div>
+        </div>               
     <footer class="footer">
         <p>&copy; 2025 Copyright by Vince. All rights reserved.</p>
     </footer>
@@ -6269,6 +6363,314 @@ HTML_TEMPLATE = r'''
         }
 
     </script>
+    <script>
+        // 檔案/資料夾選擇相關變數
+        let selectedFiles = [];
+        let selectedFolders = [];
+
+        // 開啟檔案選擇對話框
+        function openFileSelectDialog() {
+            document.getElementById('fileSelectDialogOverlay').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+            clearFileSelection();
+        }
+
+        // 關閉檔案選擇對話框
+        function closeFileSelectDialog() {
+            document.getElementById('fileSelectDialogOverlay').style.display = 'none';
+            document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.width = '';
+        }
+
+        // 清除選擇
+        function clearFileSelection() {
+            selectedFiles = [];
+            selectedFolders = [];
+            document.getElementById('selectedItemsList').innerHTML = '';
+            document.getElementById('selectedItemsSection').style.display = 'none';
+            document.getElementById('fileSelectInput').value = '';
+            document.getElementById('folderSelectInput').value = '';
+        }
+
+        // 更新已選擇項目顯示
+        function updateSelectedItemsDisplay() {
+            const listDiv = document.getElementById('selectedItemsList');
+            listDiv.innerHTML = '';
+            
+            let itemCount = 0;
+            
+            // 顯示選擇的檔案
+            selectedFiles.forEach((file, index) => {
+                const item = createItemDisplay(file.name, 'file', () => removeItem('file', index));
+                listDiv.appendChild(item);
+                itemCount++;
+            });
+            
+            // 顯示選擇的資料夾（透過檔案列表）
+            if (selectedFolders.length > 0) {
+                // 計算資料夾數量
+                const folderPaths = new Set();
+                selectedFolders.forEach(file => {
+                    const pathParts = file.webkitRelativePath.split('/');
+                    if (pathParts.length > 1) {
+                        folderPaths.add(pathParts[0]);
+                    }
+                });
+                
+                folderPaths.forEach(folderName => {
+                    const item = createItemDisplay(folderName, 'folder', () => removeFolderByName(folderName));
+                    listDiv.appendChild(item);
+                    itemCount++;
+                });
+            }
+            
+            // 顯示或隱藏區域
+            document.getElementById('selectedItemsSection').style.display = itemCount > 0 ? 'block' : 'none';
+        }
+
+        // 建立項目顯示元素
+        function createItemDisplay(name, type, removeCallback) {
+            const div = document.createElement('div');
+            div.className = 'selected-item';
+            
+            const icon = type === 'file' ? '📄' : '📁';
+            div.innerHTML = `
+                <span>${icon} ${name}</span>
+                <button class="btn-clear" style="padding: 2px 8px; font-size: 12px;">移除</button>
+            `;
+            
+            div.querySelector('.btn-clear').onclick = removeCallback;
+            return div;
+        }
+
+        // 移除項目
+        function removeItem(type, index) {
+            if (type === 'file') {
+                selectedFiles.splice(index, 1);
+            }
+            updateSelectedItemsDisplay();
+        }
+
+        // 移除資料夾
+        function removeFolderByName(folderName) {
+            selectedFolders = selectedFolders.filter(file => {
+                const pathParts = file.webkitRelativePath.split('/');
+                return pathParts[0] !== folderName;
+            });
+            updateSelectedItemsDisplay();
+        }
+
+        // 處理檔案選擇
+        function handleFileSelect(files) {
+            if (!files || files.length === 0) return;
+            
+            // 轉換 FileList 為 Array
+            const fileArray = Array.from(files);
+            
+            // 添加到選擇列表（避免重複）
+            fileArray.forEach(file => {
+                const exists = selectedFiles.some(f => 
+                    f.name === file.name && f.size === file.size
+                );
+                if (!exists) {
+                    selectedFiles.push(file);
+                }
+            });
+            
+            updateSelectedItemsDisplay();
+        }
+
+        // 處理資料夾選擇
+        function handleFolderSelect(files) {
+            if (!files || files.length === 0) return;
+            
+            // 轉換 FileList 為 Array
+            const fileArray = Array.from(files);
+            
+            // 替換現有的資料夾選擇
+            selectedFolders = fileArray;
+            
+            updateSelectedItemsDisplay();
+        }
+
+        // 執行檔案分析
+        async function executeFileAnalysis() {
+            const totalFiles = selectedFiles.length + selectedFolders.length;
+            
+            if (totalFiles === 0) {
+                showMessage('請選擇要分析的檔案或資料夾', 'error');
+                return;
+            }
+            
+            const executeBtn = document.getElementById('fileAnalysisExecuteBtn');
+            executeBtn.disabled = true;
+            executeBtn.textContent = '準備中...';
+            
+            try {
+                const formData = new FormData();
+                
+                // 添加單獨的檔案
+                selectedFiles.forEach(file => {
+                    formData.append('files', file);
+                });
+                
+                // 添加資料夾中的檔案
+                selectedFolders.forEach(file => {
+                    formData.append('folder_files', file, file.webkitRelativePath);
+                });
+                
+                // 添加選項
+                formData.append('auto_group', document.getElementById('autoGroupFiles').checked);
+                
+                // 發送請求
+                const response = await fetch('/analyze-selected-items', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // 關閉對話框
+                    closeFileSelectDialog();
+                    
+                    // 設定路徑並執行分析
+                    if (data.temp_path) {
+                        document.getElementById('pathInput').value = data.temp_path;
+                        // 自動執行分析
+                        analyzeLogs();
+                    }
+                } else {
+                    const error = await response.json();
+                    showMessage('準備失敗: ' + (error.error || '未知錯誤'), 'error');
+                }
+            } catch (error) {
+                showMessage('準備失敗: ' + error.message, 'error');
+            } finally {
+                executeBtn.disabled = false;
+                executeBtn.textContent = '開始分析';
+            }
+        }
+
+        // 在 DOMContentLoaded 事件中設置事件監聽器
+        document.addEventListener('DOMContentLoaded', function() {
+            // 檔案選擇按鈕
+            const selectFilesBtn = document.getElementById('selectLocalFilesBtn');
+            if (selectFilesBtn) {
+                selectFilesBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('fileSelectInput').click();
+                });
+            }
+            
+            // 資料夾選擇按鈕
+            const selectFolderBtn = document.getElementById('selectLocalFolderBtn');
+            if (selectFolderBtn) {
+                selectFolderBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('folderSelectInput').click();
+                });
+            }
+            
+            // 檔案輸入變化事件
+            const fileInput = document.getElementById('fileSelectInput');
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    handleFileSelect(e.target.files);
+                });
+            }
+            
+            // 資料夾輸入變化事件
+            const folderInput = document.getElementById('folderSelectInput');
+            if (folderInput) {
+                folderInput.addEventListener('change', function(e) {
+                    handleFolderSelect(e.target.files);
+                });
+            }
+            
+            // 拖曳功能
+            const dropZone = document.getElementById('fileSelectDropZone');
+            if (dropZone) {
+                // 防止瀏覽器預設行為
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, preventDefaults, false);
+                    document.body.addEventListener(eventName, preventDefaults, false);
+                });
+                
+                // 拖曳進入和離開的視覺效果
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, highlight, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, unhighlight, false);
+                });
+                
+                // 處理拖放
+                dropZone.addEventListener('drop', handleDrop, false);
+            }
+        });
+
+        // 防止預設行為
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // 高亮拖放區域
+        function highlight(e) {
+            document.getElementById('fileSelectDropZone').classList.add('drag-over');
+        }
+
+        // 取消高亮
+        function unhighlight(e) {
+            document.getElementById('fileSelectDropZone').classList.remove('drag-over');
+        }
+
+        // 處理拖放
+        async function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const items = dt.items;
+            
+            if (items) {
+                // 使用 DataTransferItemList 介面
+                const files = [];
+                
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    
+                    if (item.kind === 'file') {
+                        const entry = item.webkitGetAsEntry();
+                        if (entry) {
+                            if (entry.isFile) {
+                                // 處理檔案
+                                const file = item.getAsFile();
+                                if (file) {
+                                    files.push(file);
+                                }
+                            } else if (entry.isDirectory) {
+                                // 處理資料夾
+                                showMessage('拖放資料夾功能需要使用選擇資料夾按鈕', 'info');
+                            }
+                        }
+                    }
+                }
+                
+                if (files.length > 0) {
+                    handleFileSelect(files);
+                }
+            } else {
+                // 舊版瀏覽器
+                const files = dt.files;
+                handleFileSelect(files);
+            }
+        }
+    </script>
 </body>
 </html>
 '''
@@ -9507,4 +9909,152 @@ def export_html_to_folder(analysis_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@main_page_bp.route('/analyze-selected-items', methods=['POST'])
+def analyze_selected_items():
+    """處理選擇的檔案和資料夾，準備分析"""
+    try:
+
+        # 每次分析前清理舊的臨時檔案
+        cleanup_old_temp_dirs()
         
+        import tempfile
+        import shutil
+        import zipfile
+        
+        # 建立臨時目錄
+        temp_dir = tempfile.mkdtemp(prefix='anr_analysis_')
+        
+        # 將臨時目錄加入追蹤集合
+        temp_directories.add(temp_dir)
+        
+        # 處理上傳的檔案
+        files = request.files.getlist('files')
+        folder_files = request.files.getlist('folder_files')
+        auto_group = request.form.get('auto_group') == 'true'
+        
+        print(f"接收到 {len(files)} 個單獨檔案")
+        print(f"接收到 {len(folder_files)} 個資料夾檔案")
+        
+        # 用於分組的計數器
+        group_counter = 1
+        anr_files = []
+        tombstone_files = []
+        
+        # 處理單獨上傳的檔案
+        for file in files:
+            filename = file.filename
+            file_lower = filename.lower()
+            
+            # 檢查是否為 ANR 或 Tombstone 檔案
+            if 'anr' in file_lower or 'tombstone' in file_lower:
+                # 儲存到臨時目錄
+                temp_file_path = os.path.join(temp_dir, filename)
+                file.save(temp_file_path)
+                
+                if 'anr' in file_lower:
+                    anr_files.append((temp_file_path, filename))
+                else:
+                    tombstone_files.append((temp_file_path, filename))
+            else:
+                # 其他檔案直接儲存
+                file.save(os.path.join(temp_dir, filename))
+        
+        # 處理資料夾中的檔案
+        for file in folder_files:
+            # 保持原始路徑結構
+            relative_path = file.filename
+            file_path = os.path.join(temp_dir, relative_path)
+            
+            # 建立目錄
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # 儲存檔案
+            file.save(file_path)
+            
+            # 檢查是否需要分組（只對根目錄的檔案）
+            path_parts = relative_path.split('/')
+            if len(path_parts) == 2:  # 只有一層目錄
+                filename = path_parts[1]
+                file_lower = filename.lower()
+                
+                if auto_group and ('anr' in file_lower or 'tombstone' in file_lower):
+                    if 'anr' in file_lower:
+                        anr_files.append((file_path, filename))
+                    else:
+                        tombstone_files.append((file_path, filename))
+        
+        # 如果啟用自動分組，將獨立的 ANR/Tombstone 檔案放入群組資料夾
+        if auto_group:
+            # 處理 ANR 檔案
+            if anr_files:
+                for file_path, filename in anr_files:
+                    group_folder = os.path.join(temp_dir, f'Group{group_counter}', 'anr')
+                    os.makedirs(group_folder, exist_ok=True)
+                    
+                    # 如果檔案存在，移動它
+                    if os.path.exists(file_path):
+                        shutil.move(file_path, os.path.join(group_folder, filename))
+                        group_counter += 1
+            
+            # 處理 Tombstone 檔案
+            if tombstone_files:
+                for file_path, filename in tombstone_files:
+                    group_folder = os.path.join(temp_dir, f'Group{group_counter}', 'tombstones')
+                    os.makedirs(group_folder, exist_ok=True)
+                    
+                    # 如果檔案存在，移動它
+                    if os.path.exists(file_path):
+                        shutil.move(file_path, os.path.join(group_folder, filename))
+                        group_counter += 1
+        
+        # 返回臨時目錄路徑
+        total_files = len(files) + len(folder_files)
+        return jsonify({
+            'success': True,
+            'temp_path': temp_dir,
+            'message': f'已準備 {total_files} 個檔案'
+        })
+        
+    except Exception as e:
+        print(f"Error in analyze_selected_items: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# 全域變數追蹤臨時目錄
+temp_directories = set()
+
+def cleanup_temp_dirs():
+    """清理所有臨時目錄"""
+    for temp_dir in temp_directories:
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+                print(f"已清理臨時目錄: {temp_dir}")
+        except Exception as e:
+            print(f"清理臨時目錄失敗 {temp_dir}: {e}")
+
+# 註冊清理函數
+atexit.register(cleanup_temp_dirs)
+
+def cleanup_old_temp_dirs():
+    """清理超過 24 小時的臨時目錄"""
+    import glob
+    temp_base = tempfile.gettempdir()
+    pattern = os.path.join(temp_base, 'anr_analysis_*')
+    
+    for temp_dir in glob.glob(pattern):
+        try:
+            # 檢查目錄修改時間
+            mtime = os.path.getmtime(temp_dir)
+            age_hours = (time.time() - mtime) / 3600
+            
+            if age_hours > 24:
+                shutil.rmtree(temp_dir)
+                print(f"已清理舊的臨時目錄: {temp_dir}")
+        except Exception as e:
+            print(f"清理舊臨時目錄失敗 {temp_dir}: {e}")
+
+# 可以定期呼叫 cleanup_old_temp_dirs()
+
