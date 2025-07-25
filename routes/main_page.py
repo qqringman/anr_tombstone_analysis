@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from pathlib import Path
 import threading
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import time
 from urllib.parse import quote
 import html
@@ -26,6 +26,10 @@ import pandas as pd
 import requests
 import atexit
 import tempfile
+from routes.analysisLockManager import AnalysisLockManager
+
+# 創建全域的鎖管理器實例
+analysis_lock_manager = AnalysisLockManager()
 
 # 創建一個藍圖實例
 main_page_bp = Blueprint('main_page_bp', __name__)
@@ -3868,6 +3872,47 @@ HTML_TEMPLATE = r'''
                 return;
             }
 
+            // === 新增：先檢查是否被鎖定 ===
+            try {
+                const lockResponse = await fetch('/check-analysis-lock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path: path })
+                });
+                
+                const lockData = await lockResponse.json();
+                
+                if (lockData.locked) {
+                    const remainingTime = lockData.remaining_time || 0;
+                    
+                    // 詢問使用者是否要等待
+                    const userChoice = confirm(
+                        `此路徑正在被其他使用者分析中\n` +
+                        `預計剩餘時間: ${Math.floor(remainingTime / 60)} 分 ${remainingTime % 60} 秒\n\n` +
+                        `是否要自動等待並在分析完成後開始？`
+                    );
+                    
+                    if (userChoice) {
+                        // 使用者選擇等待
+                        try {
+                            await waitForAnalysisUnlock(path);
+                            // 等待成功，繼續執行分析
+                        } catch (error) {
+                            console.error('等待失敗:', error);
+                            return;
+                        }
+                    } else {
+                        // 使用者選擇不等待
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('檢查鎖狀態失敗:', error);
+                // 如果檢查失敗，還是讓用戶繼續嘗試
+            }
+            
             // 重置匯出狀態
             window.currentAnalysisExported = false;
             window.hasCurrentAnalysis = false;
@@ -3938,6 +3983,30 @@ HTML_TEMPLATE = r'''
                 });
                 
                 const data = await response.json();
+                
+                // === 新增：處理鎖定狀態 ===
+                if (response.status === 423) {  // Locked status
+                    // 如果還是被鎖定（可能是新的鎖），詢問是否重試
+                    const retry = confirm(
+                        data.error + '\n\n' +
+                        '是否要自動等待並重試？'
+                    );
+                    
+                    if (retry) {
+                        try {
+                            await waitForAnalysisUnlock(path);
+                            // 遞迴呼叫自己重新分析
+                            analyzeLogs();
+                            return;
+                        } catch (error) {
+                            console.error('等待失敗:', error);
+                        }
+                    }
+                    
+                    document.getElementById('analyzeBtn').disabled = false;
+                    document.getElementById('loading').style.display = 'none';
+                    return;
+                }
                 
                 if (!response.ok) {
                     throw new Error(data.error || 'Analysis failed');
@@ -4140,8 +4209,139 @@ HTML_TEMPLATE = r'''
             document.getElementById('filesRegexToggle').checked = false;
             document.getElementById('processSummaryRegexToggle').checked = false;
         }
-        
+
+        // 加入進度條顯示函數
+        function createWaitingProgressBar() {
+            const progressHtml = `
+                <div id="waitingProgress" style="
+                    margin-top: 10px;
+                    background: #f0f0f0;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    height: 20px;
+                    position: relative;
+                ">
+                    <div id="waitingProgressBar" style="
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        height: 100%;
+                        width: 0%;
+                        transition: width 1s linear;
+                        position: relative;
+                    ">
+                        <span id="waitingProgressText" style="
+                            position: absolute;
+                            right: 10px;
+                            top: 50%;
+                            transform: translateY(-50%);
+                            color: white;
+                            font-size: 12px;
+                            font-weight: bold;
+                        "></span>
+                    </div>
+                </div>
+            `;
+            
+            return progressHtml;
+        }
+
+        // 全域變數來控制等待狀態
+        let waitingForUnlock = false;
+
+        // 修改 waitForAnalysisUnlock 包含進度條 (支援取消)
+        async function waitForAnalysisUnlock(path, maxWaitTime = 300000) {
+            const startTime = Date.now();
+            const pollInterval = 5000;
+            waitingForUnlock = true;
+            
+            showMessage(
+                '其他使用者正在分析此路徑，系統將自動等待...<br>' +
+                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>' +
+                createWaitingProgressBar(),
+                'info'
+            );
+            
+            return new Promise((resolve, reject) => {
+                const checkLock = async () => {
+                    if (!waitingForUnlock) {
+                        showMessage('已取消等待', 'info');
+                        reject(new Error('使用者取消等待'));
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/check-analysis-lock', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ path: path })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (!data.locked) {
+                            showMessage('分析鎖已釋放，開始進行分析...', 'success');
+                            resolve();
+                        } else {
+                            const remainingTime = data.remaining_time || 0;
+                            const minutes = Math.floor(remainingTime / 60);
+                            const seconds = remainingTime % 60;
+                            
+                            // 初始化初始剩餘時間
+                            if (initialRemainingTime === 0) {
+                                initialRemainingTime = remainingTime;
+                            }
+                            
+                            // 計算進度
+                            const progress = Math.max(0, Math.min(100, 
+                                ((initialRemainingTime - remainingTime) / initialRemainingTime) * 100
+                            ));
+                            
+                            // 更新進度條
+                            const progressBar = document.getElementById('waitingProgressBar');
+                            const progressText = document.getElementById('waitingProgressText');
+                            
+                            if (progressBar) {
+                                progressBar.style.width = progress + '%';
+                            }
+                            
+                            if (progressText) {
+                                progressText.textContent = `${Math.round(progress)}%`;
+                            }
+                            
+                            const message = '正在等待其他分析完成...<br>' +
+                                '預計剩餘時間: ' + minutes + ' 分 ' + seconds + ' 秒<br>' +
+                                '<small>系統會自動開始分析，請勿關閉此頁面</small>';
+                            
+                            showMessage(message, 'info');
+                            
+                            setTimeout(checkLock, pollInterval);
+                        }
+                    } catch (error) {
+                        showMessage('檢查鎖狀態失敗', 'error');
+                        reject(error);
+                    }
+                };
+                
+                checkLock();
+            });
+        }
+
+        // 取消等待函數
+        function cancelWaiting() {
+            waitingForUnlock = false;
+            document.getElementById('analyzeBtn').disabled = false;
+            document.getElementById('loading').style.display = 'none';
+        }
+
         function updateResults(data) {
+
+            // === 確保 basePath 被設置 ===
+            if (!window.basePath && data.path) {
+                window.basePath = data.path;
+                console.log('在 updateResults 中設置 basePath:', window.basePath);
+            }
+            
             // 生成程序統計（不分類型）
             const processOnlyData = {};
             data.statistics.type_process_summary.forEach(item => {
@@ -4888,9 +5088,15 @@ HTML_TEMPLATE = r'''
                     // === 新增：建立分析報告連結 ===
                     let analyzeReportLink = '';
                     if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {
-                        // 取得基礎路徑（使用者輸入的路徑）
-                        const basePath = document.getElementById('pathInput').value;
+                        // 使用全域的 basePath 而不是從 input 取值
+                        const basePath = window.basePath || document.getElementById('pathInput').value;
                         const filePath = log.file || '';
+                        
+                        // 添加除錯訊息
+                        console.log('=== Logs Table Analyze Link Debug ===');
+                        console.log('Using basePath:', basePath);
+                        console.log('Log file path:', filePath);
+                        console.log('vpAnalyzeOutputPath:', window.vpAnalyzeOutputPath);
                         
                         // 從檔案路徑中提取相對路徑
                         if (filePath.startsWith(basePath)) {
@@ -4901,9 +5107,17 @@ HTML_TEMPLATE = r'''
                                 relativePath = relativePath.substring(1);
                             }
                             
+                            console.log('Relative path:', relativePath);
+                            
                             // 建立分析報告路徑
                             const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                            console.log('Analyzed file path:', analyzedFilePath);
+                            
                             analyzeReportLink = ` <a href="/view-file?path=${encodeURIComponent(analyzedFilePath)}" target="_blank" class="file-link" style="color: #28a745; font-size: 0.9em;">(分析報告)</a>`;
+                        } else {
+                            console.log('File path does not start with basePath');
+                            console.log('Expected basePath:', basePath);
+                            console.log('Actual file path:', filePath);
                         }
                     }
                     
@@ -5011,9 +5225,14 @@ HTML_TEMPLATE = r'''
                     // === 新增：建立分析報告連結 ===
                     let analyzeReportLink = '';
                     if (window.vpAnalyzeOutputPath && window.vpAnalyzeSuccess) {
-                        // 取得基礎路徑（使用者輸入的路徑）
-                        const basePath = document.getElementById('pathInput').value;
+                        // 使用全域的 basePath 而不是從 input 取值
+                        const basePath = window.basePath || document.getElementById('pathInput').value;
                         const filePath = file.filepath || '';
+                        
+                        console.log('=== Files Table Analyze Link Debug ===');
+                        console.log('Using basePath:', basePath);
+                        console.log('File path:', filePath);
+                        console.log('vpAnalyzeOutputPath:', window.vpAnalyzeOutputPath);
                         
                         // 從檔案路徑中提取相對路徑
                         if (filePath.startsWith(basePath)) {
@@ -5024,9 +5243,15 @@ HTML_TEMPLATE = r'''
                                 relativePath = relativePath.substring(1);
                             }
                             
+                            console.log('Relative path:', relativePath);
+                            
                             // 建立分析報告路徑
                             const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                            console.log('Analyzed file path:', analyzedFilePath);
+                            
                             analyzeReportLink = ` <a href="/view-file?path=${encodeURIComponent(analyzedFilePath)}" target="_blank" class="file-link" style="color: #28a745; font-size: 0.9em;">(分析報告)</a>`;
+                        } else {
+                            console.log('File path does not start with basePath');
                         }
                     }
                     
@@ -6966,6 +7191,13 @@ HTML_TEMPLATE = r'''
                     
                     // 設定路徑並執行分析
                     if (data.temp_path) {
+                        // === 重要：儲存原始臨時路徑 ===
+                        const originalTempPath = data.temp_path;
+                        
+                        // === 重要：先設置 basePath ===
+                        window.basePath = data.temp_path;
+                        console.log('設置 basePath:', window.basePath);
+                        
                         // 使用臨時路徑直接呼叫 analyze 端點
                         const analyzeResponse = await fetch('/analyze', {
                             method: 'POST',
@@ -6981,6 +7213,7 @@ HTML_TEMPLATE = r'''
                             // 直接處理分析結果
                             currentAnalysisId = analyzeData.analysis_id;
                             
+                            // === 重要：處理檔案路徑映射 ===
                             const sortedLogs = analyzeData.logs.sort((a, b) => {
                                 if (!a.timestamp && !b.timestamp) return 0;
                                 if (!a.timestamp) return 1;
@@ -6988,20 +7221,120 @@ HTML_TEMPLATE = r'''
                                 return a.timestamp.localeCompare(b.timestamp);
                             });
                             
-                            allLogs = sortedLogs;
+                            // === 修正：確保檔案路徑正確 ===
+                            allLogs = sortedLogs.map(log => {
+                                // 添加除錯資訊
+                                console.log('=== Log Path Debug ===');
+                                console.log('Original log.file:', log.file);
+                                console.log('basePath:', window.basePath);
+                                
+                                // 確保 file 路徑存在
+                                if (!log.file && log.filepath) {
+                                    log.file = log.filepath;
+                                }
+                                
+                                // 如果是臨時目錄的檔案，保持原樣
+                                if (log.file && log.file.startsWith(originalTempPath)) {
+                                    console.log('File is in temp directory, keeping original path');
+                                }
+                                
+                                return log;
+                            });
+                            
                             allSummary = analyzeData.statistics.type_process_summary || [];
+                            
+                            // === 修正：處理檔案統計 ===
                             allFileStats = analyzeData.file_statistics || [];
+                            allFileStats = allFileStats.map(stat => {
+                                // 確保 filepath 存在
+                                if (!stat.filepath && stat.file) {
+                                    stat.filepath = stat.file;
+                                }
+                                
+                                console.log('=== FileStat Path Debug ===');
+                                console.log('Original stat.filepath:', stat.filepath);
+                                
+                                return stat;
+                            });
                             
                             // Reset filters and pagination
                             resetFiltersAndPagination();
                             
-                            // 保存分析輸出路徑和狀態
+                            // === 重要：確保所有路徑相關變數都被正確設置 ===
+                            window.basePath = originalTempPath;  // 使用原始臨時路徑
                             window.vpAnalyzeOutputPath = analyzeData.vp_analyze_output_path;
                             window.vpAnalyzeSuccess = analyzeData.vp_analyze_success;
                             window.hasCurrentAnalysis = true;
                             
+                            console.log('=== Final Path Configuration ===');
+                            console.log('basePath:', window.basePath);
+                            console.log('vpAnalyzeOutputPath:', window.vpAnalyzeOutputPath);
+                            console.log('vpAnalyzeSuccess:', window.vpAnalyzeSuccess);
+                            console.log('Sample log path:', allLogs[0]?.file);
+                            console.log('Sample file stat path:', allFileStats[0]?.filepath);
+                            
                             // Update UI
                             updateResults(analyzeData);
+                            
+                            // === 新增：強制重新渲染表格以確保分析報告連結顯示 ===
+                            if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
+                                // 第一次渲染
+                                setTimeout(() => {
+                                    console.log('第一次重新渲染表格...');
+                                    updateFilesTable();
+                                    updateLogsTable();
+                                    
+                                    // 檢查是否成功添加了分析報告連結
+                                    const analyzeLinks = document.querySelectorAll('.analyze-report-link');
+                                    console.log('找到的分析報告連結數量:', analyzeLinks.length);
+                                    
+                                    // 如果沒有找到連結，再次嘗試
+                                    if (analyzeLinks.length === 0) {
+                                        setTimeout(() => {
+                                            console.log('第二次重新渲染表格...');
+                                            
+                                            // 確保路徑變數仍然正確
+                                            window.basePath = originalTempPath;
+                                            window.vpAnalyzeOutputPath = analyzeData.vp_analyze_output_path;
+                                            
+                                            updateFilesTable();
+                                            updateLogsTable();
+                                            
+                                            // 再次檢查
+                                            const retryLinks = document.querySelectorAll('.analyze-report-link');
+                                            console.log('重試後找到的分析報告連結數量:', retryLinks.length);
+                                        }, 1000);
+                                    }
+                                }, 500);
+                                
+                                // 額外的除錯：檢查路徑計算
+                                setTimeout(() => {
+                                    console.log('=== 路徑計算除錯 ===');
+                                    if (allLogs.length > 0) {
+                                        const testLog = allLogs[0];
+                                        const testPath = testLog.file;
+                                        console.log('測試檔案路徑:', testPath);
+                                        
+                                        // 模擬路徑計算
+                                        let relativePath = testPath;
+                                        const normalizedBasePath = window.basePath.replace(/\/+$/, '');
+                                        const normalizedFilePath = testPath.replace(/\/+$/, '');
+                                        
+                                        console.log('normalizedBasePath:', normalizedBasePath);
+                                        console.log('normalizedFilePath:', normalizedFilePath);
+                                        
+                                        if (normalizedFilePath.includes(normalizedBasePath)) {
+                                            const basePathIndex = normalizedFilePath.indexOf(normalizedBasePath);
+                                            relativePath = normalizedFilePath.substring(basePathIndex + normalizedBasePath.length);
+                                            console.log('計算出的相對路徑:', relativePath);
+                                        }
+                                        
+                                        relativePath = relativePath.replace(/^\/+/, '');
+                                        const analyzedFilePath = window.vpAnalyzeOutputPath + '/' + relativePath + '.analyzed.txt';
+                                        console.log('預期的分析檔案路徑:', analyzedFilePath);
+                                    }
+                                }, 2000);
+                            }
                             
                             // 顯示相關按鈕
                             if (analyzeData.vp_analyze_success && analyzeData.vp_analyze_output_path) {
@@ -7014,11 +7347,47 @@ HTML_TEMPLATE = r'''
                                 document.getElementById('exportExcelReportBtn').style.display = 'block';
                                 document.getElementById('mergeExcelBtn').style.display = 'block';
                                 document.getElementById('downloadCurrentZipBtn').style.display = 'block';
+                                
+                                // 自動產生各種格式的檔案
+                                try {
+                                    await autoExportExcel(analyzeData.vp_analyze_output_path);
+                                    console.log('已自動產生 Excel 檔案');
+                                } catch (error) {
+                                    console.error('自動產生 Excel 失敗:', error);
+                                }
+                                
+                                try {
+                                    await autoExportHTML(analyzeData.vp_analyze_output_path);
+                                    console.log('已自動產生 HTML 檔案');
+                                } catch (error) {
+                                    console.error('自動產生 HTML 失敗:', error);
+                                }
+                                
+                                try {
+                                    await autoExportExcelReport(analyzeData.vp_analyze_output_path);
+                                    console.log('已自動產生 Excel 報表');
+                                } catch (error) {
+                                    console.error('自動產生 Excel 報表失敗:', error);
+                                }
                             }
                             
                             document.getElementById('exportHtmlBtn').style.display = 'block';
                             
-                            let message = `分析完成！共掃描 ${analyzeData.total_files} 個檔案`;
+                            let message = `分析完成！共掃描 ${analyzeData.total_files} 個檔案，找到 ${analyzeData.anr_subject_count || 0} 個包含 ANR 的檔案，找到 ${analyzeData.files_with_cmdline - (analyzeData.anr_subject_count || 0)} 個包含 Tombstone 的檔案`;
+                            message += `<br>分析耗時: ${analyzeData.analysis_time} 秒`;
+                            if (analyzeData.used_grep) {
+                                message += '<span class="grep-badge">使用 grep 加速</span>';
+                            } else {
+                                message += '<span class="grep-badge no-grep-badge">未使用 grep</span>';
+                            }
+                            
+                            // 新增 vp_analyze 狀態訊息
+                            if (analyzeData.vp_analyze_success) {
+                                message += '<br><span style="color: #28a745;">✓ 詳細分析報告已生成</span>';
+                            } else if (analyzeData.vp_analyze_error) {
+                                message += `<br><span style="color: #dc3545;">✗ 詳細分析失敗: ${analyzeData.vp_analyze_error}</span>`;
+                            }
+                            
                             showMessage(message, 'success');
                             
                             // 清除選擇
@@ -7034,6 +7403,7 @@ HTML_TEMPLATE = r'''
                 }
             } catch (error) {
                 showMessage('分析失敗: ' + error.message, 'error');
+                window.hasCurrentAnalysis = false;
             } finally {
                 analyzeBtn.disabled = false;
                 analyzeBtn.textContent = '開始分析';
@@ -7257,252 +7627,274 @@ def analyze():
         
         if not path:
             return jsonify({'error': 'Path is required'}), 400
+
+        # === 新增：檢查並獲取分析鎖 ===
+        # 使用 session ID 或 IP 作為 owner_id
+        owner_id = request.remote_addr  # 或使用 session.get('id') 如果有 session
         
-        # Handle Windows UNC paths and regular paths
-        original_path = path
+        # 嘗試獲取鎖
+        lock_acquired, error_message = analysis_lock_manager.acquire_lock(path, owner_id)
         
-        # Convert Windows backslashes to forward slashes for consistency
-        # But preserve UNC paths starting with \\
-        if path.startswith('\\\\'):
-            # This is a UNC path, keep it as is
-            print(f"UNC path detected: {path}")
-        else:
-            # Expand user path and convert to absolute
-            path = os.path.expanduser(path)
-            path = os.path.abspath(path)
-        
-        print(f"Analyzing path: {path}")
-        print(f"Original input: {original_path}")
-        
-        if not os.path.exists(path):
+        if not lock_acquired:
             return jsonify({
-                'error': f'Path does not exist: {path}',
-                'original_path': original_path,
-                'resolved_path': path,
-                'hint': 'For network paths, ensure the share is accessible and mounted'
-            }), 400
-        
-        if not os.path.isdir(path):
-            return jsonify({'error': f'Path is not a directory: {path}'}), 400
-        
-        # 生成包含時間戳和 UUID 的唯一 ID
-        analysis_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + str(uuid.uuid4())[:8]
-                      
-        # === 新增：執行 vp_analyze_logs.py ===
-        # 取得路徑的最後一個資料夾名稱
-        last_folder_name = os.path.basename(path.rstrip(os.sep))
-        # 建立輸出目錄名稱
-        output_dir_name = f".{last_folder_name}_anr_tombstones_analyze"
-        output_path = os.path.join(path, output_dir_name)
-
-        # 修改：備份 all_anr_tombstone_result.xlsx 到上一層目錄
-        all_excel_exists = False
-        all_excel_path_in_output = os.path.join(output_path, 'all_anr_tombstone_result.xlsx')
-        all_excel_backup_path = os.path.join(path, 'all_anr_tombstone_result.xlsx.backup')
-        
-        # 如果輸出目錄存在
-        if os.path.exists(output_path):
-            print(f"發現已存在的輸出目錄: {output_path}")
-            
-            # 備份 all_anr_tombstone_result.xlsx 到上一層目錄
-            if os.path.exists(all_excel_path_in_output):
-                try:
-                    # 備份到上一層目錄（使用 .backup 後綴避免衝突）
-                    shutil.copy2(all_excel_path_in_output, all_excel_backup_path)
-                    all_excel_exists = True
-                    print(f"已備份 all_anr_tombstone_result.xlsx 到: {all_excel_backup_path}")
-                except Exception as e:
-                    print(f"備份 all_anr_tombstone_result.xlsx 失敗: {e}")
-                    all_excel_exists = False
-            
-            # 刪除輸出目錄
-            try:
-                shutil.rmtree(output_path)
-                print(f"已刪除舊的輸出目錄: {output_path}")
-            except Exception as e:
-                print(f"刪除輸出目錄失敗: {e}")
-                # 如果刪除失敗，清理備份
-                if all_excel_exists and os.path.exists(all_excel_backup_path):
-                    try:
-                        os.unlink(all_excel_backup_path)
-                    except:
-                        pass
-                return jsonify({'error': f'無法刪除現有的輸出目錄: {output_path}, 錯誤: {str(e)}'}), 500
-        else:
-            print(f"輸出目錄不存在，將建立新的: {output_path}")
-
-        # 執行分析
-        results = analyzer.analyze_logs(path)
-
-        # 重要：保存基礎路徑到結果中
-        results['path'] = path  # 確保保存原始輸入路徑
-        results['base_path'] = path  # 也保存為 base_path
-                    
-        # 執行 vp_analyze_logs.py
-        vp_analyze_success = False
-        vp_analyze_error = None
+                'error': error_message,
+                'locked': True,
+                'lock_info': analysis_lock_manager.get_lock_info(path)
+            }), 423  # 423 Locked status code
         
         try:
-            # 確保 vp_analyze_logs.py 在同一目錄
-            vp_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vp_analyze_logs.py')
+            # Handle Windows UNC paths and regular paths
+            original_path = path
             
-            if os.path.exists(vp_script_path):
-                print(f"找到 vp_analyze_logs.py: {vp_script_path}")
-                print(f"執行命令: python3.12 {vp_script_path} {path} {output_path}")
-                
-                # 使用 python3.12 執行 vp_analyze_logs.py
-                cmd = ['python3.12', vp_script_path, path, output_path]
-                
-                # 執行命令
-                result = subprocess.run(
-                    cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=1000,
-                    cwd=os.path.dirname(vp_script_path)  # 設定工作目錄
-                )
-                
-                print(f"Return code: {result.returncode}")
-                print(f"STDOUT: {result.stdout}")
-                print(f"STDERR: {result.stderr}")
-                
-                if result.returncode == 0:
-                    vp_analyze_success = True
-                    print("vp_analyze_logs.py 執行成功")
-                    print(f"分析結果輸出到: {output_path}")
-                    
-                    # 確保輸出目錄存在
-                    if os.path.exists(output_path):
-                        print(f"確認輸出目錄已建立: {output_path}")
+            # Convert Windows backslashes to forward slashes for consistency
+            # But preserve UNC paths starting with \\
+            if path.startswith('\\\\'):
+                # This is a UNC path, keep it as is
+                print(f"UNC path detected: {path}")
+            else:
+                # Expand user path and convert to absolute
+                path = os.path.expanduser(path)
+                path = os.path.abspath(path)
+            
+            print(f"Analyzing path: {path}")
+            print(f"Original input: {original_path}")
+            
+            if not os.path.exists(path):
+                return jsonify({
+                    'error': f'Path does not exist: {path}',
+                    'original_path': original_path,
+                    'resolved_path': path,
+                    'hint': 'For network paths, ensure the share is accessible and mounted'
+                }), 400
+            
+            if not os.path.isdir(path):
+                return jsonify({'error': f'Path is not a directory: {path}'}), 400
+            
+            # 生成包含時間戳和 UUID 的唯一 ID
+            analysis_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + str(uuid.uuid4())[:8]
                         
-                        # 還原備份的 all_anr_tombstone_result.xlsx
-                        if all_excel_exists and os.path.exists(all_excel_backup_path):
-                            try:
-                                # 將備份檔案移回輸出目錄
-                                shutil.move(all_excel_backup_path, all_excel_path_in_output)
-                                print(f"已還原 all_anr_tombstone_result.xlsx 到: {all_excel_path_in_output}")
-                            except Exception as e:
-                                print(f"還原 all_anr_tombstone_result.xlsx 失敗: {e}")
-                                # 如果移動失敗，嘗試複製
-                                try:
-                                    shutil.copy2(all_excel_backup_path, all_excel_path_in_output)
-                                    os.unlink(all_excel_backup_path)
-                                    print(f"已複製並還原 all_anr_tombstone_result.xlsx")
-                                except Exception as e2:
-                                    print(f"複製 all_anr_tombstone_result.xlsx 也失敗: {e2}")
-                        
-                        # 列出目錄內容
+            # === 新增：執行 vp_analyze_logs.py ===
+            # 取得路徑的最後一個資料夾名稱
+            last_folder_name = os.path.basename(path.rstrip(os.sep))
+            # 建立輸出目錄名稱
+            output_dir_name = f".{last_folder_name}_anr_tombstones_analyze"
+            output_path = os.path.join(path, output_dir_name)
+
+            # 修改：備份 all_anr_tombstone_result.xlsx 到上一層目錄
+            all_excel_exists = False
+            all_excel_path_in_output = os.path.join(output_path, 'all_anr_tombstone_result.xlsx')
+            all_excel_backup_path = os.path.join(path, 'all_anr_tombstone_result.xlsx.backup')
+            
+            # 如果輸出目錄存在
+            if os.path.exists(output_path):
+                print(f"發現已存在的輸出目錄: {output_path}")
+                
+                # 備份 all_anr_tombstone_result.xlsx 到上一層目錄
+                if os.path.exists(all_excel_path_in_output):
+                    try:
+                        # 備份到上一層目錄（使用 .backup 後綴避免衝突）
+                        shutil.copy2(all_excel_path_in_output, all_excel_backup_path)
+                        all_excel_exists = True
+                        print(f"已備份 all_anr_tombstone_result.xlsx 到: {all_excel_backup_path}")
+                    except Exception as e:
+                        print(f"備份 all_anr_tombstone_result.xlsx 失敗: {e}")
+                        all_excel_exists = False
+                
+                # 刪除輸出目錄
+                try:
+                    shutil.rmtree(output_path)
+                    print(f"已刪除舊的輸出目錄: {output_path}")
+                except Exception as e:
+                    print(f"刪除輸出目錄失敗: {e}")
+                    # 如果刪除失敗，清理備份
+                    if all_excel_exists and os.path.exists(all_excel_backup_path):
                         try:
-                            files = os.listdir(output_path)
-                            print(f"輸出目錄包含 {len(files)} 個檔案")
-                            if 'all_anr_tombstone_result.xlsx' in files:
-                                print("確認 all_anr_tombstone_result.xlsx 已在輸出目錄中")
+                            os.unlink(all_excel_backup_path)
                         except:
                             pass
-                    else:
-                        print("警告：輸出目錄不存在")
-                        vp_analyze_success = False
-                        vp_analyze_error = "輸出目錄未建立"
-                else:
-                    vp_analyze_error = f"vp_analyze_logs.py 執行失敗 (return code: {result.returncode})\nSTDERR: {result.stderr}\nSTDOUT: {result.stdout}"
-                    print(vp_analyze_error)
+                    return jsonify({'error': f'無法刪除現有的輸出目錄: {output_path}, 錯誤: {str(e)}'}), 500
             else:
-                vp_analyze_error = f"找不到 vp_analyze_logs.py: {vp_script_path}"
-                print(vp_analyze_error)
+                print(f"輸出目錄不存在，將建立新的: {output_path}")
+
+            # 執行分析
+            results = analyzer.analyze_logs(path)
+
+            # 重要：保存基礎路徑到結果中
+            results['path'] = path  # 確保保存原始輸入路徑
+            results['base_path'] = path  # 也保存為 base_path
+                        
+            # 執行 vp_analyze_logs.py
+            vp_analyze_success = False
+            vp_analyze_error = None
+            
+            try:
+                # 確保 vp_analyze_logs.py 在同一目錄
+                vp_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vp_analyze_logs.py')
                 
-        except subprocess.TimeoutExpired:
-            vp_analyze_error = "vp_analyze_logs.py 執行超時 (超過 300 秒)"
-            print(vp_analyze_error)
-        except FileNotFoundError:
-            vp_analyze_error = "找不到 python3.12 命令，請確認已安裝 Python 3.12"
-            print(vp_analyze_error)
-        except Exception as e:
-            vp_analyze_error = f"執行 vp_analyze_logs.py 時發生錯誤: {str(e)}"
-            print(vp_analyze_error)
-            import traceback
-            traceback.print_exc()
-        finally:
-            # 清理備份檔案（如果還存在）
-            if os.path.exists(all_excel_backup_path):
-                try:
-                    os.unlink(all_excel_backup_path)
-                    print(f"已清理備份檔案: {all_excel_backup_path}")
-                except Exception as e:
-                    print(f"清理備份檔案失敗: {e}")
-
-        # 在每個 log 中添加完整路徑
-        for log in results['logs']:
-            log['full_path'] = log.get('file', '')
-            
-            # 從檔案路徑中提取 problem_set
-            # 假設路徑格式為 /base/path/問題集名稱/anr或tombstones/檔案名稱
-            if 'problem_set' not in log and log.get('file'):
-                try:
-                    file_path = log['file']
-                    # 移除基礎路徑
-                    relative_path = file_path.replace(path, '').lstrip('/')
-                    # 取得第一層資料夾名稱作為 problem_set
-                    parts = relative_path.split('/')
-                    if len(parts) > 1:
-                        log['problem_set'] = parts[0]
+                if os.path.exists(vp_script_path):
+                    print(f"找到 vp_analyze_logs.py: {vp_script_path}")
+                    print(f"執行命令: python3.12 {vp_script_path} {path} {output_path}")
+                    
+                    # 使用 python3.12 執行 vp_analyze_logs.py
+                    cmd = ['python3.12', vp_script_path, path, output_path]
+                    
+                    # 執行命令
+                    result = subprocess.run(
+                        cmd, 
+                        capture_output=True, 
+                        text=True, 
+                        timeout=1000,
+                        cwd=os.path.dirname(vp_script_path)  # 設定工作目錄
+                    )
+                    
+                    print(f"Return code: {result.returncode}")
+                    print(f"STDOUT: {result.stdout}")
+                    print(f"STDERR: {result.stderr}")
+                    
+                    if result.returncode == 0:
+                        vp_analyze_success = True
+                        print("vp_analyze_logs.py 執行成功")
+                        print(f"分析結果輸出到: {output_path}")
+                        
+                        # 確保輸出目錄存在
+                        if os.path.exists(output_path):
+                            print(f"確認輸出目錄已建立: {output_path}")
+                            
+                            # 還原備份的 all_anr_tombstone_result.xlsx
+                            if all_excel_exists and os.path.exists(all_excel_backup_path):
+                                try:
+                                    # 將備份檔案移回輸出目錄
+                                    shutil.move(all_excel_backup_path, all_excel_path_in_output)
+                                    print(f"已還原 all_anr_tombstone_result.xlsx 到: {all_excel_path_in_output}")
+                                except Exception as e:
+                                    print(f"還原 all_anr_tombstone_result.xlsx 失敗: {e}")
+                                    # 如果移動失敗，嘗試複製
+                                    try:
+                                        shutil.copy2(all_excel_backup_path, all_excel_path_in_output)
+                                        os.unlink(all_excel_backup_path)
+                                        print(f"已複製並還原 all_anr_tombstone_result.xlsx")
+                                    except Exception as e2:
+                                        print(f"複製 all_anr_tombstone_result.xlsx 也失敗: {e2}")
+                            
+                            # 列出目錄內容
+                            try:
+                                files = os.listdir(output_path)
+                                print(f"輸出目錄包含 {len(files)} 個檔案")
+                                if 'all_anr_tombstone_result.xlsx' in files:
+                                    print("確認 all_anr_tombstone_result.xlsx 已在輸出目錄中")
+                            except:
+                                pass
+                        else:
+                            print("警告：輸出目錄不存在")
+                            vp_analyze_success = False
+                            vp_analyze_error = "輸出目錄未建立"
                     else:
+                        vp_analyze_error = f"vp_analyze_logs.py 執行失敗 (return code: {result.returncode})\nSTDERR: {result.stderr}\nSTDOUT: {result.stdout}"
+                        print(vp_analyze_error)
+                else:
+                    vp_analyze_error = f"找不到 vp_analyze_logs.py: {vp_script_path}"
+                    print(vp_analyze_error)
+                    
+            except subprocess.TimeoutExpired:
+                vp_analyze_error = "vp_analyze_logs.py 執行超時 (超過 300 秒)"
+                print(vp_analyze_error)
+            except FileNotFoundError:
+                vp_analyze_error = "找不到 python3.12 命令，請確認已安裝 Python 3.12"
+                print(vp_analyze_error)
+            except Exception as e:
+                vp_analyze_error = f"執行 vp_analyze_logs.py 時發生錯誤: {str(e)}"
+                print(vp_analyze_error)
+                import traceback
+                traceback.print_exc()
+            finally:
+                # 清理備份檔案（如果還存在）
+                if os.path.exists(all_excel_backup_path):
+                    try:
+                        os.unlink(all_excel_backup_path)
+                        print(f"已清理備份檔案: {all_excel_backup_path}")
+                    except Exception as e:
+                        print(f"清理備份檔案失敗: {e}")
+
+            # 在每個 log 中添加完整路徑
+            for log in results['logs']:
+                log['full_path'] = log.get('file', '')
+                
+                # 從檔案路徑中提取 problem_set
+                # 假設路徑格式為 /base/path/問題集名稱/anr或tombstones/檔案名稱
+                if 'problem_set' not in log and log.get('file'):
+                    try:
+                        file_path = log['file']
+                        # 移除基礎路徑
+                        relative_path = file_path.replace(path, '').lstrip('/')
+                        # 取得第一層資料夾名稱作為 problem_set
+                        parts = relative_path.split('/')
+                        if len(parts) > 1:
+                            log['problem_set'] = parts[0]
+                        else:
+                            log['problem_set'] = '未分類'
+                    except:
                         log['problem_set'] = '未分類'
-                except:
-                    log['problem_set'] = '未分類'
-    
-        # 在每個 file_stat 中添加完整路徑  
-        for file_stat in results['file_statistics']:
-            file_stat['full_path'] = file_stat.get('filepath', '')
-            
-            # 同樣處理 file_statistics 的 problem_set
-            if 'problem_set' not in file_stat and file_stat.get('filepath'):
-                try:
-                    file_path = file_stat['filepath']
-                    relative_path = file_path.replace(path, '').lstrip('/')
-                    parts = relative_path.split('/')
-                    if len(parts) > 1:
-                        file_stat['problem_set'] = parts[0]
-                    else:
+        
+            # 在每個 file_stat 中添加完整路徑  
+            for file_stat in results['file_statistics']:
+                file_stat['full_path'] = file_stat.get('filepath', '')
+                
+                # 同樣處理 file_statistics 的 problem_set
+                if 'problem_set' not in file_stat and file_stat.get('filepath'):
+                    try:
+                        file_path = file_stat['filepath']
+                        relative_path = file_path.replace(path, '').lstrip('/')
+                        parts = relative_path.split('/')
+                        if len(parts) > 1:
+                            file_stat['problem_set'] = parts[0]
+                        else:
+                            file_stat['problem_set'] = '未分類'
+                    except:
                         file_stat['problem_set'] = '未分類'
-                except:
-                    file_stat['problem_set'] = '未分類'
 
-        # 將分析輸出路徑加入結果中
-        results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
-        results['vp_analyze_success'] = vp_analyze_success
-        results['vp_analyze_error'] = vp_analyze_error
-        
-        # 檢查 all_anr_tombstone_result.xlsx 是否存在
-        results['has_all_excel'] = os.path.exists(all_excel_path_in_output)
-        results['all_excel_path'] = all_excel_path_in_output if results['has_all_excel'] else None
-        
-        print(f"最終檢查 all_anr_tombstone_result.xlsx: {results['has_all_excel']}")
-        
-        # 使用新的 cache
-        analysis_cache.set(analysis_id, results)
-        
-        # Return results
-        return jsonify({
-            'analysis_id': analysis_id,
-            'total_files': results['total_files'],
-            'files_with_cmdline': results['files_with_cmdline'],
-            'anr_folders': results['anr_folders'],
-            'tombstone_folders': results['tombstone_folders'],
-            'statistics': results['statistics'],
-            'file_statistics': results['file_statistics'],
-            'logs': results['logs'],
-            'analysis_time': results['analysis_time'],
-            'used_grep': results['used_grep'],
-            'zip_files_extracted': results.get('zip_files_extracted', 0),
-            'anr_subject_count': results.get('anr_subject_count', 0),
-            'vp_analyze_output_path': results.get('vp_analyze_output_path'),
-            'vp_analyze_success': results.get('vp_analyze_success', False),
-            'vp_analyze_error': results.get('vp_analyze_error'),
-            'has_all_excel': results.get('has_all_excel', False),
-            'all_excel_path': results.get('all_excel_path')
-        })
-        
+            # 將分析輸出路徑加入結果中
+            results['vp_analyze_output_path'] = output_path if vp_analyze_success else None
+            results['vp_analyze_success'] = vp_analyze_success
+            results['vp_analyze_error'] = vp_analyze_error
+            
+            # 檢查 all_anr_tombstone_result.xlsx 是否存在
+            results['has_all_excel'] = os.path.exists(all_excel_path_in_output)
+            results['all_excel_path'] = all_excel_path_in_output if results['has_all_excel'] else None
+            
+            print(f"最終檢查 all_anr_tombstone_result.xlsx: {results['has_all_excel']}")
+            
+            # 使用新的 cache
+            analysis_cache.set(analysis_id, results)
+            
+            # Return results
+            return jsonify({
+                'analysis_id': analysis_id,
+                'total_files': results['total_files'],
+                'files_with_cmdline': results['files_with_cmdline'],
+                'anr_folders': results['anr_folders'],
+                'tombstone_folders': results['tombstone_folders'],
+                'statistics': results['statistics'],
+                'file_statistics': results['file_statistics'],
+                'logs': results['logs'],
+                'analysis_time': results['analysis_time'],
+                'used_grep': results['used_grep'],
+                'zip_files_extracted': results.get('zip_files_extracted', 0),
+                'anr_subject_count': results.get('anr_subject_count', 0),
+                'vp_analyze_output_path': results.get('vp_analyze_output_path'),
+                'vp_analyze_success': results.get('vp_analyze_success', False),
+                'vp_analyze_error': results.get('vp_analyze_error'),
+                'has_all_excel': results.get('has_all_excel', False),
+                'all_excel_path': results.get('all_excel_path')
+            })
+        finally:
+            # === 重要：確保釋放鎖 ===
+            analysis_lock_manager.release_lock(path, owner_id)
+
     except Exception as e:
+        # === 發生異常時也要釋放鎖 ===
+        if 'path' in locals():
+            analysis_lock_manager.release_lock(path, owner_id)
+
         print(f"Error in analyze endpoint: {str(e)}")
         import traceback
         traceback.print_exc()
@@ -10352,7 +10744,6 @@ def export_html_to_folder(analysis_id):
 def analyze_selected_items():
     """處理選擇的檔案和資料夾，準備分析"""
     try:
-
         # 每次分析前清理舊的臨時檔案
         cleanup_old_temp_dirs()
 
@@ -10374,15 +10765,33 @@ def analyze_selected_items():
         print(f"接收到 {len(files)} 個單獨檔案")
         print(f"接收到 {len(folder_files)} 個資料夾檔案")
         
+        # === 修改：簡化排除邏輯 - 排除所有隱藏資料夾 ===
+        def should_exclude_path(path):
+            """檢查路徑是否應該被排除"""
+            path_parts = path.split('/')
+            for part in path_parts:
+                # 排除隱藏資料夾（以 . 開頭的資料夾）
+                if part.startswith('.'):
+                    return True
+            return False
+        
         # 用於分組的計數器
         group_counter = 1
         anr_files = []
         tombstone_files = []
+        zip_files_to_extract = []
         
         # 處理單獨上傳的檔案
         for file in files:
             filename = file.filename
             file_lower = filename.lower()
+            
+            # === 新增：檢查是否為 ZIP 檔案 ===
+            if filename.endswith('.zip'):
+                temp_file_path = os.path.join(temp_dir, filename)
+                file.save(temp_file_path)
+                zip_files_to_extract.append(temp_file_path)
+                continue
             
             # 檢查是否為 ANR 或 Tombstone 檔案
             if 'anr' in file_lower or 'tombstone' in file_lower:
@@ -10402,6 +10811,12 @@ def analyze_selected_items():
         for file in folder_files:
             # 保持原始路徑結構
             relative_path = file.filename
+            
+            # === 新增：檢查是否應該排除此路徑 ===
+            if should_exclude_path(relative_path):
+                print(f"排除路徑: {relative_path}")
+                continue
+            
             file_path = os.path.join(temp_dir, relative_path)
             
             # 建立目錄
@@ -10409,6 +10824,11 @@ def analyze_selected_items():
             
             # 儲存檔案
             file.save(file_path)
+            
+            # === 新增：檢查是否為 ZIP 檔案 ===
+            if file_path.endswith('.zip'):
+                zip_files_to_extract.append(file_path)
+                continue
             
             # 檢查是否需要分組（只對根目錄的檔案）
             path_parts = relative_path.split('/')
@@ -10421,6 +10841,44 @@ def analyze_selected_items():
                         anr_files.append((file_path, filename))
                     else:
                         tombstone_files.append((file_path, filename))
+        
+        # === 新增：解壓所有 ZIP 檔案 ===
+        for zip_path in zip_files_to_extract:
+            try:
+                print(f"解壓 ZIP 檔案: {zip_path}")
+                extract_dir = os.path.splitext(zip_path)[0]  # 移除 .zip 副檔名
+                
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    # 取得所有檔案列表
+                    all_files = zip_ref.namelist()
+                    
+                    # 過濾並解壓檔案
+                    for file_info in all_files:
+                        # 檢查是否應該排除
+                        if should_exclude_path(file_info):
+                            print(f"解壓時排除: {file_info}")
+                            continue
+                        
+                        # 解壓檔案
+                        zip_ref.extract(file_info, extract_dir)
+                        
+                        # 檢查是否為 ANR 或 Tombstone 檔案（用於自動分組）
+                        if auto_group:
+                            file_lower = file_info.lower()
+                            if 'anr' in file_lower or 'tombstone' in file_lower:
+                                full_path = os.path.join(extract_dir, file_info)
+                                if os.path.isfile(full_path):
+                                    filename = os.path.basename(file_info)
+                                    if 'anr' in file_lower:
+                                        anr_files.append((full_path, filename))
+                                    else:
+                                        tombstone_files.append((full_path, filename))
+                
+                # 刪除原始 ZIP 檔案
+                os.remove(zip_path)
+                
+            except Exception as e:
+                print(f"解壓 ZIP 檔案失敗 {zip_path}: {str(e)}")
         
         # 如果啟用自動分組，將獨立的 ANR/Tombstone 檔案放入群組資料夾
         if auto_group:
@@ -10446,12 +10904,28 @@ def analyze_selected_items():
                         shutil.move(file_path, os.path.join(group_folder, filename))
                         group_counter += 1
         
+        # === 新增：清理空目錄 ===
+        def remove_empty_dirs(root_dir):
+            """遞迴刪除空目錄"""
+            for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
+                # 如果目錄為空，刪除它
+                if not dirnames and not filenames and dirpath != root_dir:
+                    try:
+                        os.rmdir(dirpath)
+                        print(f"刪除空目錄: {dirpath}")
+                    except:
+                        pass
+        
+        remove_empty_dirs(temp_dir)
+        
         # 返回臨時目錄路徑
         total_files = len(files) + len(folder_files)
+        extracted_files = len(zip_files_to_extract)
+        
         return jsonify({
             'success': True,
             'temp_path': temp_dir,
-            'message': f'已準備 {total_files} 個檔案'
+            'message': f'已準備 {total_files} 個檔案，解壓了 {extracted_files} 個 ZIP 檔案'
         })
         
     except Exception as e:
@@ -10494,5 +10968,33 @@ def cleanup_old_temp_dirs():
         except Exception as e:
             print(f"清理舊臨時目錄失敗 {temp_dir}: {e}")
 
-# 可以定期呼叫 cleanup_old_temp_dirs()
-
+@main_page_bp.route('/check-analysis-lock', methods=['POST'])
+def check_analysis_lock():
+    """檢查分析路徑是否被鎖定"""
+    try:
+        data = request.json
+        path = data.get('path', '')
+        
+        if not path:
+            return jsonify({'locked': False})
+        
+        is_locked = analysis_lock_manager.is_locked(path)
+        lock_info = analysis_lock_manager.get_lock_info(path) if is_locked else None
+        
+        response_data = {'locked': is_locked}
+        
+        if lock_info:
+            elapsed_time = (datetime.now() - lock_info['start_time']).total_seconds()
+            remaining_time = max(0, analysis_lock_manager._lock_timeout - elapsed_time)
+            
+            response_data.update({
+                'owner': lock_info['owner'],
+                'elapsed_time': int(elapsed_time),
+                'remaining_time': int(remaining_time)
+            })
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"Error checking lock: {str(e)}")
+        return jsonify({'locked': False, 'error': str(e)}), 500
