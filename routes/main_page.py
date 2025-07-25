@@ -2597,6 +2597,185 @@ HTML_TEMPLATE = r'''
         }
     }
 
+    /* 鎖定提示對話框樣式 */
+    .lock-dialog-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+        backdrop-filter: blur(5px);
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .lock-dialog {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        width: 90%;
+        max-width: 480px;
+        overflow: hidden;
+        animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(50px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .lock-dialog-header {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: white;
+        padding: 20px 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .lock-dialog-header h3 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .lock-dialog-body {
+        padding: 30px 25px;
+        text-align: center;
+    }
+
+    .lock-warning-icon {
+        margin-bottom: 20px;
+    }
+
+    .lock-warning-icon svg {
+        filter: drop-shadow(0 4px 6px rgba(251, 191, 36, 0.3));
+    }
+
+    .lock-message {
+        font-size: 18px;
+        color: #333;
+        margin-bottom: 20px;
+        font-weight: 500;
+    }
+
+    .lock-time-info {
+        background: #fef3c7;
+        border: 2px solid #fbbf24;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+    }
+
+    .time-display {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .time-label {
+        font-size: 16px;
+        color: #92400e;
+    }
+
+    .time-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #d97706;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .lock-question {
+        font-size: 16px;
+        color: #666;
+        margin-top: 20px;
+    }
+
+    .lock-dialog-footer {
+        padding: 20px 25px;
+        background: #f9fafb;
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+
+    .lock-dialog-footer button {
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: none;
+    }
+
+    .btn-wait {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-wait:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-cancel {
+        background: #e5e7eb;
+        color: #6b7280;
+    }
+
+    .btn-cancel:hover {
+        background: #d1d5db;
+    }
+
+    .btn-icon {
+        font-size: 18px;
+    }
+
+    /* 等待中動畫 */
+    @keyframes pulse {
+        0% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.5;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    .waiting-animation {
+        animation: pulse 2s ease-in-out infinite;
+    }
+
     </style>      
 </head>
 <body>
@@ -2722,7 +2901,7 @@ HTML_TEMPLATE = r'''
                 正在分析中
             </div>
             
-            <div id="message"></div>
+            <div id="message" style="margin-top:8px"></div>
         </div>
         <!-- 修改歷史分析文件區塊 -->
         <div id="historySection" style="display: none; margin-top: 20px;">
@@ -3164,11 +3343,239 @@ HTML_TEMPLATE = r'''
                     <button class="btn-secondary" onclick="closeFileSelectDialog()">取消</button>
                 </div>
             </div>
-        </div>               
+        </div>
+        <!-- 鎖定提示對話框 -->
+        <div class="lock-dialog-overlay" id="lockDialogOverlay" style="display: none;">
+            <div class="lock-dialog">
+                <div class="lock-dialog-header">
+                    <h3>⚠️ 路徑使用中</h3>
+                </div>
+                <div class="lock-dialog-body">
+                    <div class="lock-warning-icon">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 9V13M12 17H12.01M12 3L2 20H22L12 3Z" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <p class="lock-message" id="lockMessage">此路徑正在被其他使用者分析中</p>
+                    <div class="lock-time-info" id="lockTimeInfo">
+                        <div class="time-display">
+                            <span class="time-label">預計剩餘時間：</span>
+                            <span class="time-value" id="remainingTime">計算中...</span>
+                        </div>
+                    </div>
+                    <p class="lock-question">是否要自動等待並在分析完成後開始？</p>
+                </div>
+                <div class="lock-dialog-footer">
+                    <button class="btn-wait" onclick="confirmWait()" id="btnWait">
+                        <span class="btn-icon">⏳</span> 自動等待
+                    </button>
+                    <button class="btn-cancel" onclick="cancelWait()">
+                        <span class="btn-icon">✖</span> 取消
+                    </button>
+                </div>
+            </div>
+        </div>                    
     <footer class="footer">
         <p>&copy; 2025 Copyright by Vince. All rights reserved.</p>
     </footer>
-    
+    <script>
+        // 全域變數
+        let lockDialogResolver = null;
+        let waitingForUnlock = false;
+
+        // 顯示鎖定對話框
+        function showLockDialog(remainingTime) {
+            const overlay = document.getElementById('lockDialogOverlay');
+            const timeElement = document.getElementById('remainingTime');
+            
+            // 格式化時間顯示
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = remainingTime % 60;
+            
+            if (minutes > 0) {
+                timeElement.textContent = `${minutes} 分 ${seconds} 秒`;
+            } else {
+                timeElement.textContent = `${seconds} 秒`;
+            }
+            
+            overlay.style.display = 'flex';
+            
+            // 返回 Promise，等待用戶選擇
+            return new Promise((resolve) => {
+                lockDialogResolver = resolve;
+            });
+        }
+
+        // 確認等待
+        function confirmWait() {
+            const overlay = document.getElementById('lockDialogOverlay');
+            overlay.style.display = 'none';
+            if (lockDialogResolver) {
+                lockDialogResolver(true);
+                lockDialogResolver = null;
+            }
+        }
+
+        // 取消等待
+        function cancelWait() {
+            const overlay = document.getElementById('lockDialogOverlay');
+            overlay.style.display = 'none';
+            waitingForUnlock = false;
+            if (lockDialogResolver) {
+                lockDialogResolver(false);
+                lockDialogResolver = null;
+            }
+        }
+
+        // 添加錯誤對話框
+        function showErrorDialog(title, message, question) {
+            return new Promise((resolve) => {
+                // 重用鎖定對話框，但修改內容
+                const overlay = document.getElementById('lockDialogOverlay');
+                const header = overlay.querySelector('.lock-dialog-header h3');
+                const messageElement = overlay.querySelector('.lock-message');
+                const timeInfo = overlay.querySelector('.lock-time-info');
+                const questionElement = overlay.querySelector('.lock-question');
+                const btnWait = document.getElementById('btnWait');
+                
+                // 修改內容
+                header.innerHTML = '❌ ' + title;
+                messageElement.textContent = message;
+                timeInfo.style.display = 'none';
+                questionElement.textContent = question;
+                btnWait.innerHTML = '<span class="btn-icon">✓</span> 繼續';
+                
+                // 臨時修改 header 背景色
+                const headerElement = overlay.querySelector('.lock-dialog-header');
+                headerElement.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                
+                overlay.style.display = 'flex';
+                
+                // 設置臨時的處理函數
+                const originalConfirm = window.confirmWait;
+                window.confirmWait = function() {
+                    overlay.style.display = 'none';
+                    // 恢復原始設置
+                    headerElement.style.background = '';
+                    timeInfo.style.display = '';
+                    btnWait.innerHTML = '<span class="btn-icon">⏳</span> 自動等待';
+                    window.confirmWait = originalConfirm;
+                    resolve(true);
+                };
+                
+                const originalCancel = window.cancelWait;
+                window.cancelWait = function() {
+                    overlay.style.display = 'none';
+                    // 恢復原始設置
+                    headerElement.style.background = '';
+                    timeInfo.style.display = '';
+                    btnWait.innerHTML = '<span class="btn-icon">⏳</span> 自動等待';
+                    window.cancelWait = originalCancel;
+                    resolve(false);
+                };
+                
+                lockDialogResolver = null;
+            });
+        }
+
+        // 修改 waitForAnalysisUnlock 函數，改善錯誤處理
+        async function waitForAnalysisUnlock(path, maxWaitTime = 300000) {
+            const startTime = Date.now();
+            const pollInterval = 5000;
+            waitingForUnlock = true;
+            let initialRemainingTime = 0;
+            
+            showMessage(
+                '其他使用者正在分析此路徑，系統將自動等待...<br>' +
+                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>' +
+                createWaitingProgressBar(),
+                'info'
+            );
+            
+            return new Promise((resolve, reject) => {
+                const checkLock = async () => {
+                    if (!waitingForUnlock) {
+                        showMessage('已取消等待', 'info');
+                        reject(new Error('使用者取消等待'));
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/check-analysis-lock', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ path: path })
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if (!data.locked) {
+                            showMessage('分析鎖已釋放，開始進行分析...', 'success');
+                            resolve();
+                        } else {
+                            const remainingTime = data.remaining_time || 0;
+                            const minutes = Math.floor(remainingTime / 60);
+                            const seconds = remainingTime % 60;
+                            
+                            // 初始化初始剩餘時間
+                            if (initialRemainingTime === 0) {
+                                initialRemainingTime = remainingTime;
+                            }
+                            
+                            // 計算進度
+                            const progress = Math.max(0, Math.min(100, 
+                                ((initialRemainingTime - remainingTime) / initialRemainingTime) * 100
+                            ));
+                            
+                            // 更新進度條
+                            const progressBar = document.getElementById('waitingProgressBar');
+                            const progressText = document.getElementById('waitingProgressText');
+                            
+                            if (progressBar) {
+                                progressBar.style.width = progress + '%';
+                            }
+                            
+                            if (progressText) {
+                                progressText.textContent = `${Math.round(progress)}%`;
+                            }
+                            
+                            const message = '正在等待其他分析完成...<br>' +
+                                '預計剩餘時間: ' + minutes + ' 分 ' + seconds + ' 秒<br>' +
+                                '<small>系統會自動開始分析，請勿關閉此頁面</small><br>' +
+                                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>';
+                            
+                            showMessage(message, 'info');
+                            
+                            // 檢查是否超時
+                            if (Date.now() - startTime > maxWaitTime) {
+                                throw new Error('等待超時');
+                            }
+                            
+                            setTimeout(checkLock, pollInterval);
+                        }
+                    } catch (error) {
+                        console.error('檢查鎖狀態時發生錯誤:', error);
+                        // 不要立即失敗，繼續重試
+                        if (Date.now() - startTime < maxWaitTime) {
+                            setTimeout(checkLock, pollInterval);
+                        } else {
+                            showMessage('檢查鎖狀態失敗，已超過最大等待時間', 'error');
+                            reject(error);
+                        }
+                    }
+                };
+                
+                checkLock();
+            });
+        }
+
+    </script>
     <script>
         let currentAnalysisId = null;
         let allLogs = [];
@@ -3887,12 +4294,8 @@ HTML_TEMPLATE = r'''
                 if (lockData.locked) {
                     const remainingTime = lockData.remaining_time || 0;
                     
-                    // 詢問使用者是否要等待
-                    const userChoice = confirm(
-                        `此路徑正在被其他使用者分析中\n` +
-                        `預計剩餘時間: ${Math.floor(remainingTime / 60)} 分 ${remainingTime % 60} 秒\n\n` +
-                        `是否要自動等待並在分析完成後開始？`
-                    );
+                    // 使用美化的對話框
+                    const userChoice = await showLockDialog(remainingTime);
                     
                     if (userChoice) {
                         // 使用者選擇等待
@@ -3901,6 +4304,7 @@ HTML_TEMPLATE = r'''
                             // 等待成功，繼續執行分析
                         } catch (error) {
                             console.error('等待失敗:', error);
+                            showMessage('等待過程中發生錯誤', 'error');
                             return;
                         }
                     } else {
@@ -3910,7 +4314,15 @@ HTML_TEMPLATE = r'''
                 }
             } catch (error) {
                 console.error('檢查鎖狀態失敗:', error);
-                // 如果檢查失敗，還是讓用戶繼續嘗試
+                // 如果檢查失敗，詢問是否繼續
+                const continueAnyway = await showErrorDialog(
+                    '無法檢查路徑狀態',
+                    '無法確認此路徑是否正在被其他使用者分析。',
+                    '是否要繼續執行分析？'
+                );
+                if (!continueAnyway) {
+                    return;
+                }
             }
             
             // 重置匯出狀態
@@ -4244,14 +4656,12 @@ HTML_TEMPLATE = r'''
             return progressHtml;
         }
 
-        // 全域變數來控制等待狀態
-        let waitingForUnlock = false;
-
         // 修改 waitForAnalysisUnlock 包含進度條 (支援取消)
         async function waitForAnalysisUnlock(path, maxWaitTime = 300000) {
             const startTime = Date.now();
             const pollInterval = 5000;
             waitingForUnlock = true;
+            let initialRemainingTime = 0;
             
             showMessage(
                 '其他使用者正在分析此路徑，系統將自動等待...<br>' +
@@ -4276,6 +4686,10 @@ HTML_TEMPLATE = r'''
                             },
                             body: JSON.stringify({ path: path })
                         });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
                         
                         const data = await response.json();
                         
@@ -4311,15 +4725,27 @@ HTML_TEMPLATE = r'''
                             
                             const message = '正在等待其他分析完成...<br>' +
                                 '預計剩餘時間: ' + minutes + ' 分 ' + seconds + ' 秒<br>' +
-                                '<small>系統會自動開始分析，請勿關閉此頁面</small>';
+                                '<small>系統會自動開始分析，請勿關閉此頁面</small><br>' +
+                                '<button onclick="cancelWaiting()" class="btn btn-sm btn-danger" style="margin-top: 10px;">取消等待</button>';
                             
                             showMessage(message, 'info');
+                            
+                            // 檢查是否超時
+                            if (Date.now() - startTime > maxWaitTime) {
+                                throw new Error('等待超時');
+                            }
                             
                             setTimeout(checkLock, pollInterval);
                         }
                     } catch (error) {
-                        showMessage('檢查鎖狀態失敗', 'error');
-                        reject(error);
+                        console.error('檢查鎖狀態時發生錯誤:', error);
+                        // 不要立即失敗，繼續重試
+                        if (Date.now() - startTime < maxWaitTime) {
+                            setTimeout(checkLock, pollInterval);
+                        } else {
+                            showMessage('檢查鎖狀態失敗，已超過最大等待時間', 'error');
+                            reject(error);
+                        }
                     }
                 };
                 
