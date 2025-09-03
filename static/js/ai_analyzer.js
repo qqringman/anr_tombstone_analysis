@@ -156,8 +156,8 @@ class AIRequestManager {
 class AIAnalyzer {
     constructor() {
         this.sessionId = this.generateSessionId();
-        this.currentProvider = 'anthropic';  // 預設
-        this.currentModel = 'claude-sonnet-4-20250514';
+        this.currentProvider = 'realtek';  // 改為預設使用 Realtek
+        this.currentModel = 'chat-chattek-qwen';  // 改為預設使用 Chattek Qwen
         this.isAnalyzing = false;
         this.eventSource = null;
         this.currentMode = 'smart';
@@ -324,10 +324,10 @@ class AIAnalyzer {
         return '';
     }
     
-    // 新增方法：獲取模型徽章文字
+    // 更新 getBadgeText 方法，確保正確處理 Realtek 模型
     getBadgeText(modelId) {
         if (modelId.includes('claude-4')) return 'NEW';
-        if (modelId.includes('chat-codetek') || modelId.includes('chat-chattek')) return 'INTERNAL';
+        if (modelId.includes('chat-chattek')) return 'INTERNAL';  // 修正條件
         return '';
     }
 
@@ -1544,8 +1544,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectedModel = 'gpt-4-turbo-preview';
                 document.getElementById('selectedModelNameInline').textContent = 'GPT-4 Turbo';
             } else if (provider === 'realtek') {
-                selectedModel = 'chat-codetek-qwen';
-                document.getElementById('selectedModelNameInline').textContent = 'Codetek Qwen';
+                selectedModel = 'chat-chattek-qwen';  // 預設為 Qwen
+                document.getElementById('selectedModelNameInline').textContent = 'Chattek Qwen';
             }
             
             // 如果 aiAnalyzer 存在，也更新它
@@ -1557,7 +1557,16 @@ document.addEventListener('DOMContentLoaded', function() {
             // 更新模型彈窗內容
             updateModelPopupForProvider(provider);
         });
-    } 
+        
+        // 確保頁面載入時就設定為 Realtek
+        providerSelect.value = 'realtek';
+        providerSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // 確保全局變數也設定為 Realtek
+    if (typeof selectedModel !== 'undefined') {
+        selectedModel = 'chat-chattek-qwen';
+    }
 });
 
 // 導出全域函數供 HTML 使用

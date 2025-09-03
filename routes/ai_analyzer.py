@@ -12,6 +12,7 @@ import openai
 from openai import OpenAI
 from config.config import AI_PROVIDERS, ANALYSIS_MODES, TOKEN_PRICING, RATE_LIMITS, MODEL_LIMITS, CLAUDE_API_KEY, REALTEK_API_KEY, REALTEK_BASE_URL
 from enum import Enum
+import requests
 
 ai_analyzer_bp = Blueprint('ai_analyzer_bp', __name__)
 
@@ -85,15 +86,18 @@ class AIProvider(ABC):
         return self._stop_flag.is_set()
 
 class RealtekProvider(AIProvider):
-    """Realtek AI Provider - 使用 OpenAI 相容 API"""
+    """Realtek AI Provider - 使用原生 HTTP 請求避免 OpenAI Client 問題"""
     
     def __init__(self, api_key: str, model: str, base_url: str = None):
         super().__init__(api_key, model)
         self.base_url = base_url or REALTEK_BASE_URL
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=self.base_url
-        )
+        self.api_key = api_key
+        
+        # 不使用 OpenAI client，改用直接的 HTTP 請求
+        self.headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
         
         # 從配置獲取模型限制
         self.model_config = MODEL_LIMITS.get(model, {})
@@ -113,6 +117,31 @@ class RealtekProvider(AIProvider):
         input_cost = (input_tokens / 1000) * pricing.get('input', 0)
         output_cost = (output_tokens / 1000) * pricing.get('output', 0)
         return input_cost + output_cost
+    
+    def _make_request(self, messages: list, max_tokens: int, temperature: float, stream: bool = False):
+        """發送 HTTP 請求到 Realtek API"""
+        url = f"{self.base_url}/chat/completions"
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": stream
+        }
+        
+        try:
+            response = requests.post(
+                url, 
+                headers=self.headers, 
+                json=payload, 
+                stream=stream,
+                timeout=300  # 5分鐘超時
+            )
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Realtek API 請求失敗: {str(e)}")
     
     def _truncate_content(self, content: str, mode: AnalysisMode) -> tuple[str, bool]:
         """根據 token 限制截取內容"""
@@ -160,14 +189,17 @@ class RealtekProvider(AIProvider):
         """同步分析"""
         try:
             messages = self._prepare_messages(context)
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self._get_max_tokens(context.mode),
-                temperature=self._get_temperature(context.mode),
-                stream=False
-            )
-            return response.choices[0].message.content
+            max_tokens = self._get_max_tokens(context.mode)
+            temperature = self._get_temperature(context.mode)
+            
+            response = self._make_request(messages, max_tokens, temperature, stream=False)
+            result = response.json()
+            
+            if 'choices' in result and len(result['choices']) > 0:
+                return result['choices'][0]['message']['content']
+            else:
+                raise Exception("API 回應格式異常")
+                
         except Exception as e:
             raise Exception(f"Realtek API 錯誤: {str(e)}")
     
@@ -176,21 +208,34 @@ class RealtekProvider(AIProvider):
         self.reset_stop_flag()
         try:
             messages = self._prepare_messages(context)
+            max_tokens = self._get_max_tokens(context.mode)
+            temperature = self._get_temperature(context.mode)
             
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self._get_max_tokens(context.mode),
-                temperature=self._get_temperature(context.mode),
-                stream=True
-            )
+            response = self._make_request(messages, max_tokens, temperature, stream=True)
             
-            for chunk in stream:
+            for line in response.iter_lines():
                 if self.should_stop():
                     break
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
                     
+                if line:
+                    line_text = line.decode('utf-8')
+                    if line_text.startswith('data: '):
+                        data_text = line_text[6:]  # 移除 'data: ' 前綴
+                        
+                        if data_text.strip() == '[DONE]':
+                            break
+                            
+                        try:
+                            data = json.loads(data_text)
+                            if 'choices' in data and len(data['choices']) > 0:
+                                choice = data['choices'][0]
+                                if 'delta' in choice and 'content' in choice['delta']:
+                                    content = choice['delta']['content']
+                                    if content:
+                                        yield content
+                        except json.JSONDecodeError:
+                            continue  # 跳過無法解析的行
+                            
         except Exception as e:
             yield f"\n\n錯誤: {str(e)}"
     

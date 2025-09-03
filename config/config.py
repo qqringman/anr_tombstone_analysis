@@ -76,27 +76,20 @@ MODEL_LIMITS = {
         'description': '即時回應，成本最低'
     },
     
-    # Realtek 模型系列（新增）
-    'chat-codetek-qwen': {
-        'max_tokens': 128000,  # 根據實際情況調整
+    # Realtek 模型系列（只保留 2 個）
+    'chat-chattek-qwen': {
+        'max_tokens': 256000,  # 256K 模型
         'max_output_tokens': 8000,
         'chars_per_token': 2.5,  # 中文模型，調整比率
-        'name': 'Codetek Qwen',
-        'description': 'Realtek 內部 Qwen 模型，適合中文分析'
+        'name': 'Chattek Qwen',
+        'description': 'Realtek 內部 Qwen 模型，適合中文對話分析'
     },
-    'chat-codetek-gpt': {
-        'max_tokens': 128000,
+    'chat-chattek-gpt': {
+        'max_tokens': 128000,  # 128K 模型
         'max_output_tokens': 8000,
         'chars_per_token': 3,
-        'name': 'Codetek GPT',
+        'name': 'Chattek GPT',
         'description': 'Realtek 內部 GPT 模型，適合程式碼分析'
-    },
-    'chat-chattek-qwen': {
-        'max_tokens': 128000,
-        'max_output_tokens': 8000,
-        'chars_per_token': 2.5,
-        'name': 'Chattek Qwen',
-        'description': 'Realtek 對話模型，適合一般分析'
     }
 }
 
@@ -109,7 +102,7 @@ AI_PROVIDERS = {
     'anthropic': {
         'api_key': os.environ.get('ANTHROPIC_API_KEY', CLAUDE_API_KEY),
         'models': {k: v for k, v in MODEL_LIMITS.items() if k.startswith('claude')},
-        'default_model': DEFAULT_MODEL
+        'default_model': 'claude-sonnet-4-20250514'
     },
     'openai': {
         'api_key': os.environ.get('OPENAI_API_KEY', ''),
@@ -141,8 +134,8 @@ AI_PROVIDERS = {
     'realtek': {
         'api_key': REALTEK_API_KEY,
         'base_url': REALTEK_BASE_URL,
-        'models': {k: v for k, v in MODEL_LIMITS.items() if k.startswith('chat-')},
-        'default_model': 'chat-codetek-qwen'
+        'models': {k: v for k, v in MODEL_LIMITS.items() if k.startswith('chat-chattek')},  # 只包含 chattek 模型
+        'default_model': 'chat-chattek-qwen'  # 預設為 qwen 模型
     }
 }
 

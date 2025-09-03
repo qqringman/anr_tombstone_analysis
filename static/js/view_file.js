@@ -28,7 +28,7 @@ const MIN_SEARCH_LENGTH = 2; // 最少輸入 2 個字元才搜尋
 
 // AI Panel State
 let isAIPanelOpen = false;
-let selectedModel = 'claude-sonnet-4-20250514';
+let selectedModel = 'chat-chattek-qwen';  // 改為 Realtek 預設模型
 let conversationHistory = [];
 let isAnalyzing = false;  // 防止重複請求
 let useSmartAnalysis = true;  // 啟用智能分析
@@ -248,18 +248,25 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
     
-    // 綁定 Provider 選擇器變更事件
+    // 設定預設 Provider 為 Realtek
     const providerSelect = document.getElementById('providerSelectInline');
     if (providerSelect) {
-        providerSelect.addEventListener('change', function(e) {
-            handleProviderChange(e.target.value);
-        });
-        if (providerSelect && !providerSelect.querySelector('option[value="realtek"]')) {
-            const realtekOption = document.createElement('option');
-            realtekOption.value = 'realtek';
-            realtekOption.textContent = 'Realtek';
-            providerSelect.appendChild(realtekOption);
+        providerSelect.value = 'realtek';  // 設定為 Realtek
+        
+        // 觸發變更事件以更新模型選項
+        providerSelect.dispatchEvent(new Event('change'));
+        
+        // 設定預設模型顯示
+        const modelNameElement = document.getElementById('selectedModelNameInline');
+        if (modelNameElement) {
+            modelNameElement.textContent = 'Chattek Qwen';
         }
+    }
+    
+    // 確保 aiAnalyzer 也使用 Realtek 作為預設
+    if (window.aiAnalyzer) {
+        window.aiAnalyzer.currentProvider = 'realtek';
+        window.aiAnalyzer.currentModel = 'chat-chattek-qwen';
     }
     
     // 綁定發送按鈕
@@ -1996,8 +2003,8 @@ async function handleProviderChange(provider) {
             document.getElementById('selectedModelNameInline').textContent = 'GPT-4 Turbo';
             updateModelPopupForProvider('openai');
         } else if (provider === 'realtek') {
-            selectedModel = 'chat-codetek-qwen';
-            document.getElementById('selectedModelNameInline').textContent = 'Codetek Qwen';
+            selectedModel = 'chat-chattek-qwen';  // 設為預設
+            document.getElementById('selectedModelNameInline').textContent = 'Chattek Qwen';
             updateModelPopupForProvider('realtek');
         }
     } catch (error) {
@@ -2026,21 +2033,16 @@ function updateModelPopupForProvider(provider) {
             </div>
         `;
     } else if (provider === 'realtek') {
-        // 新增 Realtek 模型選項
+        // 只保留 2 個 Realtek 模型，名稱修正
         modelGrid.innerHTML = `
-            <div class="model-card selected" data-model="chat-codetek-qwen" onclick="selectModel(this)">
-                <div class="model-card-name">Codetek Qwen</div>
-                <div class="model-card-desc">🚀 內部 Qwen 模型，適合中文分析</div>
-                <div class="model-card-badge internal">INTERNAL</div>
-            </div>
-            <div class="model-card" data-model="chat-codetek-gpt" onclick="selectModel(this)">
-                <div class="model-card-name">Codetek GPT</div>
-                <div class="model-card-desc">⚡ 內部 GPT 模型，適合程式碼分析</div>
-                <div class="model-card-badge internal">INTERNAL</div>
-            </div>
-            <div class="model-card" data-model="chat-chattek-qwen" onclick="selectModel(this)">
+            <div class="model-card selected" data-model="chat-chattek-qwen" onclick="selectModel(this)">
                 <div class="model-card-name">Chattek Qwen</div>
-                <div class="model-card-desc">💬 對話模型，適合一般分析</div>
+                <div class="model-card-desc">🤖 內部 Qwen 模型，適合中文對話分析 (256K)</div>
+                <div class="model-card-badge internal">INTERNAL</div>
+            </div>
+            <div class="model-card" data-model="chat-chattek-gpt" onclick="selectModel(this)">
+                <div class="model-card-name">Chattek GPT</div>
+                <div class="model-card-desc">⚡ 內部 GPT 模型，適合程式碼分析 (128K)</div>
                 <div class="model-card-badge internal">INTERNAL</div>
             </div>
         `;
@@ -2067,7 +2069,7 @@ function updateModelPopupForProvider(provider) {
             </div>
             <div class="model-card" data-model="claude-3-opus-20240229" onclick="selectModel(this)">
                 <div class="model-card-name">Claude 3 Opus</div>
-                <div class="model-card-desc">深度分析，詳細但較慢</div>
+                <div class="model-card-desc">強大的推理能力</div>
             </div>
             <div class="model-card" data-model="claude-3-haiku-20240307" onclick="selectModel(this)">
                 <div class="model-card-name">Claude 3 Haiku</div>
@@ -2393,7 +2395,7 @@ function getModelDisplayName(modelId) {
         'gpt-4': 'GPT-4',
         'gpt-3.5-turbo': 'GPT-3.5 Turbo',
         
-        // Realtek 模型（只有紅框內的兩個）
+        // Realtek 模型（只保留 2 個正確的）
         'chat-chattek-qwen': 'Chattek Qwen',
         'chat-chattek-gpt': 'Chattek GPT'
     };
