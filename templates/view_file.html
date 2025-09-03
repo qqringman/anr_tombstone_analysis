@@ -172,10 +172,11 @@
                         
                         <!-- 控制按鈕區（保持在底部） -->
                         <div class="input-inline-controls">
-                            <!-- Provider 選擇器 -->
+                            <!-- Provider 選擇器 - 新增 Realtek 選項 -->
                             <select class="provider-select-inline" id="providerSelectInline">
                                 <option value="anthropic">Anthropic</option>
                                 <option value="openai">OpenAI</option>
+                                <option value="realtek">Realtek</option>
                             </select>
                             
                             <!-- 模型選擇器 -->
@@ -202,7 +203,7 @@
         <!-- 模型選擇彈出卡片 -->
         <div class="model-popup" id="modelPopup">
             <div class="model-popup-grid">
-                <!-- Claude 4 系列（新增） -->
+                <!-- Claude 4 系列（預設顯示） -->
                 <div class="model-card" data-model="claude-opus-4-20250514" onclick="selectModel(this)">
                     <div class="model-card-name">Claude 4 Opus</div>
                     <div class="model-card-desc">🚀 最強大，300K tokens，複雜分析首選</div>
@@ -280,10 +281,22 @@
                     <button class="modal-close-btn" onclick="toggleAIInfo()">×</button>
                 </div>
                 <div class="ai-info-modal-body">
+                    <h5>Anthropic Claude</h5>
                     <ul>
                         <li>Claude 4 Opus: 最大 300K tokens 輸入，16K 輸出</li>
                         <li>Claude 4 Sonnet: 最大 250K tokens 輸入，12K 輸出</li>
                         <li>Claude 3.5 系列: 最大 200K tokens 輸入，8K 輸出</li>
+                    </ul>
+                    
+                    <h5>Realtek Internal Models</h5>
+                    <ul>
+                        <li>Chattek Qwen: 最大 256K tokens 輸入，8K 輸出</li>
+                        <li>Chattek GPT: 最大 128K tokens 輸入，8K 輸出</li>
+                        <li>內部模型，僅限公司內部使用</li>
+                    </ul>
+                    
+                    <h5>一般限制</h5>
+                    <ul>
                         <li>支援 ANR 和 Tombstone 日誌智能分析</li>
                         <li>大檔案會自動分段處理</li>
                         <li>每分鐘有 API 速率限制</li>

@@ -3,6 +3,10 @@ import os
 # Claude API 配置 - 請設置環境變數或直接填入
 CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY', '')  # 從環境變數讀取
 
+# 新增 Realtek API 配置
+REALTEK_API_KEY = os.environ.get('REALTEK_API_KEY', '')  # 從環境變數讀取
+REALTEK_BASE_URL = os.environ.get('REALTEK_BASE_URL', 'https://devops.realtek.com/realgpt-api/openai-compatible/v1')
+
 # 更新 AI 配置
 AI_CONFIG = {
     'MAX_TOKENS_PER_REQUEST': 180000,  # 單次請求的 token 限制
@@ -15,12 +19,12 @@ AI_CONFIG = {
     'PARALLEL_SEGMENTS': 2,  # 新增：並行處理段數
 }
 
-# 更新 MODEL_LIMITS 以包含正確的速率限制
+# 更新 MODEL_LIMITS 以包含 Realtek 模型
 MODEL_LIMITS = {
     # Claude 4 系列（新增）
     'claude-opus-4': {
         'max_tokens': 200000,
-        'max_output_tokens': 16000,  # 根據 OTPM 限制
+        'max_output_tokens': 16000,
         'chars_per_token': 4,
         'name': 'Claude Opus 4',
         'description': '最新最強大的模型'
@@ -36,7 +40,7 @@ MODEL_LIMITS = {
     # Claude 3.5 系列
     'claude-3-5-sonnet-20241022': {
         'max_tokens': 200000,
-        'max_output_tokens': 16000,  # 根據表格
+        'max_output_tokens': 16000,
         'chars_per_token': 4,
         'name': 'Claude Sonnet 3.5',
         'description': '最新版本，智能度高'
@@ -52,7 +56,7 @@ MODEL_LIMITS = {
     # Claude 3 系列
     'claude-3-opus-20240229': {
         'max_tokens': 200000,
-        'max_output_tokens': 16000,  # 更新為 16K
+        'max_output_tokens': 16000,
         'chars_per_token': 4,
         'name': 'Claude 3 Opus',
         'description': '強大的推理能力'
@@ -66,21 +70,45 @@ MODEL_LIMITS = {
     },
     'claude-3-haiku-20240307': {
         'max_tokens': 200000,
-        'max_output_tokens': 20000,  # Tier 4 為 20K
+        'max_output_tokens': 20000,
         'chars_per_token': 4,
         'name': 'Claude 3 Haiku',
         'description': '即時回應，成本最低'
+    },
+    
+    # Realtek 模型系列（新增）
+    'chat-codetek-qwen': {
+        'max_tokens': 128000,  # 根據實際情況調整
+        'max_output_tokens': 8000,
+        'chars_per_token': 2.5,  # 中文模型，調整比率
+        'name': 'Codetek Qwen',
+        'description': 'Realtek 內部 Qwen 模型，適合中文分析'
+    },
+    'chat-codetek-gpt': {
+        'max_tokens': 128000,
+        'max_output_tokens': 8000,
+        'chars_per_token': 3,
+        'name': 'Codetek GPT',
+        'description': 'Realtek 內部 GPT 模型，適合程式碼分析'
+    },
+    'chat-chattek-qwen': {
+        'max_tokens': 128000,
+        'max_output_tokens': 8000,
+        'chars_per_token': 2.5,
+        'name': 'Chattek Qwen',
+        'description': 'Realtek 對話模型，適合一般分析'
     }
 }
 
-# 更新默認模型為 Claude 4 Sonnet
-DEFAULT_MODEL = 'claude-sonnet-4-20250514'
+# 更新系統預設為 Realtek Chattek Qwen
+DEFAULT_PROVIDER = 'realtek'
+DEFAULT_MODEL = 'chat-chattek-qwen'
 
-# AI Provider 配置
+# AI Provider 配置 - 新增 Realtek
 AI_PROVIDERS = {
     'anthropic': {
         'api_key': os.environ.get('ANTHROPIC_API_KEY', CLAUDE_API_KEY),
-        'models': MODEL_LIMITS,  # 使用現有的 MODEL_LIMITS
+        'models': {k: v for k, v in MODEL_LIMITS.items() if k.startswith('claude')},
         'default_model': DEFAULT_MODEL
     },
     'openai': {
@@ -109,6 +137,12 @@ AI_PROVIDERS = {
             }
         },
         'default_model': 'gpt-4-turbo-preview'
+    },
+    'realtek': {
+        'api_key': REALTEK_API_KEY,
+        'base_url': REALTEK_BASE_URL,
+        'models': {k: v for k, v in MODEL_LIMITS.items() if k.startswith('chat-')},
+        'default_model': 'chat-codetek-qwen'
     }
 }
 
@@ -134,10 +168,10 @@ ANALYSIS_MODES = {
     }
 }
 
-# Token 計費配置（參考官網）
+# Token 計費配置（參考官網）- 新增 Realtek 定價
 TOKEN_PRICING = {
     'anthropic': {
-        'claude-opus-4-20250514': {'input': 0.015, 'output': 0.075},  # per 1K tokens
+        'claude-opus-4-20250514': {'input': 0.015, 'output': 0.075},
         'claude-sonnet-4-20250514': {'input': 0.003, 'output': 0.015},
         'claude-3-5-sonnet-20241022': {'input': 0.003, 'output': 0.015},
         'claude-3-5-haiku-20241022': {'input': 0.0008, 'output': 0.004},
@@ -148,10 +182,14 @@ TOKEN_PRICING = {
         'gpt-4-turbo-preview': {'input': 0.01, 'output': 0.03},
         'gpt-4': {'input': 0.03, 'output': 0.06},
         'gpt-3.5-turbo': {'input': 0.001, 'output': 0.002}
+    },
+    'realtek': {
+        'chat-chattek-qwen': {'input': 0.001, 'output': 0.002},  # 256K 模型，稍高定價
+        'chat-chattek-gpt': {'input': 0.0015, 'output': 0.003}   # 128K GPT 模型
     }
 }
 
-# Rate Limits 配置
+# Rate Limits 配置 - 新增 Realtek 限制
 RATE_LIMITS = {
     'anthropic': {
         'tier1': {'rpm': 50, 'tpm': 50000, 'tpd': 1000000},
@@ -162,5 +200,8 @@ RATE_LIMITS = {
     'openai': {
         'tier1': {'rpm': 500, 'tpm': 60000, 'tpd': 1000000},
         'tier2': {'rpm': 5000, 'tpm': 80000, 'tpd': 2000000}
+    },
+    'realtek': {
+        'default': {'rpm': 1000, 'tpm': 100000, 'tpd': 2000000}  # 內部 API，假設較寬鬆限制
     }
 }

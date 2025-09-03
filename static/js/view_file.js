@@ -254,6 +254,12 @@ document.addEventListener('DOMContentLoaded', function() {
         providerSelect.addEventListener('change', function(e) {
             handleProviderChange(e.target.value);
         });
+        if (providerSelect && !providerSelect.querySelector('option[value="realtek"]')) {
+            const realtekOption = document.createElement('option');
+            realtekOption.value = 'realtek';
+            realtekOption.textContent = 'Realtek';
+            providerSelect.appendChild(realtekOption);
+        }
     }
     
     // 綁定發送按鈕
@@ -1984,15 +1990,15 @@ async function handleProviderChange(provider) {
         if (provider === 'anthropic') {
             selectedModel = 'claude-sonnet-4-20250514';
             document.getElementById('selectedModelNameInline').textContent = 'Claude 4 Sonnet';
-            
-            // 更新模型選擇彈窗
             updateModelPopupForProvider('anthropic');
         } else if (provider === 'openai') {
             selectedModel = 'gpt-4-turbo-preview';
             document.getElementById('selectedModelNameInline').textContent = 'GPT-4 Turbo';
-            
-            // 更新模型選擇彈窗
             updateModelPopupForProvider('openai');
+        } else if (provider === 'realtek') {
+            selectedModel = 'chat-codetek-qwen';
+            document.getElementById('selectedModelNameInline').textContent = 'Codetek Qwen';
+            updateModelPopupForProvider('realtek');
         }
     } catch (error) {
         console.error('Provider switch error:', error);
@@ -2017,6 +2023,25 @@ function updateModelPopupForProvider(provider) {
             <div class="model-card" data-model="gpt-3.5-turbo" onclick="selectModel(this)">
                 <div class="model-card-name">GPT-3.5 Turbo</div>
                 <div class="model-card-desc">快速且經濟的選擇</div>
+            </div>
+        `;
+    } else if (provider === 'realtek') {
+        // 新增 Realtek 模型選項
+        modelGrid.innerHTML = `
+            <div class="model-card selected" data-model="chat-codetek-qwen" onclick="selectModel(this)">
+                <div class="model-card-name">Codetek Qwen</div>
+                <div class="model-card-desc">🚀 內部 Qwen 模型，適合中文分析</div>
+                <div class="model-card-badge internal">INTERNAL</div>
+            </div>
+            <div class="model-card" data-model="chat-codetek-gpt" onclick="selectModel(this)">
+                <div class="model-card-name">Codetek GPT</div>
+                <div class="model-card-desc">⚡ 內部 GPT 模型，適合程式碼分析</div>
+                <div class="model-card-badge internal">INTERNAL</div>
+            </div>
+            <div class="model-card" data-model="chat-chattek-qwen" onclick="selectModel(this)">
+                <div class="model-card-name">Chattek Qwen</div>
+                <div class="model-card-desc">💬 對話模型，適合一般分析</div>
+                <div class="model-card-badge internal">INTERNAL</div>
             </div>
         `;
     } else {
@@ -2355,12 +2380,22 @@ document.addEventListener('DOMContentLoaded', function() {
 // Get model display name
 function getModelDisplayName(modelId) {
     const names = {
+        // Claude 模型
         'claude-opus-4-20250514': 'Claude 4 Opus',
         'claude-sonnet-4-20250514': 'Claude 4 Sonnet',
         'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
         'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
         'claude-3-opus-20240229': 'Claude 3 Opus',
-        'claude-3-haiku-20240307': 'Claude 3 Haiku'
+        'claude-3-haiku-20240307': 'Claude 3 Haiku',
+        
+        // OpenAI 模型
+        'gpt-4-turbo-preview': 'GPT-4 Turbo',
+        'gpt-4': 'GPT-4',
+        'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+        
+        // Realtek 模型（只有紅框內的兩個）
+        'chat-chattek-qwen': 'Chattek Qwen',
+        'chat-chattek-gpt': 'Chattek GPT'
     };
     return names[modelId] || modelId;
 }

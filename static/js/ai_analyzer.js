@@ -156,16 +156,16 @@ class AIRequestManager {
 class AIAnalyzer {
     constructor() {
         this.sessionId = this.generateSessionId();
-        this.currentProvider = 'anthropic';
+        this.currentProvider = 'anthropic';  // 預設
         this.currentModel = 'claude-sonnet-4-20250514';
         this.isAnalyzing = false;
         this.eventSource = null;
         this.currentMode = 'smart';
         this.messages = [];
         this.markdownParser = null;
-        this.currentResponseArea = null;  // 追蹤當前的回應區域
-        this.accumulatedContent = '';     // 累積完整內容
-        this.infoMessages = new Set();  // 追蹤已顯示的信息消息        
+        this.currentResponseArea = null;
+        this.accumulatedContent = '';
+        this.infoMessages = new Set();
         this.initializeUI();
     }
     
@@ -297,18 +297,40 @@ class AIAnalyzer {
         if (!modelPopup) return;
         
         const modelGrid = modelPopup.querySelector('.model-popup-grid');
-        modelGrid.innerHTML = models.map(model => `
-            <div class="model-card" data-model="${model.id}" onclick="aiAnalyzer.selectModel('${model.id}')">
-                <div class="model-card-name">${model.name}</div>
-                <div class="model-card-desc">${model.description}</div>
-                <div class="model-pricing">
-                    輸入: $${model.pricing.input}/1K tokens | 
-                    輸出: $${model.pricing.output}/1K tokens
+        modelGrid.innerHTML = models.map(model => {
+            const badgeClass = this.getBadgeClass(model.id);
+            const badgeText = this.getBadgeText(model.id);
+            
+            return `
+                <div class="model-card" data-model="${model.id}" onclick="aiAnalyzer.selectModel('${model.id}')">
+                    <div class="model-card-name">${model.name}</div>
+                    <div class="model-card-desc">${model.description}</div>
+                    ${badgeText ? `<div class="model-card-badge ${badgeClass}">${badgeText}</div>` : ''}
+                    ${model.pricing ? `
+                        <div class="model-pricing">
+                            輸入: $${model.pricing.input}/1K tokens | 
+                            輸出: $${model.pricing.output}/1K tokens
+                        </div>
+                    ` : ''}
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
+    }
+
+    // 新增方法：獲取模型徽章樣式
+    getBadgeClass(modelId) {
+        if (modelId.includes('claude-4')) return 'new';
+        if (modelId.includes('chat-')) return 'internal';
+        return '';
     }
     
+    // 新增方法：獲取模型徽章文字
+    getBadgeText(modelId) {
+        if (modelId.includes('claude-4')) return 'NEW';
+        if (modelId.includes('chat-codetek') || modelId.includes('chat-chattek')) return 'INTERNAL';
+        return '';
+    }
+
     selectModel(modelId) {
         this.currentModel = modelId;
         
@@ -1507,6 +1529,35 @@ document.addEventListener('DOMContentLoaded', function() {
             aiAnalyzer.startAnalysis();
         };
     }
+
+    // 綁定 Provider 選擇器變更事件
+    const providerSelect = document.getElementById('providerSelectInline');
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function(e) {
+            const provider = e.target.value;
+            
+            // 根據選擇的 Provider 切換預設模型
+            if (provider === 'anthropic') {
+                selectedModel = 'claude-sonnet-4-20250514';
+                document.getElementById('selectedModelNameInline').textContent = 'Claude 4 Sonnet';
+            } else if (provider === 'openai') {
+                selectedModel = 'gpt-4-turbo-preview';
+                document.getElementById('selectedModelNameInline').textContent = 'GPT-4 Turbo';
+            } else if (provider === 'realtek') {
+                selectedModel = 'chat-codetek-qwen';
+                document.getElementById('selectedModelNameInline').textContent = 'Codetek Qwen';
+            }
+            
+            // 如果 aiAnalyzer 存在，也更新它
+            if (window.aiAnalyzer) {
+                window.aiAnalyzer.currentProvider = provider;
+                window.aiAnalyzer.currentModel = selectedModel;
+            }
+            
+            // 更新模型彈窗內容
+            updateModelPopupForProvider(provider);
+        });
+    } 
 });
 
 // 導出全域函數供 HTML 使用

@@ -4542,3 +4542,33 @@ a.btn {
     flex-direction: column;
     position: relative;
 }
+
+.model-card-badge.internal {
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    color: white;
+    font-weight: 600;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Realtek provider 相關樣式 */
+.provider-select-inline option[value="realtek"] {
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    color: white;
+}
+
+/* 當選擇 Realtek 時的特殊樣式 */
+.provider-select-inline:has(option[value="realtek"]:checked) + .model-selector-inline .model-select-inline-btn {
+    border-color: #ff6b35;
+}
+
+.provider-select-inline:has(option[value="realtek"]:checked) + .model-selector-inline .model-select-inline-btn:hover {
+    border-color: #f7931e;
+    box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
+}

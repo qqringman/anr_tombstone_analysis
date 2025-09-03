@@ -8,7 +8,9 @@ import json
 import threading
 from typing import Dict, List, Optional, Any
 import anthropic
-from config.config import AI_PROVIDERS, ANALYSIS_MODES, TOKEN_PRICING, RATE_LIMITS, MODEL_LIMITS, CLAUDE_API_KEY
+import openai
+from openai import OpenAI
+from config.config import AI_PROVIDERS, ANALYSIS_MODES, TOKEN_PRICING, RATE_LIMITS, MODEL_LIMITS, CLAUDE_API_KEY, REALTEK_API_KEY, REALTEK_BASE_URL
 from enum import Enum
 
 ai_analyzer_bp = Blueprint('ai_analyzer_bp', __name__)
@@ -82,6 +84,232 @@ class AIProvider(ABC):
         """檢查是否應該停止"""
         return self._stop_flag.is_set()
 
+class RealtekProvider(AIProvider):
+    """Realtek AI Provider - 使用 OpenAI 相容 API"""
+    
+    def __init__(self, api_key: str, model: str, base_url: str = None):
+        super().__init__(api_key, model)
+        self.base_url = base_url or REALTEK_BASE_URL
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=self.base_url
+        )
+        
+        # 從配置獲取模型限制
+        self.model_config = MODEL_LIMITS.get(model, {})
+        self.max_tokens = self.model_config.get('max_tokens', 128000)
+        self.max_output_tokens = self.model_config.get('max_output_tokens', 8000)
+        self.chars_per_token = self.model_config.get('chars_per_token', 2.5)
+    
+    def calculate_tokens(self, text: str) -> int:
+        """計算 token 數量"""
+        if not text:
+            return 0
+        return int(len(text) / self.chars_per_token)
+    
+    def get_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """計算成本"""
+        pricing = TOKEN_PRICING.get('realtek', {}).get(self.model, {'input': 0, 'output': 0})
+        input_cost = (input_tokens / 1000) * pricing.get('input', 0)
+        output_cost = (output_tokens / 1000) * pricing.get('output', 0)
+        return input_cost + output_cost
+    
+    def _truncate_content(self, content: str, mode: AnalysisMode) -> tuple[str, bool]:
+        """根據 token 限制截取內容"""
+        # 根據模型調整預留 tokens
+        if self.model == 'chat-chattek-qwen':
+            reserved_tokens = 5000  # 256K 模型，預留更多空間
+        else:  # chat-chattek-gpt (128K)
+            reserved_tokens = 3000  # 128K 模型，預留較少空間
+        
+        if mode == AnalysisMode.QUICK:
+            if self.model == 'chat-chattek-qwen':
+                max_content_tokens = min(50000, self.max_tokens - reserved_tokens)  # 256K 模型可以更多內容
+            else:
+                max_content_tokens = min(30000, self.max_tokens - reserved_tokens)  # 128K 模型較少內容
+        elif mode == AnalysisMode.DEEP:
+            max_content_tokens = self.max_tokens - reserved_tokens
+        else:  # SMART
+            if self.model == 'chat-chattek-qwen':
+                max_content_tokens = min(100000, self.max_tokens - reserved_tokens)  # 256K 模型
+            else:
+                max_content_tokens = min(60000, self.max_tokens - reserved_tokens)   # 128K 模型
+        
+        current_tokens = self.calculate_tokens(content)
+        
+        if current_tokens <= max_content_tokens:
+            return content, False
+        
+        max_chars = int(max_content_tokens * self.chars_per_token)
+        
+        if mode == AnalysisMode.QUICK:
+            head_chars = max_chars // 3
+            tail_chars = max_chars // 3
+            
+            truncated = (
+                content[:head_chars] + 
+                f"\n\n... [省略中間內容，原始大小: {len(content)} 字元] ...\n\n" +
+                content[-tail_chars:]
+            )
+        else:
+            truncated = content[:max_chars] + f"\n\n... [內容已截取，原始大小: {len(content)} 字元]"
+        
+        return truncated, True
+    
+    def analyze_sync(self, context: AnalysisContext) -> str:
+        """同步分析"""
+        try:
+            messages = self._prepare_messages(context)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self._get_max_tokens(context.mode),
+                temperature=self._get_temperature(context.mode),
+                stream=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise Exception(f"Realtek API 錯誤: {str(e)}")
+    
+    def stream_analyze_sync(self, context: AnalysisContext):
+        """同步流式分析"""
+        self.reset_stop_flag()
+        try:
+            messages = self._prepare_messages(context)
+            
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self._get_max_tokens(context.mode),
+                temperature=self._get_temperature(context.mode),
+                stream=True
+            )
+            
+            for chunk in stream:
+                if self.should_stop():
+                    break
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            yield f"\n\n錯誤: {str(e)}"
+    
+    def _prepare_messages(self, context: AnalysisContext) -> List[Dict]:
+        """準備訊息格式"""
+        messages = []
+        
+        # 截取檔案內容
+        truncated_content, was_truncated = self._truncate_content(
+            context.file_content, 
+            context.mode
+        )
+        
+        # 添加系統提示
+        system_prompt = self._get_system_prompt(context.mode)
+        
+        if was_truncated:
+            system_prompt += "\n\n注意：由於檔案過大，只提供了部分內容進行分析。請基於可見的內容提供分析。"
+        
+        messages.append({"role": "system", "content": system_prompt})
+        
+        # 添加歷史訊息（限制數量）
+        recent_messages = context.previous_messages[-2:]  # Realtek 模型保留更少歷史
+        for msg in recent_messages:
+            if msg.role == MessageRole.USER:
+                content = msg.content[:800] if len(msg.content) > 800 else msg.content
+                messages.append({"role": "user", "content": content})
+            elif msg.role == MessageRole.ASSISTANT:
+                content = msg.content[:1500] if len(msg.content) > 1500 else msg.content
+                messages.append({"role": "assistant", "content": content})
+        
+        # 添加當前請求
+        user_message = f"檔案路徑: {context.file_path}\n\n檔案內容:\n{truncated_content}"
+        messages.append({"role": "user", "content": user_message})
+        
+        # 將截取狀態保存到上下文
+        context.metadata['was_truncated'] = was_truncated
+        context.metadata['original_size'] = len(context.file_content)
+        context.metadata['truncated_size'] = len(truncated_content)
+        context.metadata['actual_input_tokens'] = self.calculate_tokens(user_message)
+        
+        return messages
+    
+    def _get_system_prompt(self, mode: AnalysisMode) -> str:
+        """根據模式獲取系統提示"""
+        prompts = {
+            AnalysisMode.SMART: """你是一個專業的 Android 系統日誌分析專家。請分析提供的日誌內容：
+
+1. 自動識別日誌類型：
+   - 如果包含 "Subject: Input dispatching timed out" 或類似內容，這是 ANR (Application Not Responding) 日誌
+   - 如果包含 "tombstone" 或崩潰堆疊，這是崩潰日誌
+   - 其他類型請相應識別
+
+2. 根據日誌類型提供分析：
+   - **問題摘要**：簡潔描述發生了什麼問題
+   - **根本原因**：深入分析導致問題的原因
+   - **影響範圍**：哪些進程/組件受到影響
+   - **解決方案**：提供具體的修復建議
+   
+3. 請使用清晰的標題和格式化輸出，回答請使用繁體中文""",
+            
+            AnalysisMode.QUICK: """你是一個快速診斷助手。請快速分析這個 Android 日誌：
+
+快速識別：
+- 日誌類型（ANR/崩潰/其他）
+- 主要問題
+- 立即可執行的解決方案
+
+請保持簡潔，只提供最關鍵的信息，回答請使用繁體中文。""",
+            
+            AnalysisMode.DEEP: """你是一個細緻的 Android 系統分析專家。請對這個日誌進行深度分析：
+
+1. **日誌解析**
+   - 完整解讀每個關鍵信息
+   - 分析記憶體地址、暫存器狀態
+   - 追蹤完整的調用堆疊
+
+2. **問題診斷**
+   - 詳細的根因分析
+   - 可能的觸發條件
+   - 系統狀態評估
+
+3. **解決方案**
+   - 程式碼層面的修復建議
+   - 系統配置優化
+   - 預防措施
+
+請使用繁體中文回答，提供詳細且專業的分析。"""
+        }
+        return prompts.get(mode, prompts[AnalysisMode.SMART])
+    
+    def _get_max_tokens(self, mode: AnalysisMode) -> int:
+        """根據模式獲取最大輸出 token 數"""
+        base_max = self.max_output_tokens
+        
+        # 根據模型調整輸出 token 限制
+        if self.model == 'chat-chattek-qwen':  # 256K 模型，可以更多輸出
+            tokens = {
+                AnalysisMode.QUICK: min(1000, base_max),
+                AnalysisMode.SMART: min(2000, base_max),
+                AnalysisMode.DEEP: min(4000, base_max)
+            }
+        else:  # chat-chattek-gpt (128K 模型)
+            tokens = {
+                AnalysisMode.QUICK: min(800, base_max),
+                AnalysisMode.SMART: min(1500, base_max),
+                AnalysisMode.DEEP: min(3000, base_max)
+            }
+        return tokens.get(mode, min(1500, base_max))
+    
+    def _get_temperature(self, mode: AnalysisMode) -> float:
+        """根據模式獲取溫度參數"""
+        temps = {
+            AnalysisMode.QUICK: 0.3,
+            AnalysisMode.SMART: 0.5,
+            AnalysisMode.DEEP: 0.7
+        }
+        return temps.get(mode, 0.5)
+
 class AnthropicProvider(AIProvider):
     """Anthropic Claude Provider"""
     
@@ -99,7 +327,6 @@ class AnthropicProvider(AIProvider):
         """計算 token 數量"""
         if not text:
             return 0
-        # 使用模型配置的 chars_per_token 或默認值 4
         return len(text) // self.chars_per_token
     
     def get_cost(self, input_tokens: int, output_tokens: int) -> float:
@@ -111,31 +338,23 @@ class AnthropicProvider(AIProvider):
     
     def _truncate_content(self, content: str, mode: AnalysisMode) -> tuple[str, bool]:
         """根據 token 限制截取內容"""
-        # 預留空間給系統提示和上下文
-        reserved_tokens = 5000  # 預留給系統提示、歷史訊息等
+        reserved_tokens = 5000
         
-        # 根據模式調整策略
         if mode == AnalysisMode.QUICK:
-            # 快速分析：只取前後關鍵部分
             max_content_tokens = min(50000, self.max_tokens - reserved_tokens)
         elif mode == AnalysisMode.DEEP:
-            # 深度分析：盡可能多的內容
             max_content_tokens = self.max_tokens - reserved_tokens
-        else:  # SMART
-            # 智能分析：平衡的內容量
+        else:
             max_content_tokens = min(100000, self.max_tokens - reserved_tokens)
         
-        # 估算當前內容的 tokens
         current_tokens = self.calculate_tokens(content)
         
         if current_tokens <= max_content_tokens:
             return content, False
         
-        # 需要截取
         max_chars = max_content_tokens * self.chars_per_token
         
         if mode == AnalysisMode.QUICK:
-            # 快速模式：取開頭和結尾
             head_chars = max_chars // 3
             tail_chars = max_chars // 3
             
@@ -145,7 +364,6 @@ class AnthropicProvider(AIProvider):
                 content[-tail_chars:]
             )
         else:
-            # 其他模式：優先保留開頭（通常包含重要信息）
             truncated = content[:max_chars] + f"\n\n... [內容已截取，原始大小: {len(content)} 字元]"
         
         return truncated, True
@@ -170,7 +388,6 @@ class AnthropicProvider(AIProvider):
         try:
             messages = self._prepare_messages(context)
             
-            # 使用 stream
             with self.client.messages.stream(
                 model=self.model,
                 messages=messages,
@@ -189,35 +406,28 @@ class AnthropicProvider(AIProvider):
         """準備訊息格式"""
         messages = []
         
-        # 截取檔案內容
         truncated_content, was_truncated = self._truncate_content(
             context.file_content, 
             context.mode
         )
         
-        # 添加系統提示
         system_prompt = self._get_system_prompt(context.mode)
         
-        # 如果內容被截取，在系統提示中說明
         if was_truncated:
             system_prompt += "\n\n注意：由於檔案過大，只提供了部分內容進行分析。請基於可見的內容提供分析。"
         
-        # 添加歷史訊息（限制數量）
-        recent_messages = context.previous_messages[-3:]  # 只保留最近3條
+        recent_messages = context.previous_messages[-3:]
         for msg in recent_messages:
             if msg.role == MessageRole.USER:
-                # 限制歷史訊息長度
                 content = msg.content[:1000] if len(msg.content) > 1000 else msg.content
                 messages.append({"role": "user", "content": content})
             elif msg.role == MessageRole.ASSISTANT:
                 content = msg.content[:2000] if len(msg.content) > 2000 else msg.content
                 messages.append({"role": "assistant", "content": content})
         
-        # 添加當前請求
         user_message = f"{system_prompt}\n\n檔案路徑: {context.file_path}\n\n檔案內容:\n{truncated_content}"
         messages.append({"role": "user", "content": user_message})
         
-        # 將截取狀態保存到上下文
         context.metadata['was_truncated'] = was_truncated
         context.metadata['original_size'] = len(context.file_content)
         context.metadata['truncated_size'] = len(truncated_content)
@@ -277,7 +487,6 @@ class AnthropicProvider(AIProvider):
     
     def _get_max_tokens(self, mode: AnalysisMode) -> int:
         """根據模式獲取最大輸出 token 數"""
-        # 使用模型配置的最大輸出 tokens，但根據模式調整
         base_max = self.max_output_tokens
         
         tokens = {
@@ -313,6 +522,12 @@ class ProviderFactory:
         
         if provider_name == 'anthropic':
             return AnthropicProvider(api_key, model)
+        elif provider_name == 'realtek':
+            base_url = config.get('base_url', REALTEK_BASE_URL)
+            return RealtekProvider(api_key, model, base_url)
+        elif provider_name == 'openai':
+            # 如果您需要 OpenAI 支持，可以在這裡實現
+            raise ValueError("OpenAI Provider 尚未實現")
         else:
             raise ValueError(f"未實作的 Provider: {provider_name}")
 
@@ -352,7 +567,7 @@ def analyze_file():
     try:
         data = request.json
         session_id = data.get('session_id', str(time.time()))
-        provider_name = data.get('provider', 'anthropic')
+        provider_name = data.get('provider', 'realtek')  # 預設使用 Realtek
         model = data.get('model', AI_PROVIDERS[provider_name]['default_model'])
         mode = AnalysisMode(data.get('mode', 'smart'))
         file_path = data.get('file_path', '')
@@ -376,7 +591,6 @@ def analyze_file():
                     role = MessageRole(msg['role']) if msg['role'] in ['user', 'assistant', 'system'] else MessageRole.USER
                     session.add_message(role, msg['content'])
                 except ValueError:
-                    # 如果角色無效，默認為用戶
                     session.add_message(MessageRole.USER, msg['content'])
         
         # 準備分析上下文
@@ -398,14 +612,15 @@ def analyze_file():
                     # 發送開始事件
                     yield f"data: {json.dumps({'type': 'start', 'mode': mode.value})}\n\n"
                     
-                    # 檢查檔案大小
+                    # 檢查檔案大小和模型類型
                     file_size = len(file_content)
                     estimated_tokens = session.provider.calculate_tokens(file_content)
                     
-                    # 顯示檔案資訊
-                    file_info = f"正在分析檔案: {file_path}"
-                    if file_name:
-                        file_info = f"正在分析檔案: {file_name}"
+                    # 根據不同 Provider 顯示不同資訊
+                    if provider_name == 'realtek':
+                        file_info = f"正在使用 Realtek 內部模型分析: {file_name or file_path}"
+                    else:
+                        file_info = f"正在分析檔案: {file_name or file_path}"
                     
                     # 識別檔案類型
                     if 'tombstone' in file_path.lower() or 'tombstone' in file_content[:1000].lower():
@@ -421,23 +636,29 @@ def analyze_file():
                     size_info = f"檔案大小: {file_size:,} 字元 (約 {estimated_tokens:,} tokens)"
                     yield f"data: {json.dumps({'type': 'info', 'message': size_info})}\n\n"
                     
-                    # 如果檔案很大，發送警告
+                    # 根據不同模型顯示不同的 token 限制警告
                     model_config = MODEL_LIMITS.get(model, {})
                     max_tokens = model_config.get('max_tokens', 200000)
                     
-                    if estimated_tokens > max_tokens * 0.8:  # 超過 80% 限制
-                        warning_msg = f"⚠️ 檔案較大（約 {estimated_tokens:,} tokens），將自動截取適當內容進行分析"
+                    if estimated_tokens > max_tokens * 0.8:
+                        if provider_name == 'realtek':
+                            warning_msg = f"⚠️ 檔案較大（約 {estimated_tokens:,} tokens），Realtek 模型將自動截取適當內容"
+                        else:
+                            warning_msg = f"⚠️ 檔案較大（約 {estimated_tokens:,} tokens），將自動截取適當內容進行分析"
                         yield f"data: {json.dumps({'type': 'warning', 'message': warning_msg})}\n\n"
                     
                     # 根據模式顯示預期時間
                     if mode == AnalysisMode.QUICK:
-                        yield f"data: {json.dumps({'type': 'info', 'message': '⚡ 快速分析模式：預計 30 秒內完成'})}\n\n"
+                        if provider_name == 'realtek':
+                            yield f"data: {json.dumps({'type': 'info', 'message': '⚡ Realtek 快速分析模式：預計 20 秒內完成'})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'info', 'message': '⚡ 快速分析模式：預計 30 秒內完成'})}\n\n"
                     elif mode == AnalysisMode.DEEP:
                         yield f"data: {json.dumps({'type': 'info', 'message': '🔍 深度分析模式：預計 2-3 分鐘完成'})}\n\n"
                     else:
                         yield f"data: {json.dumps({'type': 'info', 'message': '🧠 智能分析模式：自動平衡速度與深度'})}\n\n"
                     
-                    # 估算輸入 tokens（可能會被截取）
+                    # 估算輸入 tokens
                     yield f"data: {json.dumps({'type': 'tokens', 'input': estimated_tokens})}\n\n"
                     
                     # 流式輸出
@@ -458,7 +679,7 @@ def analyze_file():
                             # 發送內容
                             yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                             
-                            # 定期更新 token 計數（每秒最多一次）
+                            # 定期更新 token 計數
                             current_time = time.time()
                             if current_time - last_update_time > 1.0:
                                 output_tokens = session.provider.calculate_tokens(output_content)
@@ -468,10 +689,18 @@ def analyze_file():
                     except Exception as stream_error:
                         # 處理流式輸出中的錯誤
                         error_msg = str(stream_error)
-                        if "rate limit" in error_msg.lower():
-                            error_msg = "超過 API 速率限制，請稍後再試（建議等待 30 秒）"
-                        elif "prompt is too long" in error_msg.lower():
-                            error_msg = "檔案內容過大，請嘗試使用快速分析模式或分段分析"
+                        
+                        # 針對不同 Provider 提供不同的錯誤處理
+                        if provider_name == 'realtek':
+                            if "rate limit" in error_msg.lower():
+                                error_msg = "Realtek API 請求頻繁，請稍後再試"
+                            elif "prompt is too long" in error_msg.lower():
+                                error_msg = "檔案內容過大，請嘗試使用快速分析模式"
+                        else:
+                            if "rate limit" in error_msg.lower():
+                                error_msg = "超過 API 速率限制，請稍後再試（建議等待 30 秒）"
+                            elif "prompt is too long" in error_msg.lower():
+                                error_msg = "檔案內容過大，請嘗試使用快速分析模式或分段分析"
                         
                         yield f"data: {json.dumps({'type': 'error', 'error': error_msg})}\n\n"
                         return
@@ -509,7 +738,9 @@ def analyze_file():
                             },
                             'cost': session.total_cost,
                             'was_truncated': context.metadata.get('was_truncated', False),
-                            'duration': (datetime.now() - session.created_at).total_seconds()
+                            'duration': (datetime.now() - session.created_at).total_seconds(),
+                            'provider': provider_name,
+                            'model': model
                         })}\n\n"
                     
                 except Exception as e:
@@ -517,13 +748,19 @@ def analyze_file():
                     traceback.print_exc()
                     
                     error_msg = str(e)
-                    # 提供更友好的錯誤訊息
-                    if "prompt is too long" in error_msg:
-                        error_msg = "檔案內容超過模型限制，請使用快速分析模式或減少檔案大小"
-                    elif "rate limit" in error_msg.lower():
-                        error_msg = "API 請求過於頻繁，請等待 30 秒後再試"
-                    elif "api key" in error_msg.lower():
-                        error_msg = "API Key 無效或未設置，請檢查配置"
+                    # 針對不同 Provider 提供更友好的錯誤訊息
+                    if provider_name == 'realtek':
+                        if "Connection" in error_msg or "timeout" in error_msg.lower():
+                            error_msg = "Realtek 內部 API 連線超時，請檢查網路連接"
+                        elif "api key" in error_msg.lower():
+                            error_msg = "Realtek API Key 無效或過期，請聯繫管理員"
+                    else:
+                        if "prompt is too long" in error_msg:
+                            error_msg = "檔案內容超過模型限制，請使用快速分析模式或減少檔案大小"
+                        elif "rate limit" in error_msg.lower():
+                            error_msg = "API 請求過於頻繁，請等待 30 秒後再試"
+                        elif "api key" in error_msg.lower():
+                            error_msg = "API Key 無效或未設置，請檢查配置"
                     
                     yield f"data: {json.dumps({'type': 'error', 'error': error_msg})}\n\n"
             
@@ -542,14 +779,11 @@ def analyze_file():
             try:
                 result = session.provider.analyze_sync(context)
                 
-                # 檢查是否被截取
                 was_truncated = context.metadata.get('was_truncated', False)
                 
-                # 更新會話
                 session.add_message(MessageRole.USER, f"分析檔案: {file_name or file_path}")
                 session.add_message(MessageRole.ASSISTANT, result)
                 
-                # 計算 token 使用量
                 input_tokens = session.provider.calculate_tokens(file_content)
                 output_tokens = session.provider.calculate_tokens(result)
                 session.update_usage(input_tokens, output_tokens)
@@ -564,7 +798,9 @@ def analyze_file():
                         'total': session.total_tokens['input'] + session.total_tokens['output']
                     },
                     'cost': session.total_cost,
-                    'was_truncated': was_truncated
+                    'was_truncated': was_truncated,
+                    'provider': provider_name,
+                    'model': model
                 }
                 
                 if was_truncated:
@@ -580,15 +816,20 @@ def analyze_file():
                 traceback.print_exc()
                 
                 error_msg = str(e)
-                if "prompt is too long" in error_msg:
-                    error_msg = "檔案內容超過模型限制"
-                elif "rate limit" in error_msg.lower():
-                    error_msg = "API 請求限制"
+                if provider_name == 'realtek':
+                    if "Connection" in error_msg:
+                        error_msg = "Realtek 內部 API 連線失敗"
+                else:
+                    if "prompt is too long" in error_msg:
+                        error_msg = "檔案內容超過模型限制"
+                    elif "rate limit" in error_msg.lower():
+                        error_msg = "API 請求限制"
                 
                 return jsonify({
                     'success': False,
                     'error': error_msg,
-                    'details': str(e)
+                    'details': str(e),
+                    'provider': provider_name
                 }), 500
             
     except Exception as e:
@@ -624,7 +865,8 @@ def get_models(provider):
                 'name': info['name'],
                 'description': info['description'],
                 'max_tokens': info['max_tokens'],
-                'pricing': TOKEN_PRICING.get(provider, {}).get(model_id, {})
+                'pricing': TOKEN_PRICING.get(provider, {}).get(model_id, {}),
+                'provider': provider
             }
             for model_id, info in models.items()
         ]
