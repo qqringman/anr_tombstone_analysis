@@ -4572,3 +4572,128 @@ a.btn {
     border-color: #f7931e;
     box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
 }
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-5px);
+    }
+    60% {
+        transform: translateY(-3px);
+    }
+}
+
+.scroll-to-bottom-btn {
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.scroll-to-bottom-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.scroll-to-bottom-btn:active {
+    transform: scale(0.95);
+}
+
+/* 確保按鈕在全屏模式下也能正確顯示 */
+.right-panel.fullscreen-mode .scroll-to-bottom-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+}
+
+/* 在 static/css/ai_analyzer.css 中添加/修改以下樣式 */
+
+/* 確保 AI 聊天區域可以正確滾動 */
+.ai-chat-area {
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    scroll-behavior: smooth; /* 原生平滑滾動 */
+    position: relative;
+}
+
+/* AI 回應區域滾動設置 */
+#aiResponse {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    max-height: 100%;
+}
+
+/* AI 回應內容區域 */
+#aiResponseContent {
+    overflow-y: visible; /* 讓內容自然展開 */
+    overflow-x: hidden;
+    padding-bottom: 20px; /* 底部留一些空間 */
+}
+
+/* 對話項目動畫 */
+.ai-conversation-item {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 內容更新時的平滑過渡 */
+.content-area {
+    transition: all 0.1s ease;
+}
+
+/* 確保消息區域不會影響滾動 */
+.message-area {
+    position: relative;
+    z-index: 1;
+}
+
+/* 滾動指示器（可選，顯示新內容） */
+.scroll-indicator {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(102, 126, 234, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1000;
+}
+
+.scroll-indicator.show {
+    opacity: 1;
+}
+
+/* 改進滾動條樣式 */
+.ai-chat-area::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ai-chat-area::-webkit-scrollbar-track {
+    background: #2d2d30;
+    border-radius: 4px;
+}
+
+.ai-chat-area::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.ai-chat-area::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}

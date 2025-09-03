@@ -39,6 +39,10 @@ let isAskingQuestion = false;  // 防止重複發送問題
 // 全屏功能
 let isAIFullscreen = false;
 
+// 滾動狀態管理
+let isUserScrolling = false;
+let scrollTimeout = null;
+
 // 新增：分析模式配置
 const ANALYSIS_MODES = {
     'auto': {
@@ -439,7 +443,7 @@ async function executeAIAnalysis(mode) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
-                provider: document.getElementById('providerSelectInline')?.value || 'anthropic',
+                provider: document.getElementById('providerSelectInline')?.value || 'realtek',
                 model: selectedModel,
                 mode: mode,
                 file_path: filePath,
@@ -494,11 +498,8 @@ function updateStreamingContent(container, content) {
         const formatted = formatStreamingContent(content);
         container.innerHTML = formatted;
         
-        // 保持滾動在底部
-        const chatArea = document.getElementById('aiChatArea');
-        if (chatArea) {
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
+        // 添加自動滾動
+        smartAutoScroll();
     });
 }
 
@@ -896,6 +897,9 @@ function displayMessage(container, type, message) {
     msgDiv.className = `ai-${type}-message`;
     msgDiv.innerHTML = `<span class="${type}-icon">${type === 'info' ? 'ℹ️' : '⚠️'}</span> ${message}`;
     container.appendChild(msgDiv);
+    
+    // 新增訊息後滾動
+    setTimeout(smartAutoScroll, 50);
 }
 
 // 更新使用信息
@@ -1051,8 +1055,8 @@ async function useQuickQuestion(question) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
-                provider: 'anthropic',
-                model: selectedModel,
+                provider: 'realtek',
+                model: selectedModel || 'chat-chattek-qwen',
                 mode: 'quick',
                 file_path: filePath,
                 file_name: fileName,
@@ -1151,15 +1155,21 @@ async function handleStreamResponse(response, conversationItem) {
                             case 'content':
                                 accumulatedContent += data.content;
                                 updateStreamingContent(contentArea, accumulatedContent);
+                                // 每次內容更新後都嘗試自動滾動
+                                setTimeout(smartAutoScroll, 50);
                                 break;
                                 
                             case 'info':
                             case 'warning':
                                 displayMessage(messageArea, data.type, data.message);
+                                // 新增訊息後也滾動
+                                setTimeout(smartAutoScroll, 50);
                                 break;
                                 
                             case 'complete':
                                 updateUsageInfo(conversationItem, data);
+                                // 完成後最終滾動
+                                setTimeout(() => autoScrollToBottom(true), 100);
                                 break;
                                 
                             case 'error':
@@ -1869,7 +1879,7 @@ async function askCustomQuestion() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
-                provider: document.getElementById('providerSelectInline')?.value || 'anthropic',
+                provider: document.getElementById('providerSelectInline')?.value || 'realtek',
                 model: selectedModel,
                 mode: 'quick',
                 file_path: filePath,
@@ -2403,21 +2413,186 @@ function getModelDisplayName(modelId) {
 }
 
 // 自動滾動函數
-function autoScrollToBottom() {
-	const aiChatArea = document.getElementById('aiChatArea');
-	const aiResponse = document.getElementById('aiResponse');
-	
-	setTimeout(() => {
-		// 滾動聊天區域到底部
-		if (aiChatArea) {
-			aiChatArea.scrollTop = aiChatArea.scrollHeight;
-		}
-		
-		// 如果回應區域也有滾動條，也滾動到底部
-		if (aiResponse) {
-			aiResponse.scrollTop = aiResponse.scrollHeight;
-		}
-	}, 100);
+function autoScrollToBottom(smooth = true) {
+    // 獲取所有可能的滾動容器
+    const scrollContainers = [
+        document.getElementById('aiChatArea'),
+        document.getElementById('aiResponse'),
+        document.getElementById('aiResponseContent')
+    ];
+    
+    scrollContainers.forEach(container => {
+        if (container) {
+            if (smooth) {
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
+            } else {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    });
+}
+
+function shouldAutoScroll() {
+    const aiChatArea = document.getElementById('aiChatArea');
+    if (!aiChatArea) return true;
+    
+    const threshold = 100; // 100px 閾值
+    const isNearBottom = aiChatArea.scrollHeight - aiChatArea.scrollTop - aiChatArea.clientHeight < threshold;
+    return isNearBottom;
+}
+
+// 改進的智能自動滾動 - 考慮用戶行為
+function smartAutoScroll() {
+    // 如果用戶正在主動滾動，不要自動滾動
+    if (isUserScrolling) {
+        checkScrollButtonVisibility();
+        return;
+    }
+    
+    // 檢查用戶是否在底部附近
+    if (shouldAutoScroll()) {
+        requestAnimationFrame(() => {
+            autoScrollToBottom(true);
+            hideScrollToBottomButton();
+        });
+    } else {
+        // 用戶不在底部，顯示滾動按鈕
+        showScrollToBottomButton();
+    }
+}
+
+
+// 初始化滾動功能
+function initializeScrollFeatures() {
+    const aiChatArea = document.getElementById('aiChatArea');
+    if (!aiChatArea) return;
+    
+    // 創建滾動到底部按鈕
+    createScrollToBottomButton();
+    
+    // 監聽用戶滾動事件
+    aiChatArea.addEventListener('scroll', handleUserScroll);
+    
+    // 監聽滾動結束事件
+    aiChatArea.addEventListener('scroll', debounce(onScrollEnd, 150));
+}
+
+// 創建滾動到底部按鈕
+function createScrollToBottomButton() {
+    const aiChatArea = document.getElementById('aiChatArea');
+    if (!aiChatArea || document.getElementById('scrollToBottomBtn')) return;
+    
+    const scrollBtn = document.createElement('button');
+    scrollBtn.id = 'scrollToBottomBtn';
+    scrollBtn.className = 'scroll-to-bottom-btn';
+    scrollBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M7 13l3 3 3-3"></path>
+            <path d="M7 6l3 3 3-3"></path>
+        </svg>
+        <span class="btn-text">新訊息</span>
+    `;
+    scrollBtn.style.cssText = `
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 10px 15px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        font-size: 12px;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        z-index: 1001;
+        transition: all 0.3s ease;
+        animation: bounce 2s infinite;
+    `;
+    
+    scrollBtn.onclick = () => {
+        autoScrollToBottom(true);
+        hideScrollToBottomButton();
+    };
+    
+    // 確保按鈕添加到正確的容器
+    const rightPanel = document.getElementById('rightPanel');
+    if (rightPanel) {
+        rightPanel.style.position = 'relative';
+        rightPanel.appendChild(scrollBtn);
+    }
+}
+
+// 處理用戶滾動
+function handleUserScroll() {
+    isUserScrolling = true;
+    
+    // 清除之前的計時器
+    if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+    }
+    
+    // 檢查是否需要顯示滾動按鈕
+    checkScrollButtonVisibility();
+}
+
+// 滾動結束處理
+function onScrollEnd() {
+    isUserScrolling = false;
+    checkScrollButtonVisibility();
+}
+
+// 檢查滾動按鈕可見性
+function checkScrollButtonVisibility() {
+    const aiChatArea = document.getElementById('aiChatArea');
+    const scrollBtn = document.getElementById('scrollToBottomBtn');
+    
+    if (!aiChatArea || !scrollBtn) return;
+    
+    const threshold = 100;
+    const isNearBottom = aiChatArea.scrollHeight - aiChatArea.scrollTop - aiChatArea.clientHeight < threshold;
+    
+    if (!isNearBottom) {
+        showScrollToBottomButton();
+    } else {
+        hideScrollToBottomButton();
+    }
+}
+
+// 顯示滾動到底部按鈕
+function showScrollToBottomButton() {
+    const scrollBtn = document.getElementById('scrollToBottomBtn');
+    if (scrollBtn && scrollBtn.style.display === 'none') {
+        scrollBtn.style.display = 'flex';
+        setTimeout(() => scrollBtn.style.opacity = '1', 10);
+    }
+}
+
+// 隱藏滾動到底部按鈕
+function hideScrollToBottomButton() {
+    const scrollBtn = document.getElementById('scrollToBottomBtn');
+    if (scrollBtn) {
+        scrollBtn.style.opacity = '0';
+        setTimeout(() => scrollBtn.style.display = 'none', 300);
+    }
+}
+
+// 防抖函數
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 function displayAIAnalysis(analysis, truncated, model, isCustomQuestion = false, thinking = null) {
@@ -2594,6 +2769,9 @@ document.addEventListener('DOMContentLoaded', function() {
 	// Setup AI panel
 	setupResizeHandle();
 	setupModelSelection();
+
+    // 初始化滾動功能
+    setTimeout(initializeScrollFeatures, 500); // 稍微延遲確保 DOM 完全載入    
 });
 
 // 在 custom-question div 中添加提示文字

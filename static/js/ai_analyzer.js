@@ -658,12 +658,11 @@ class AIAnalyzer {
             this.updateTimer = null;
         }
         
-        // 做最後一次完整格式化（但不要清空）
+        // 做最後一次完整格式化
         const contentDiv = responseArea.querySelector('.ai-response-text');
         const contentArea = contentDiv.querySelector('.content-area');
         
         if (contentArea && this.accumulatedContent) {
-            // 最終格式化
             const formatted = this.formatContentChatGPTStyle(this.accumulatedContent);
             contentArea.innerHTML = formatted;
         }
@@ -688,8 +687,11 @@ class AIAnalyzer {
             cost: data.cost
         });
         
-        // 標記分析完成但不清理內容
+        // 完成分析並滾動到底部
         this.completeAnalysis();
+        
+        // 最終滾動，確保用戶能看到完整內容
+        setTimeout(() => this.scrollToBottom(), 300);
     }
 
     completeAnalysis() {
@@ -978,24 +980,25 @@ class AIAnalyzer {
             case 'start':
                 thinkingDiv.style.display = 'none';
                 this.accumulatedContent = '';
-                this.infoMessages.clear();  // 清除追蹤
-                // 清空內容區但保留結構
+                this.infoMessages.clear();
                 contentDiv.innerHTML = '<div class="message-area"></div><div class="content-area"></div>';
                 break;
                 
             case 'info':
             case 'warning':
-                // 只添加新的消息
                 if (data.message && !this.infoMessages.has(data.message)) {
                     this.infoMessages.add(data.message);
                     this.addInfoMessage(contentDiv, data.type, data.message);
+                    // 添加訊息後滾動
+                    setTimeout(() => this.scrollToBottom(), 100);
                 }
                 break;
                 
             case 'content':
-                // 累積內容並更新顯示
                 this.accumulatedContent += data.content;
                 this.updateContentDisplay(contentDiv);
+                // 內容更新後滾動
+                setTimeout(() => this.scrollToBottom(), 50);
                 break;
                 
             case 'tokens':
@@ -1010,6 +1013,8 @@ class AIAnalyzer {
                 
             case 'complete':
                 this.handleComplete(data, responseArea);
+                // 完成後最終滾動
+                setTimeout(() => this.scrollToBottom(), 200);
                 break;
                 
             case 'error':
@@ -1055,7 +1060,7 @@ class AIAnalyzer {
             const formatted = this.formatContentChatGPTStyle(this.accumulatedContent);
             contentArea.innerHTML = formatted;
             
-            // 保持滾動在底部
+            // 內容更新後自動滾動
             this.scrollToBottom();
         }, 100);  // 100ms 防抖
     }
@@ -1260,11 +1265,23 @@ class AIAnalyzer {
     }
     
     scrollToBottom() {
-        const chatArea = document.getElementById('aiChatArea');
-        if (chatArea) {
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
-    }  
+        // 獲取所有可能的滾動容器
+        const scrollContainers = [
+            document.getElementById('aiChatArea'),
+            document.getElementById('aiResponse'),
+            document.getElementById('aiResponseContent')
+        ];
+        
+        scrollContainers.forEach(container => {
+            if (container) {
+                // 使用 smooth 滾動，但不要太頻繁
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        });
+    }
 
     async executeAnalysis(mode) {
         // 防止重複分析
