@@ -1765,3 +1765,31 @@
 .debug-layout .question-input {
     border: 2px dashed #0000ff !important;
 }
+
+.segment-result.streaming .streaming-content {
+    border-left: 3px solid #667eea;
+    padding-left: 10px;
+    animation: pulse 1.5s infinite;
+}
+
+.segment-status.processing {
+    color: #ffa726;
+}
+
+.segment-status.success {
+    color: #66bb6a;
+}
+
+.segment-status.error {
+    color: #ef5350;
+}
+
+.final-analysis-content.streaming {
+    border-left: 3px solid #4ec9b0;
+    padding-left: 15px;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}

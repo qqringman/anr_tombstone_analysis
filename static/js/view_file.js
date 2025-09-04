@@ -399,76 +399,194 @@ function getAIRequestManager() {
 }
 
 async function executeAIAnalysis(mode) {
-    // 檢查 aiRequestManager 是否可用
+    /**
+     * 執行 AI 分析 - 完整版本
+     * @param {string} mode - 分析模式：'smart', 'quick', 'deep'
+     */
+    
+    // Debug 日誌函數
+    function debugLog(stage, message, data = null) {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        console.log(`[${timestamp}] ANALYSIS_${stage.toUpperCase()}: ${message}`);
+        if (data) {
+            console.log(`[${timestamp}] DATA:`, data);
+        }
+    }
+    
+    debugLog('init', `=== 開始 ${mode} 模式分析 ===`);
+    
+    // 1. 檢查 aiRequestManager 是否可用
     if (!window.aiRequestManager) {
         console.error('AIRequestManager 未初始化');
         return;
     }
 
-    // 使用統一的請求管理器
+    // 2. 檢查基本參數
+    const currentFileContent = window.fileContent || window.escaped_content;
+    const currentFileName = window.fileName || window.escaped_filename;
+    const currentFilePath = window.filePath || window.escaped_file_path;
+    
+    if (!currentFileContent) {
+        alert('沒有檔案內容可分析');
+        return;
+    }
+    
+    debugLog('params', '檢查參數', {
+        content_length: currentFileContent.length,
+        file_name: currentFileName,
+        file_path: currentFilePath ? currentFilePath.substring(0, 100) : null,
+        mode: mode
+    });
+    
+    // 3. 檢查文件大小，決定分析策略
+    const fileSize = currentFileContent.length;
+    const estimatedTokens = Math.ceil(fileSize / 2.5); // 粗略估算 tokens
+    const shouldUseSegmentAnalysis = shouldUseSegmentAnalysisForFile(mode, fileSize, estimatedTokens);
+    
+    debugLog('strategy', '分析策略決定', {
+        file_size_chars: fileSize,
+        file_size_kb: Math.round(fileSize / 1024),
+        estimated_tokens: estimatedTokens,
+        mode: mode,
+        use_segment_analysis: shouldUseSegmentAnalysis,
+        threshold_reached: estimatedTokens > getTokenThreshold(mode)
+    });
+    
+    // 4. 如果需要使用分段分析，切換到分段模式
+    if (shouldUseSegmentAnalysis) {
+        debugLog('redirect', `重導向到分段分析 - 模式: ${mode}`);
+        return executeSegmentAnalysis(mode);
+    }
+    
+    // 5. 使用統一的請求管理器
     const signal = window.aiRequestManager.startRequest(mode);
     
+    // 6. 獲取 UI 元素
     const btn = document.querySelector(`.ai-mode-btn[data-mode="${mode}"]`);
-    if (!btn) return;
+    const responseDiv = document.getElementById('aiResponse');
+    const responseContent = document.getElementById('aiResponseContent');
     
-    // **新增：設定選中狀態**
-    document.querySelectorAll('.ai-mode-btn').forEach(b => {
-        b.classList.remove('selected');  // 移除所有選中狀態
+    if (!btn || !responseContent) {
+        debugLog('error', 'UI 元素缺失', {
+            has_button: !!btn,
+            has_response_content: !!responseContent
+        });
+        return;
+    }
+    
+    debugLog('ui', 'UI 元素檢查完成', {
+        button_found: !!btn,
+        response_div_found: !!responseDiv,
+        response_content_found: !!responseContent
     });
-    btn.classList.add('selected');  // 設定當前按鈕為選中
     
-    const conversationClass = `${mode}-mode`;
-    
-    // 禁用所有模式按鈕
+    // 7. 設置按鈕選中狀態和 loading 狀態
     document.querySelectorAll('.ai-mode-btn').forEach(b => {
+        b.classList.remove('selected', 'analyzing');
         b.disabled = true;
         b.classList.add('disabled');
     });
     
-    // 顯示 loading 狀態
-    btn.classList.add('analyzing');
+    btn.classList.add('selected', 'analyzing');
+    
+    // 8. 保存原始按鈕內容並設置 loading 狀態
+    const originalButtonContent = btn.innerHTML;
+    const modeConfig = {
+        'smart': { icon: '🧠', name: '智能分析' },
+        'quick': { icon: '⚡', name: '快速分析' },
+        'deep': { icon: '🔍', name: '深度分析' }
+    }[mode] || { icon: '🤖', name: '分析' };
+    
     btn.innerHTML = `
         <div class="ai-spinner"></div>
         <span class="mode-name">分析中...</span>
     `;
     
-    const responseDiv = document.getElementById('aiResponse');
-    const responseContent = document.getElementById('aiResponseContent');
+    // 9. 顯示 AI 回應區域
     responseDiv.classList.add('active');
     
-    // 創建新的對話項目
+    // 10. 創建對話項目
+    const conversationClass = `${mode}-mode`;
     const conversationItem = createConversationItem(mode);
     conversationItem.classList.add(conversationClass);
     responseContent.appendChild(conversationItem);
     
+    debugLog('conversation', '創建對話項目', {
+        conversation_id: conversationItem.id,
+        conversation_class: conversationClass,
+        mode_config: modeConfig
+    });
+    
+    // 11. 獲取當前設置
+    const currentProvider = document.getElementById('providerSelectInline')?.value || 'realtek';
+    const currentModel = selectedModel || 'chat-chattek-qwen';
+    
+    debugLog('settings', '當前設置', {
+        provider: currentProvider,
+        model: currentModel,
+        session_id: window.aiAnalyzer?.sessionId
+    });
+    
     try {
-        // 獲取當前選中的 Provider 和 Model，如果沒有則使用 Realtek 預設
-        const currentProvider = document.getElementById('providerSelectInline')?.value || 'realtek';
-        const currentModel = selectedModel || 'chat-chattek-qwen';
+        // 12. 準備請求數據
+        const requestData = {
+            session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
+            provider: currentProvider,
+            model: currentModel,
+            mode: mode,
+            file_path: currentFilePath,
+            file_name: currentFileName,
+            content: currentFileContent,
+            stream: true,
+            context: window.aiAnalyzer ? 
+                window.aiAnalyzer.messages.slice(-5).map(msg => ({
+                    role: msg.role,
+                    content: msg.content.substring(0, 500)
+                })) : []
+        };
         
-        console.log(`AI分析使用: Provider=${currentProvider}, Model=${currentModel}`);
+        debugLog('request', '準備請求數據', {
+            data_keys: Object.keys(requestData),
+            content_preview: requestData.content.substring(0, 100) + '...',
+            context_count: requestData.context.length,
+            stream: requestData.stream
+        });
         
-        const requestManager = getAIRequestManager();
-        const signal = requestManager.startRequest(mode);		
+        // 13. 發送請求
         const response = await fetch('/api/ai/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
-                provider: currentProvider,  
-                model: currentModel,        
-                mode: mode,
-                file_path: filePath,
-                file_name: fileName,
-                content: fileContent,
-                stream: true
-            }),
-            signal: signal  
+            body: JSON.stringify(requestData),
+            signal: signal
         });
         
+        debugLog('response', '收到回應', {
+            ok: response.ok,
+            status: response.status,
+            status_text: response.statusText,
+            headers: Object.fromEntries(response.headers.entries())
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // 14. 處理流式回應
         await handleStreamResponse(response, conversationItem);
         
+        debugLog('success', '分析完成', {
+            mode: mode,
+            provider: currentProvider,
+            model: currentModel
+        });
+        
     } catch (error) {
+        debugLog('error', '分析過程發生錯誤', {
+            error_name: error.name,
+            error_message: error.message,
+            is_abort_error: error.name === 'AbortError'
+        });
+        
         if (error.name === 'AbortError') {
             console.log('分析已取消');
             const contentDiv = conversationItem.querySelector('.ai-response-text');
@@ -481,21 +599,149 @@ async function executeAIAnalysis(mode) {
             }
         } else {
             console.error('Analysis error:', error);
-            const contentDiv = conversationItem.querySelector('.ai-response-text');
-            if (contentDiv) {
-                contentDiv.innerHTML = `
-                    <div class="ai-error">
-                        <h3>❌ 分析失敗</h3>
-                        <p>${escapeHtml(error.message)}</p>
-                    </div>
-                `;
-            }
+            handleAnalysisError(conversationItem, error, mode, currentProvider);
         }
+        
     } finally {
-		// 使用統一的清理
-		if (window.aiRequestManager) {
-			window.aiRequestManager.cleanup();
-		}
+        // 15. 清理和重置狀態
+        debugLog('cleanup', '開始清理', {
+            mode: mode,
+            manager_processing: window.aiRequestManager ? window.aiRequestManager.isProcessing : false
+        });
+        
+        // 恢復按鈕狀態
+        btn.innerHTML = originalButtonContent;
+        btn.classList.remove('analyzing');
+        
+        // 恢復所有按鈕
+        document.querySelectorAll('.ai-mode-btn').forEach(b => {
+            b.disabled = false;
+            b.classList.remove('disabled');
+        });
+        
+        // 使用統一的清理
+        if (window.aiRequestManager) {
+            window.aiRequestManager.cleanup();
+        }
+        
+        debugLog('cleanup', '清理完成');
+    }
+    
+    debugLog('end', `=== ${mode} 模式分析結束 ===`);
+}
+
+/**
+ * 判斷是否應該使用分段分析
+ */
+function shouldUseSegmentAnalysisForFile(mode, fileSize, estimatedTokens) {
+    // 不同模式的 token 閾值
+    const thresholds = {
+        'quick': 100000,   // 快速模式：100K tokens
+        'smart': 120000,   // 智能模式：120K tokens  
+        'deep': 80000      // 深度模式：80K tokens (更保守)
+    };
+    
+    const threshold = thresholds[mode] || 100000;
+    
+    // 深度分析對大檔案更敏感
+    if (mode === 'deep') {
+        return estimatedTokens > threshold || fileSize > 200000; // 200KB
+    }
+    
+    // 其他模式的判斷
+    return estimatedTokens > threshold || fileSize > 500000; // 500KB
+}
+
+/**
+ * 獲取模式對應的 token 閾值
+ */
+function getTokenThreshold(mode) {
+    const thresholds = {
+        'quick': 100000,
+        'smart': 120000,
+        'deep': 80000
+    };
+    return thresholds[mode] || 100000;
+}
+
+/**
+ * 處理分析錯誤
+ */
+function handleAnalysisError(conversationItem, error, mode, provider) {
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    const thinkingDiv = conversationItem.querySelector('.ai-thinking');
+    
+    // 移除 loading
+    if (thinkingDiv) {
+        thinkingDiv.style.display = 'none';
+    }
+    
+    // 分析錯誤類型
+    let errorType = 'general';
+    let suggestion = '';
+    
+    const errorMessage = error.message.toLowerCase();
+    
+    if (errorMessage.includes('contextwindowexceeded') || 
+        errorMessage.includes('prompt is too long')) {
+        errorType = 'context_exceeded';
+        suggestion = `
+            <div class="error-suggestion">
+                <h4>💡 建議解決方案：</h4>
+                <button class="suggestion-btn" onclick="executeSegmentAnalysis('${mode}')">
+                    🧩 使用分段分析
+                </button>
+                <button class="suggestion-btn" onclick="document.querySelector('.ai-mode-btn.quick').click()">
+                    ⚡ 改用快速分析
+                </button>
+            </div>
+        `;
+    } else if (errorMessage.includes('rate limit')) {
+        errorType = 'rate_limit';
+        suggestion = `
+            <div class="error-suggestion">
+                <h4>💡 建議解決方案：</h4>
+                <p>請等待 30-60 秒後重試，或切換到其他 AI Provider。</p>
+                <button class="suggestion-btn" onclick="setTimeout(() => executeAIAnalysis('${mode}'), 30000)">
+                    ⏳ 30秒後重試
+                </button>
+            </div>
+        `;
+    } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+        errorType = 'network';
+        suggestion = `
+            <div class="error-suggestion">
+                <h4>💡 建議解決方案：</h4>
+                <button class="suggestion-btn" onclick="executeAIAnalysis('${mode}')">
+                    🔄 重新分析
+                </button>
+                <button class="suggestion-btn" onclick="switchProviderAndRetry('realtek')">
+                    🏢 切換到 Realtek
+                </button>
+            </div>
+        `;
+    }
+    
+    // 顯示錯誤
+    if (contentDiv) {
+        contentDiv.innerHTML = `
+            <div class="ai-error ${errorType}-error">
+                <div class="error-header">
+                    <span class="error-icon">❌</span>
+                    <h4>分析失敗</h4>
+                </div>
+                <div class="error-content">
+                    <p><strong>錯誤訊息：</strong> ${escapeHtml(error.message)}</p>
+                    <p><strong>模式：</strong> ${mode}</p>
+                    <p><strong>Provider：</strong> ${provider}</p>
+                    ${suggestion}
+                </div>
+                <details class="error-details">
+                    <summary>技術詳情</summary>
+                    <pre>${escapeHtml(error.stack || error.message)}</pre>
+                </details>
+            </div>
+        `;
     }
 }
 
@@ -4742,17 +4988,16 @@ function displayFullAnalysis(data) {
 
 // 創建對話項目
 function createConversationItem(mode) {
+    const conversationItem = document.createElement('div');
+    conversationItem.className = 'ai-conversation-item';
+    const conversationId = `conversation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    conversationItem.id = conversationId;
+    
     const modeInfo = {
         'smart': { icon: '🧠', name: '智能分析' },
         'quick': { icon: '⚡', name: '快速分析' },
         'deep': { icon: '🔍', name: '深度分析' }
-    }[mode];
-
-	// 在創建對話項目時，確保按鈕有唯一的 ID
-	const conversationId = `conversation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const conversationItem = document.createElement('div');
-    conversationItem.className = 'ai-conversation-item';
-    conversationItem.id = `conversation-${Date.now()}`;
+    }[mode] || { icon: '🤖', name: '分析' };
     
     conversationItem.innerHTML = `
         <div class="ai-conversation-header">
@@ -4761,17 +5006,17 @@ function createConversationItem(mode) {
                     <span class="mode-icon">${modeInfo.icon}</span>
                     <span class="mode-text">${modeInfo.name}</span>
                 </span>
-                <span class="model-info">${selectedModel}</span>
+                <span class="model-info">${selectedModel || 'Unknown'}</span>
                 <span class="timestamp">${new Date().toLocaleTimeString()}</span>
             </div>
             <div class="conversation-actions">
-                <button class="copy-btn" onclick="copyAIResponse('${conversationItem.id}')">
+                <button class="copy-btn" onclick="copyAIResponse('${conversationId}')">
                     📋 複製
                 </button>
-                <button class="export-html-btn" onclick="exportSingleResponse('${conversationItem.id}', 'html')">
+                <button class="export-html-btn" onclick="exportSingleResponse('${conversationId}', 'html')">
                     🌐 HTML
                 </button>
-                <button class="export-md-btn" onclick="exportSingleResponse('${conversationItem.id}', 'markdown')">
+                <button class="export-md-btn" onclick="exportSingleResponse('${conversationId}', 'markdown')">
                     📝 MD
                 </button>
             </div>
@@ -4791,10 +5036,36 @@ function createConversationItem(mode) {
         </div>
     `;
     
-    // 添加到對話歷史
-    conversationHistory.push(conversationItem);
+    // 添加到對話歷史（如果存在）
+    if (window.conversationHistory) {
+        window.conversationHistory.push(conversationItem);
+    }
+    
+    // 滾動到新內容
+    setTimeout(() => {
+        conversationItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
     
     return conversationItem;
+}
+
+/**
+ * 切換 Provider 並重試
+ */
+function switchProviderAndRetry(provider) {
+    const providerSelect = document.getElementById('providerSelectInline');
+    if (providerSelect) {
+        providerSelect.value = provider;
+        providerSelect.dispatchEvent(new Event('change'));
+        
+        // 等待切換完成後重試
+        setTimeout(() => {
+            const smartBtn = document.querySelector('.ai-mode-btn[data-mode="smart"]');
+            if (smartBtn) {
+                smartBtn.click();
+            }
+        }, 500);
+    }
 }
 
 // 提取段落摘要
@@ -6267,3 +6538,420 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// 添加分段分析函數
+async function executeSegmentAnalysis(mode) {
+    if (!window.aiRequestManager) {
+        console.error('AIRequestManager 未初始化');
+        return;
+    }
+
+    // 使用統一的請求管理器
+    const signal = window.aiRequestManager.startRequest(`segment-${mode}`);
+    
+    const responseDiv = document.getElementById('aiResponse');
+    const responseContent = document.getElementById('aiResponseContent');
+    responseDiv.classList.add('active');
+    
+    // 創建分段分析對話項目
+    const conversationItem = createSegmentAnalysisItem(mode);
+    responseContent.appendChild(conversationItem);
+    
+    const contentDiv = conversationItem.querySelector('.ai-response-text');
+    const progressDiv = conversationItem.querySelector('.segment-progress');
+    
+    try {
+        const currentProvider = document.getElementById('providerSelectInline')?.value || 'realtek';
+        const currentModel = selectedModel || 'chat-chattek-qwen';
+        
+        const response = await fetch('/api/ai/segment-analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
+                provider: currentProvider,
+                model: currentModel,
+                mode: mode,
+                file_path: filePath,
+                file_name: fileName,
+                content: fileContent
+            }),
+            signal: signal
+        });
+        
+        await handleSegmentStreamResponse(response, conversationItem);
+        
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('分段分析已取消');
+        } else {
+            console.error('Segment analysis error:', error);
+            showSegmentError(conversationItem, error.message);
+        }
+    } finally {
+        if (window.aiRequestManager) {
+            window.aiRequestManager.cleanup();
+        }
+    }
+}
+
+// 創建分段分析對話項目
+function createSegmentAnalysisItem(mode) {
+    const conversationItem = document.createElement('div');
+    conversationItem.className = 'ai-conversation-item segment-analysis';
+    conversationItem.id = `segment-conversation-${Date.now()}`;
+    
+    const modeInfo = {
+        'smart': { icon: '🧠', name: '智能分段分析' },
+        'quick': { icon: '⚡', name: '快速分段分析' },
+        'deep': { icon: '🔍', name: '深度分段分析' }
+    }[mode];
+    
+    conversationItem.innerHTML = `
+        <div class="ai-conversation-header">
+            <div class="conversation-meta">
+                <span class="mode-indicator">
+                    <span class="mode-icon">${modeInfo.icon}</span>
+                    <span class="mode-text">${modeInfo.name}</span>
+                </span>
+                <span class="model-info">${selectedModel}</span>
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+        </div>
+        <div class="ai-conversation-content">
+            <div class="segment-progress">
+                <div class="progress-header">
+                    <h4>📊 分段分析進度</h4>
+                    <div class="progress-stats">
+                        <span class="current-segment">準備中...</span>
+                        <span class="total-progress">0%</span>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="segment-status">
+                    <span class="status-text">正在初始化分段策略...</span>
+                </div>
+            </div>
+            <div class="ai-response-text">
+                <div class="segment-results"></div>
+                <div class="final-analysis" style="display: none;"></div>
+            </div>
+        </div>
+    `;
+    
+    return conversationItem;
+}
+
+// 處理分段流式響應
+async function handleSegmentStreamResponse(response, conversationItem) {
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    const progressDiv = conversationItem.querySelector('.segment-progress');
+    const segmentResults = conversationItem.querySelector('.segment-results');
+    const finalAnalysis = conversationItem.querySelector('.final-analysis');
+    
+    let totalSegments = 0;
+    let processedSegments = 0;
+    let currentSegmentDiv = null; // 記錄當前段落的 DOM 元素
+    let currentSegmentContent = ""; // 累積當前段落的內容
+    
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            if (!window.aiRequestManager || !window.aiRequestManager.isProcessing) {
+                reader.cancel();
+                break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        switch (data.type) {
+                            case 'segment_start':
+                                totalSegments = data.total_segments;
+                                updateSegmentProgress(progressDiv, 0, totalSegments, '開始分段分析...');
+                                break;
+                                
+                            case 'segment_progress':
+                                updateSegmentProgress(
+                                    progressDiv, 
+                                    data.current_segment - 1, 
+                                    data.total_segments, 
+                                    data.message
+                                );
+                                break;
+                            
+                            // 🔥 新增：段落開始事件
+                            case 'segment_content_start':
+                                currentSegmentDiv = createSegmentContainer(
+                                    segmentResults, 
+                                    data.segment_number, 
+                                    totalSegments
+                                );
+                                currentSegmentContent = "";
+                                break;
+                            
+                            // 🔥 新增：段落 streaming 內容
+                            case 'segment_content_chunk':
+                                if (currentSegmentDiv) {
+                                    currentSegmentContent += data.content;
+                                    updateSegmentStreamingContent(
+                                        currentSegmentDiv, 
+                                        currentSegmentContent,
+                                        data.segment_number
+                                    );
+                                    
+                                    // 自動滾動到當前段落
+                                    setTimeout(() => {
+                                        currentSegmentDiv.scrollIntoView({ 
+                                            behavior: 'smooth', 
+                                            block: 'end' 
+                                        });
+                                    }, 50);
+                                }
+                                break;
+                            
+                            // 🔥 修改：段落完成事件
+                            case 'segment_complete':
+                                processedSegments++;
+                                if (currentSegmentDiv) {
+                                    markSegmentComplete(currentSegmentDiv, data.segment);
+                                }
+                                updateSegmentProgress(
+                                    progressDiv, 
+                                    processedSegments, 
+                                    totalSegments, 
+                                    `完成段落 ${processedSegments}/${totalSegments}`
+                                );
+                                break;
+                                
+                            case 'segment_error':
+                                if (currentSegmentDiv) {
+                                    markSegmentError(currentSegmentDiv, data.segment);
+                                }
+                                break;
+                            
+                            // 🔥 新增：綜合分析 streaming
+                            case 'final_analysis_chunk':
+                                if (!finalAnalysis.style.display || finalAnalysis.style.display === 'none') {
+                                    showFinalAnalysisContainer(finalAnalysis);
+                                }
+                                updateFinalAnalysisStreaming(finalAnalysis, data.content);
+                                break;
+                                
+                            case 'generating_summary':
+                                updateSegmentProgress(progressDiv, totalSegments, totalSegments, data.message);
+                                if (data.streaming) {
+                                    // 準備顯示 streaming 的綜合分析
+                                    showFinalAnalysisContainer(finalAnalysis);
+                                }
+                                break;
+                                
+                            case 'segment_analysis_complete':
+                                progressDiv.style.display = 'none';
+                                if (!finalAnalysis.innerHTML) {
+                                    // 如果沒有通過 streaming 更新，使用完整內容
+                                    showFinalAnalysis(finalAnalysis, data);
+                                }
+                                markAnalysisComplete(finalAnalysis, data);
+                                break;
+                                
+                            case 'error':
+                                throw new Error(data.error);
+                        }
+                    } catch (e) {
+                        console.error('解析分段數據錯誤:', e);
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+}
+
+function createSegmentContainer(container, segmentNumber, totalSegments) {
+    const segmentDiv = document.createElement('div');
+    segmentDiv.className = 'segment-result streaming';
+    segmentDiv.id = `segment-${segmentNumber}`;
+    segmentDiv.innerHTML = `
+        <div class="segment-header">
+            <h5>📄 段落 ${segmentNumber}/${totalSegments}</h5>
+            <span class="segment-status processing">⏳ 分析中...</span>
+        </div>
+        <div class="segment-content">
+            <div class="streaming-content"></div>
+        </div>
+    `;
+    container.appendChild(segmentDiv);
+    return segmentDiv;
+}
+
+function updateSegmentStreamingContent(segmentDiv, content, segmentNumber) {
+    const contentArea = segmentDiv.querySelector('.streaming-content');
+    if (contentArea) {
+        // 使用與主要分析相同的格式化函數
+        const formattedContent = formatStreamingContent(content);
+        contentArea.innerHTML = formattedContent;
+    }
+}
+
+function markSegmentComplete(segmentDiv, segmentData) {
+    const statusSpan = segmentDiv.querySelector('.segment-status');
+    if (statusSpan) {
+        statusSpan.className = 'segment-status success';
+        statusSpan.innerHTML = '✅ 完成';
+    }
+    segmentDiv.classList.remove('streaming');
+    segmentDiv.classList.add('completed');
+}
+
+function markSegmentError(segmentDiv, segmentData) {
+    const statusSpan = segmentDiv.querySelector('.segment-status');
+    if (statusSpan) {
+        statusSpan.className = 'segment-status error';
+        statusSpan.innerHTML = '❌ 失敗';
+    }
+    const contentArea = segmentDiv.querySelector('.streaming-content');
+    if (contentArea) {
+        contentArea.innerHTML = `
+            <div class="error-content">
+                <strong>分析失敗：</strong> ${escapeHtml(segmentData.error || '未知錯誤')}
+            </div>
+        `;
+    }
+}
+
+function showFinalAnalysisContainer(container) {
+    container.style.display = 'block';
+    if (!container.innerHTML) {
+        container.innerHTML = `
+            <div class="final-analysis-header">
+                <h3>📊 綜合分析報告</h3>
+                <div class="analysis-status">
+                    <span class="status-text">正在生成綜合分析...</span>
+                </div>
+            </div>
+            <div class="final-analysis-content streaming">
+                <div class="streaming-content"></div>
+            </div>
+        `;
+    }
+}
+
+function updateFinalAnalysisStreaming(container, chunk) {
+    const contentArea = container.querySelector('.streaming-content');
+    if (contentArea) {
+        // 累積內容並格式化
+        const currentContent = contentArea.getAttribute('data-content') || '';
+        const newContent = currentContent + chunk;
+        contentArea.setAttribute('data-content', newContent);
+        
+        const formattedContent = formatStreamingContent(newContent);
+        contentArea.innerHTML = formattedContent;
+        
+        // 滾動到底部
+        setTimeout(() => {
+            container.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 50);
+    }
+}
+
+function markAnalysisComplete(container, data) {
+    const statusText = container.querySelector('.status-text');
+    if (statusText) {
+        statusText.textContent = `分析完成 - 成功: ${data.successful_segments}/${data.total_segments} 段`;
+    }
+    
+    const contentArea = container.querySelector('.streaming-content');
+    if (contentArea) {
+        contentArea.parentElement.classList.remove('streaming');
+        contentArea.parentElement.classList.add('completed');
+    }
+}
+
+// 更新分段進度
+function updateSegmentProgress(progressDiv, current, total, message) {
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+    
+    const progressFill = progressDiv.querySelector('.progress-fill');
+    const currentSegmentSpan = progressDiv.querySelector('.current-segment');
+    const totalProgressSpan = progressDiv.querySelector('.total-progress');
+    const statusText = progressDiv.querySelector('.status-text');
+    
+    if (progressFill) progressFill.style.width = `${percentage}%`;
+    if (currentSegmentSpan) currentSegmentSpan.textContent = `${current}/${total}`;
+    if (totalProgressSpan) totalProgressSpan.textContent = `${percentage}%`;
+    if (statusText) statusText.textContent = message;
+}
+
+// 添加段落結果
+function addSegmentResult(container, segment, index) {
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'segment-result success';
+    resultDiv.innerHTML = `
+        <div class="segment-header">
+            <h5>📄 段落 ${segment.segment_number}</h5>
+            <span class="segment-range">${segment.range}</span>
+            <span class="success-badge">✓ 完成</span>
+        </div>
+        <div class="segment-content">
+            ${formatStreamingContent(segment.analysis)}
+        </div>
+    `;
+    container.appendChild(resultDiv);
+    
+    // 滾動到新結果
+    setTimeout(() => resultDiv.scrollIntoView({ behavior: 'smooth', block: 'end' }), 100);
+}
+
+// 顯示最終分析
+function showFinalAnalysis(container, data) {
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div class="final-analysis-header">
+            <h3>📊 綜合分析報告</h3>
+            <div class="analysis-stats">
+                <span>總段落：${data.total_segments}</span>
+                <span>成功：${data.successful_segments}</span>
+                <span>失敗：${data.total_segments - data.successful_segments}</span>
+            </div>
+        </div>
+        <div class="final-analysis-content">
+            ${formatStreamingContent(data.final_analysis)}
+        </div>
+    `;
+    
+    // 滾動到最終分析
+    setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+}
+
+// 修改錯誤處理，在上下文超出時建議使用分段分析
+function handleContextExceededError(errorDiv, mode) {
+    const segmentBtn = document.createElement('button');
+    segmentBtn.className = 'retry-btn segment-analysis';
+    segmentBtn.innerHTML = `
+        <span class="btn-text">🧩 使用分段分析</span>
+        <span class="btn-desc">將大檔案分割成多個小段分析</span>
+    `;
+    segmentBtn.onclick = () => executeSegmentAnalysis(mode);
+    
+    const retryButtons = errorDiv.querySelector('.retry-buttons');
+    if (retryButtons) {
+        retryButtons.appendChild(segmentBtn);
+    }
+}

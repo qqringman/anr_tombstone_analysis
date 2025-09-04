@@ -916,3 +916,386 @@ def get_models(provider):
             for model_id, info in models.items()
         ]
     })
+
+# 在 routes/ai_analyzer.py 中添加
+@ai_analyzer_bp.route('/api/ai/segment-analyze', methods=['POST'])
+def segment_analyze():
+    """分段分析 API - 支持每段 streaming 輸出"""
+    import time
+    from datetime import datetime
+    
+    try:
+        data = request.json
+        session_id = data.get('session_id', str(time.time()))
+        provider_name = data.get('provider', 'realtek')
+        model = data.get('model', AI_PROVIDERS[provider_name]['default_model'])
+        mode = AnalysisMode(data.get('mode', 'deep'))
+        file_path = data.get('file_path', '')
+        file_name = data.get('file_name', '')
+        file_content = data.get('content', '')
+        
+        print(f"開始分段分析 - 內容長度: {len(file_content)}")
+        
+        # 創建 Provider
+        provider = ProviderFactory.create_provider(provider_name, model)
+        
+        # 計算分段策略
+        segments = create_smart_segments(file_content, provider, mode)
+        total_segments = len(segments)
+        
+        print(f"分段策略: {total_segments} 段")
+        
+        def generate_segments():
+            """生成分段分析結果 - 每段支持 streaming"""
+            try:
+                # 發送開始事件
+                yield f"data: {json.dumps({'type': 'segment_start', 'total_segments': total_segments, 'mode': mode.value})}\n\n"
+                
+                segment_results = []
+                
+                for i, segment in enumerate(segments):
+                    segment_num = i + 1
+                    print(f"處理段落 {segment_num}/{total_segments}")
+                    
+                    # 發送進度更新
+                    progress_data = {
+                        'type': 'segment_progress',
+                        'current_segment': segment_num,
+                        'total_segments': total_segments,
+                        'progress': int((segment_num - 1) / total_segments * 100),
+                        'message': f'正在分析第 {segment_num} 段（共 {total_segments} 段）'
+                    }
+                    yield f"data: {json.dumps(progress_data)}\n\n"
+                    
+                    # 發送段落開始事件
+                    yield f"data: {json.dumps({'type': 'segment_content_start', 'segment_number': segment_num})}\n\n"
+                    
+                    try:
+                        # 創建單段分析上下文
+                        segment_context = AnalysisContext(
+                            file_path=file_path,
+                            file_content=segment['content'],
+                            mode=mode,
+                            previous_messages=[],
+                            metadata={
+                                'segment_number': segment_num,
+                                'total_segments': total_segments,
+                                'segment_range': segment['range'],
+                                'is_segment': True
+                            }
+                        )
+                        
+                        # 🔥 關鍵改進：使用 streaming 分析每個段落
+                        segment_content = ""
+                        
+                        # 逐步輸出每段的內容
+                        for chunk in provider.stream_analyze_sync(segment_context):
+                            segment_content += chunk
+                            # 實時發送每段的 streaming 內容
+                            yield f"data: {json.dumps({'type': 'segment_content_chunk', 'segment_number': segment_num, 'content': chunk})}\n\n"
+                        
+                        # 段落完成
+                        segment_data = {
+                            'segment_number': segment_num,
+                            'range': segment['range'],
+                            'content_length': len(segment['content']),
+                            'analysis': segment_content,
+                            'success': True
+                        }
+                        
+                        segment_results.append(segment_data)
+                        
+                        # 發送段落完成事件
+                        yield f"data: {json.dumps({'type': 'segment_complete', 'segment': segment_data})}\n\n"
+                        
+                    except Exception as segment_error:
+                        print(f"段落 {segment_num} 分析失敗: {str(segment_error)}")
+                        
+                        segment_data = {
+                            'segment_number': segment_num,
+                            'range': segment['range'],
+                            'error': str(segment_error),
+                            'success': False
+                        }
+                        
+                        segment_results.append(segment_data)
+                        yield f"data: {json.dumps({'type': 'segment_error', 'segment': segment_data})}\n\n"
+                    
+                    # 段落間延遲（避免速率限制）
+                    if segment_num < total_segments:
+                        time.sleep(1)  # 減少到1秒延遲
+                
+                # 生成綜合分析 - 也使用 streaming
+                print("生成綜合分析...")
+                yield f"data: {json.dumps({'type': 'generating_summary', 'message': '正在生成綜合分析...', 'streaming': True})}\n\n"
+                
+                # 🔥 綜合分析也支持 streaming
+                final_analysis = ""
+                try:
+                    for chunk in generate_comprehensive_analysis_streaming(segment_results, file_path, provider, mode):
+                        final_analysis += chunk
+                        # 發送綜合分析的 streaming 內容
+                        yield f"data: {json.dumps({'type': 'final_analysis_chunk', 'content': chunk})}\n\n"
+                except Exception as e:
+                    print(f"綜合分析失敗: {str(e)}")
+                    final_analysis = generate_comprehensive_analysis(segment_results, file_path, provider, mode)
+                
+                # 發送最終結果
+                final_data = {
+                    'type': 'segment_analysis_complete',
+                    'total_segments': total_segments,
+                    'successful_segments': len([s for s in segment_results if s.get('success')]),
+                    'final_analysis': final_analysis,
+                    'segment_results': segment_results
+                }
+                yield f"data: {json.dumps(final_data)}\n\n"
+                
+            except Exception as e:
+                print(f"分段分析錯誤: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        
+        return Response(
+            stream_with_context(generate_segments()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive',
+                'Content-Type': 'text/event-stream'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def generate_comprehensive_analysis_streaming(segment_results, file_path, provider, mode):
+    """生成綜合分析 - streaming 版本"""
+    successful_results = [s for s in segment_results if s.get('success') and s.get('analysis')]
+    
+    if not successful_results:
+        yield "無法生成綜合分析：所有段落分析都失敗了。"
+        return
+    
+    # 合併所有成功的分析結果
+    all_analyses = [s['analysis'] for s in successful_results]
+    
+    # 創建綜合分析提示詞
+    synthesis_prompt = f"""
+基於以下 {len(all_analyses)} 個段落的分析結果，請生成一個綜合的分析報告：
+
+檔案：{file_path}
+分析模式：{mode.value}
+
+段落分析結果：
+{chr(10).join([f"段落 {i+1}: {analysis[:500]}..." for i, analysis in enumerate(all_analyses)])}
+
+請提供：
+1. 綜合問題摘要
+2. 主要發現和根本原因
+3. 影響範圍評估
+4. 統一的解決方案建議
+5. 防範措施
+
+請確保分析結果連貫且完整，避免重複內容。
+"""
+    
+    try:
+        # 使用 provider 生成綜合分析 - streaming 方式
+        context = AnalysisContext(
+            file_path=file_path,
+            file_content=synthesis_prompt,
+            mode=mode,
+            previous_messages=[],
+            metadata={'is_synthesis': True}
+        )
+        
+        # 使用 streaming 方式輸出綜合分析
+        for chunk in provider.stream_analyze_sync(context):
+            yield chunk
+            
+    except Exception as e:
+        print(f"綜合分析 streaming 失敗: {str(e)}")
+        # 降級到原來的同步方式
+        yield generate_comprehensive_analysis(segment_results, file_path, provider, mode)
+
+def create_smart_segments(content, provider, mode):
+    """智能分段策略"""
+    # 根據模式和 provider 確定每段最大大小
+    if hasattr(provider, 'model') and provider.model == 'chat-chattek-qwen':
+        max_tokens_per_segment = 40000  # 256K 模型
+    else:
+        max_tokens_per_segment = 25000  # 128K 模型
+    
+    if mode == AnalysisMode.DEEP:
+        max_tokens_per_segment = int(max_tokens_per_segment * 0.6)  # 深度分析使用更小的段
+    
+    chars_per_token = getattr(provider, 'chars_per_token', 2.5)
+    max_chars_per_segment = int(max_tokens_per_segment * chars_per_token)
+    
+    segments = []
+    
+    # 嘗試按日誌邊界分段
+    if is_log_file(content):
+        segments = split_by_log_boundaries(content, max_chars_per_segment)
+    else:
+        # 按固定大小分段（帶重疊）
+        segments = split_by_size_with_overlap(content, max_chars_per_segment)
+    
+    print(f"分段結果: {len(segments)} 段, 最大段落: {max(len(s['content']) for s in segments)} 字元")
+    
+    return segments
+
+def is_log_file(content):
+    """檢測是否為日誌檔案"""
+    log_indicators = ['tombstone', 'anr', 'crash', 'backtrace', 'stack trace', 'fatal']
+    content_lower = content[:5000].lower()
+    return any(indicator in content_lower for indicator in log_indicators)
+
+def split_by_log_boundaries(content, max_chars_per_segment):
+    """按日誌邊界分段"""
+    segments = []
+    
+    # 嘗試找到自然的分段點
+    separators = [
+        '\n*** *** ***',  # Tombstone 分隔符
+        '\nANR in ',      # ANR 開始
+        '\nmain" prio=',  # 主線程
+        '\n"Thread-',     # 線程開始
+        '\nBacktrace:',   # 堆棧開始
+        '\n\n\n',         # 三個空行
+    ]
+    
+    lines = content.split('\n')
+    current_segment = []
+    current_size = 0
+    
+    for line in lines:
+        line_size = len(line) + 1  # +1 for newline
+        
+        # 檢查是否到達分段邊界
+        should_split = False
+        if current_size + line_size > max_chars_per_segment:
+            should_split = True
+        else:
+            for sep in separators:
+                if line.startswith(sep.strip()):
+                    if current_size > max_chars_per_segment * 0.3:  # 至少 30% 才分段
+                        should_split = True
+                    break
+        
+        if should_split and current_segment:
+            segment_content = '\n'.join(current_segment)
+            segments.append({
+                'content': segment_content,
+                'range': f'{len(segments) * max_chars_per_segment}-{len(segments) * max_chars_per_segment + len(segment_content)}'
+            })
+            current_segment = []
+            current_size = 0
+        
+        current_segment.append(line)
+        current_size += line_size
+    
+    # 最後一段
+    if current_segment:
+        segment_content = '\n'.join(current_segment)
+        segments.append({
+            'content': segment_content,
+            'range': f'{len(segments) * max_chars_per_segment}-{len(segments) * max_chars_per_segment + len(segment_content)}'
+        })
+    
+    return segments
+
+def split_by_size_with_overlap(content, max_chars_per_segment):
+    """按固定大小分段（帶重疊）"""
+    segments = []
+    overlap_size = max_chars_per_segment // 10  # 10% 重疊
+    
+    start = 0
+    segment_num = 0
+    
+    while start < len(content):
+        end = start + max_chars_per_segment
+        
+        if end >= len(content):
+            # 最後一段
+            segment_content = content[start:]
+        else:
+            # 嘗試在換行處截斷
+            segment_content = content[start:end]
+            last_newline = segment_content.rfind('\n')
+            if last_newline > max_chars_per_segment * 0.8:
+                end = start + last_newline
+                segment_content = content[start:end]
+        
+        segments.append({
+            'content': segment_content,
+            'range': f'{start}-{end}'
+        })
+        
+        start = end - overlap_size
+        segment_num += 1
+        
+        if start >= len(content):
+            break
+    
+    return segments
+
+def generate_comprehensive_analysis(segment_results, file_path, provider, mode):
+    """生成綜合分析"""
+    successful_results = [s for s in segment_results if s.get('success') and s.get('analysis')]
+    
+    if not successful_results:
+        return "無法生成綜合分析：所有段落分析都失敗了。"
+    
+    # 合併所有成功的分析結果
+    all_analyses = [s['analysis'] for s in successful_results]
+    
+    # 創建綜合分析提示詞
+    synthesis_prompt = f"""
+基於以下 {len(all_analyses)} 個段落的分析結果，請生成一個綜合的分析報告：
+
+檔案：{file_path}
+分析模式：{mode.value}
+
+段落分析結果：
+{chr(10).join([f"段落 {i+1}: {analysis[:500]}..." for i, analysis in enumerate(all_analyses)])}
+
+請提供：
+1. 綜合問題摘要
+2. 主要發現和根本原因
+3. 影響範圍評估
+4. 統一的解決方案建議
+5. 預防措施
+
+請確保分析結果連貫且完整，避免重複內容。
+"""
+    
+    try:
+        # 使用 provider 生成綜合分析
+        context = AnalysisContext(
+            file_path=file_path,
+            file_content=synthesis_prompt,
+            mode=mode,
+            previous_messages=[],
+            metadata={'is_synthesis': True}
+        )
+        
+        return provider.analyze_sync(context)
+    except Exception as e:
+        print(f"生成綜合分析失敗: {str(e)}")
+        # 降級方案：簡單合併
+        return f"""
+# 分段分析綜合報告
+
+## 📊 分析概況
+- 總段落數：{len(segment_results)}
+- 成功分析：{len(successful_results)} 段
+- 失敗段落：{len(segment_results) - len(successful_results)} 段
+
+## 🔍 主要發現
+
+{chr(10).join([f"### 段落 {s['segment_number']} 分析結果{chr(10)}{s['analysis'][:1000]}...{chr(10)}" for s in successful_results[:3]])}
+
+## 💡 綜合建議
+基於以上分段分析，建議進一步查看各段落的詳細分析結果。
+"""
