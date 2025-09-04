@@ -1769,7 +1769,16 @@
 .segment-result.streaming .streaming-content {
     border-left: 3px solid #667eea;
     padding-left: 10px;
-    animation: pulse 1.5s infinite;
+}
+
+@keyframes borderPulse {
+    0%, 100% { border-left-color: #667eea; }
+    50% { border-left-color: #0f97d6; }
+}
+
+.segment-result.streaming .streaming-content {
+    border-left: 3px solid #667eea;
+    animation: borderPulse 3s infinite;
 }
 
 .segment-status.processing {
