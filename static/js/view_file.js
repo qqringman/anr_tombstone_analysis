@@ -235,6 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 綁定模式按鈕事件
     document.querySelectorAll('.ai-mode-btn').forEach(btn => {
+        btn.classList.remove('active', 'selected');
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             const mode = this.dataset.mode;
@@ -398,7 +399,6 @@ function getAIRequestManager() {
 }
 
 async function executeAIAnalysis(mode) {
-
     // 檢查 aiRequestManager 是否可用
     if (!window.aiRequestManager) {
         console.error('AIRequestManager 未初始化');
@@ -410,6 +410,12 @@ async function executeAIAnalysis(mode) {
     
     const btn = document.querySelector(`.ai-mode-btn[data-mode="${mode}"]`);
     if (!btn) return;
+    
+    // **新增：設定選中狀態**
+    document.querySelectorAll('.ai-mode-btn').forEach(b => {
+        b.classList.remove('selected');  // 移除所有選中狀態
+    });
+    btn.classList.add('selected');  // 設定當前按鈕為選中
     
     const conversationClass = `${mode}-mode`;
     
@@ -436,6 +442,12 @@ async function executeAIAnalysis(mode) {
     responseContent.appendChild(conversationItem);
     
     try {
+        // 獲取當前選中的 Provider 和 Model，如果沒有則使用 Realtek 預設
+        const currentProvider = document.getElementById('providerSelectInline')?.value || 'realtek';
+        const currentModel = selectedModel || 'chat-chattek-qwen';
+        
+        console.log(`AI分析使用: Provider=${currentProvider}, Model=${currentModel}`);
+        
         const requestManager = getAIRequestManager();
         const signal = requestManager.startRequest(mode);		
         const response = await fetch('/api/ai/analyze', {
@@ -443,15 +455,15 @@ async function executeAIAnalysis(mode) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 session_id: window.aiAnalyzer?.sessionId || Date.now().toString(),
-                provider: document.getElementById('providerSelectInline')?.value || 'realtek',
-                model: selectedModel,
+                provider: currentProvider,  
+                model: currentModel,        
                 mode: mode,
                 file_path: filePath,
                 file_name: fileName,
                 content: fileContent,
                 stream: true
             }),
-            signal: signal  // 使用統一的 signal
+            signal: signal  
         });
         
         await handleStreamResponse(response, conversationItem);
@@ -1632,15 +1644,13 @@ function setupAutoResizeTextarea() {
 	const textarea = document.getElementById('customQuestion');
 	if (!textarea) return;
 	
+	// **註釋掉自動調整高度的邏輯**
+	/*
 	function adjustHeight() {
-		// 重置高度以獲取正確的 scrollHeight
 		textarea.style.height = 'auto';
-		
-		// 計算新高度
-		const newHeight = Math.min(textarea.scrollHeight, 400); // 最大 400px
+		const newHeight = Math.min(textarea.scrollHeight, 400);
 		textarea.style.height = newHeight + 'px';
 		
-		// 如果超過最大高度，顯示滾動條
 		if (textarea.scrollHeight > 400) {
 			textarea.style.overflowY = 'auto';
 		} else {
@@ -1648,14 +1658,17 @@ function setupAutoResizeTextarea() {
 		}
 	}
 	
-	// 監聽輸入事件
 	textarea.addEventListener('input', adjustHeight);
-	
-	// 監聽視窗調整
 	window.addEventListener('resize', adjustHeight);
-	
-	// 初始調整
 	adjustHeight();
+	*/
+	
+	// **新的邏輯：保持固定高度**
+	textarea.style.height = '40px';
+	textarea.style.minHeight = '40px';
+	textarea.style.maxHeight = '40px';
+	textarea.style.overflowY = 'hidden';
+	textarea.style.resize = 'none';
 }
 
 // 快速問題下拉選單控制
