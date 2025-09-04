@@ -1500,175 +1500,181 @@ function improvedResizeDivider() {
     const chatArea = document.getElementById('aiChatArea');
     const inputArea = document.getElementById('aiInputArea');
     const rightPanel = document.getElementById('rightPanel');
+    const textarea = document.getElementById('customQuestion');
     
     if (!divider || !chatArea || !inputArea || !rightPanel) return;
     
-    // 設置初始比例 8:2
+    // 設置初始比例為8:2（聊天80%，輸入20%）
     const initializeRatio = () => {
         const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
         const dividerHeight = divider.offsetHeight;
         const totalHeight = rightPanel.offsetHeight;
         const availableHeight = totalHeight - headerHeight - dividerHeight;
         
-        // 8:2 比例
         const chatHeight = Math.floor(availableHeight * 0.8);
-        const inputHeight = Math.floor(availableHeight * 0.2);
+        const inputHeight = Math.max(Math.floor(availableHeight * 0.2), 100);
         
         chatArea.style.height = `${chatHeight}px`;
         inputArea.style.height = `${inputHeight}px`;
     };
     
-    // 初始化比例
     setTimeout(initializeRatio, 100);
-    
-    // 視窗大小改變時重新計算
     window.addEventListener('resize', initializeRatio);
-	
-	let isResizing = false;
-	let currentY = 0;
-	let animationFrame = null;
-	
-	// 使用 requestAnimationFrame 優化性能
-	function updateSizes() {
-		if (!isResizing) return;
-		
-		const rect = rightPanel.getBoundingClientRect();
-		const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-		const dividerHeight = divider.offsetHeight;
-		
-		// 計算相對於面板的位置
-		const relativeY = currentY - rect.top - headerHeight;
-		const availableHeight = rect.height - headerHeight - dividerHeight;
-		
-		// 計算新高度
-		let newChatHeight = relativeY - dividerHeight / 2;
-		let newInputHeight = availableHeight - newChatHeight;
-		
-		// 最小高度限制
-		const minHeight = 50;
-		
-		// 應用限制
-		newChatHeight = Math.max(minHeight, Math.min(newChatHeight, availableHeight - minHeight));
-		newInputHeight = availableHeight - newChatHeight;
-		
-		// 設定高度
-		chatArea.style.height = `${newChatHeight}px`;
-		inputArea.style.height = `${newInputHeight}px`;
-		
-		// 繼續動畫
-		if (isResizing) {
-			animationFrame = requestAnimationFrame(updateSizes);
-		}
-	}
-	
-	divider.addEventListener('mousedown', function(e) {
-		isResizing = true;
-		currentY = e.clientY;
-		
-		divider.classList.add('dragging');
-		document.body.style.cursor = 'ns-resize';
-		document.body.style.userSelect = 'none';
-		
-		// 添加覆蓋層防止 iframe 等元素干擾
-		const overlay = document.createElement('div');
-		overlay.id = 'resize-overlay';
-		overlay.style.cssText = `
-			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			z-index: 99999;
-			cursor: ns-resize;
-		`;
-		document.body.appendChild(overlay);
-		
-		e.preventDefault();
-		updateSizes();
-	});
-	
-	document.addEventListener('mousemove', function(e) {
-		if (!isResizing) return;
-		currentY = e.clientY;
-	});
-	
-	document.addEventListener('mouseup', function() {
-		if (!isResizing) return;
-		
-		isResizing = false;
-		cancelAnimationFrame(animationFrame);
-		
-		divider.classList.remove('dragging');
-		document.body.style.cursor = '';
-		document.body.style.userSelect = '';
-		
-		// 移除覆蓋層
-		const overlay = document.getElementById('resize-overlay');
-		if (overlay) overlay.remove();
-	});
-	
-	// 添加雙擊重置
-	addDoubleClickReset(divider, chatArea, inputArea, rightPanel);
+    
+    let isResizing = false;
+    let currentY = 0;
+    let animationFrame = null;
+    
+    function updateSizes() {
+        if (!isResizing) return;
+        
+        const rect = rightPanel.getBoundingClientRect();
+        const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
+        const dividerHeight = divider.offsetHeight;
+        
+        const relativeY = currentY - rect.top - headerHeight;
+        const availableHeight = rect.height - headerHeight - dividerHeight;
+        
+        let newChatHeight = relativeY - dividerHeight / 2;
+        let newInputHeight = availableHeight - newChatHeight;
+        
+        const minChatHeight = 200;
+        const minInputHeight = 100;
+        const maxInputHeight = availableHeight * 0.6;
+        
+        newInputHeight = Math.max(minInputHeight, Math.min(newInputHeight, maxInputHeight));
+        newChatHeight = availableHeight - newInputHeight;
+        
+        chatArea.style.height = `${newChatHeight}px`;
+        inputArea.style.height = `${newInputHeight}px`;
+        
+        // 拖拽時：直接計算並設置 textarea 高度
+        if (textarea && isResizing) {
+            // 計算 textarea 可用空間（扣除 padding, controls 等）
+            const inputAreaPadding = 24; // 上下 padding
+            const controlsHeight = 44; // 控制按鈕區域高度
+            const tokenUsageHeight = textarea.parentElement.querySelector('.token-usage-top')?.offsetHeight || 0;
+            
+            const availableTextareaHeight = newInputHeight - inputAreaPadding - controlsHeight - tokenUsageHeight;
+            const minTextareaHeight = 60;
+            
+            const finalTextareaHeight = Math.max(minTextareaHeight, availableTextareaHeight);
+            
+            // 強制設置高度
+            textarea.style.height = `${finalTextareaHeight}px !important`;
+            textarea.style.minHeight = `${finalTextareaHeight}px`;
+            textarea.style.resize = 'none';
+        }
+        
+        if (isResizing) {
+            animationFrame = requestAnimationFrame(updateSizes);
+        }
+    }
+    
+    // 拖拽開始
+    divider.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        currentY = e.clientY;
+        
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        
+        e.preventDefault();
+        updateSizes();
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        currentY = e.clientY;
+    });
+    
+    // 拖拽結束
+    document.addEventListener('mouseup', function() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        cancelAnimationFrame(animationFrame);
+        
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // 放開拖拽時：計算並設置合適的 textarea 高度
+        if (textarea) {
+            // 計算當前輸入區域的實際可用高度
+            const inputAreaHeight = inputArea.offsetHeight;
+            const inputAreaPadding = 24; // 上下 padding
+            const controlsHeight = 44; // 控制按鈕區域高度
+            const tokenUsageHeight = textarea.parentElement.querySelector('.token-usage-top')?.offsetHeight || 0;
+            
+            const availableHeight = inputAreaHeight - inputAreaPadding - controlsHeight - tokenUsageHeight;
+            const finalHeight = Math.max(60, availableHeight); // 最小 60px
+            
+            // 設置 textarea 填滿可用空間
+            textarea.style.height = `${finalHeight}px`;
+            textarea.style.minHeight = `${finalHeight}px`;
+            textarea.style.resize = 'vertical'; // 恢復手動調整功能
+            
+            console.log('設置 textarea 高度:', finalHeight, 'px'); // 調試用
+        }
+    });
+    
+    // 雙擊重置
+    divider.addEventListener('dblclick', function() {
+        initializeRatio();
+        
+        // 重置後也要恢復 textarea resize 功能
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.resize = 'vertical';
+        }
+    });
 }
 
 function addDoubleClickReset(divider, chatArea, inputArea, rightPanel) {
-	divider.addEventListener('dblclick', function() {
-		const totalHeight = rightPanel.offsetHeight;
-		const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
-		const dividerHeight = divider.offsetHeight;
-		const availableHeight = totalHeight - headerHeight - dividerHeight;
-		
-		// 重置為預設比例（70% / 30%）
-		const defaultChatHeight = availableHeight * 0.7;
-		const defaultInputHeight = availableHeight * 0.3;
-		
-		// 添加過渡動畫
-		chatArea.style.transition = 'height 0.3s ease';
-		inputArea.style.transition = 'height 0.3s ease';
-		
-		chatArea.style.height = `${defaultChatHeight}px`;
-		inputArea.style.height = `${defaultInputHeight}px`;
-		
-		// 移除過渡
-		setTimeout(() => {
-			chatArea.style.transition = '';
-			inputArea.style.transition = '';
-		}, 300);
-		
-		console.log('Reset to default proportions (70% / 30%)');
-	});
+    divider.addEventListener('dblclick', function() {
+        const totalHeight = rightPanel.offsetHeight;
+        const headerHeight = rightPanel.querySelector('.ai-panel-header').offsetHeight;
+        const dividerHeight = divider.offsetHeight;
+        const availableHeight = totalHeight - headerHeight - dividerHeight;
+        
+        // 重置為新的預設比例（90% / 10%）
+        const defaultChatHeight = availableHeight * 0.9;
+        const defaultInputHeight = Math.max(availableHeight * 0.1, 100); // 確保最小高度
+        
+        // 添加過渡動畫
+        chatArea.style.transition = 'height 0.3s ease';
+        inputArea.style.transition = 'height 0.3s ease';
+        
+        chatArea.style.height = `${defaultChatHeight}px`;
+        inputArea.style.height = `${defaultInputHeight}px`;
+        
+        // 移除過渡
+        setTimeout(() => {
+            chatArea.style.transition = '';
+            inputArea.style.transition = '';
+        }, 300);
+        
+        console.log('Reset to default proportions (90% / 10%)');
+    });
 }
 	
-// 自動調整輸入框高度
+// 修改自動調整輸入框高度的函數
 function setupAutoResizeTextarea() {
-	const textarea = document.getElementById('customQuestion');
-	if (!textarea) return;
-	
-	// **註釋掉自動調整高度的邏輯**
-	/*
-	function adjustHeight() {
-		textarea.style.height = 'auto';
-		const newHeight = Math.min(textarea.scrollHeight, 400);
-		textarea.style.height = newHeight + 'px';
-		
-		if (textarea.scrollHeight > 400) {
-			textarea.style.overflowY = 'auto';
-		} else {
-			textarea.style.overflowY = 'hidden';
-		}
-	}
-	
-	textarea.addEventListener('input', adjustHeight);
-	window.addEventListener('resize', adjustHeight);
-	adjustHeight();
-	*/
-	
-	// **新的邏輯：保持固定高度**
-	textarea.style.height = '40px';
-	textarea.style.minHeight = '40px';
-	textarea.style.maxHeight = '40px';
-	textarea.style.overflowY = 'hidden';
-	textarea.style.resize = 'none';
+    const textarea = document.getElementById('customQuestion');
+    if (!textarea) return;
+    
+    // 只在拖拽時設置為填滿
+    textarea.style.height = '100%';
+    textarea.style.resize = 'none'; // 拖拽時禁用手動resize
+    textarea.style.overflowY = 'auto';
+    
+    textarea.addEventListener('input', function() {
+        if (this.selectionStart === this.value.length) {
+            this.scrollTop = this.scrollHeight;
+        }
+    });
 }
 
 // 快速問題下拉選單控制
@@ -2190,6 +2196,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	// 設定輸入框自動調整高度
 	setupAutoResizeTextarea();
+
+	// 移除任何強制設置 40px 高度的代碼
+	const customQuestion = document.getElementById('customQuestion');
+	if (customQuestion) {
+		// 移除之前可能設置的固定高度
+		customQuestion.style.removeProperty('max-height');
+		customQuestion.style.removeProperty('min-height');
+		
+		// 設置新的高度屬性
+		customQuestion.style.height = '100%';
+		customQuestion.style.minHeight = '60px';
+		customQuestion.style.resize = 'vertical';
+		customQuestion.style.overflowY = 'auto';
+	}
 
 	// 設置 Enter 鍵送出
 	setupEnterKeySubmit();
