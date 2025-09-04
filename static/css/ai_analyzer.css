@@ -1644,3 +1644,124 @@
     flex-shrink: 0; /* 不縮小 */
     height: 36px;
 }
+
+/* 修正AI輸入區域的flex佈局 */
+.ai-input-area {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    background: #252526;
+    border-top: 1px solid #3e3e42;
+    min-height: 120px; /* 增加最小高度 */
+    flex-shrink: 0;
+}
+
+.custom-question-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 8px;
+}
+
+.question-input-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 8px;
+}
+
+.question-input {
+    flex: 1; /* 關鍵：讓textarea填滿剩餘空間 */
+    min-height: 60px;
+    padding: 12px;
+    border: 1px solid #3e3e42;
+    border-radius: 6px;
+    background: #2d2d30 !important;
+    color: #d4d4d4 !important;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.4;
+    resize: vertical; /* 允許垂直調整 */
+    overflow-y: auto;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+.question-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.question-input:hover {
+    border-color: #4a4a4f;
+}
+
+.question-input:disabled {
+    opacity: 0.6;
+    background: #1e1e1e !important;
+    resize: none;
+}
+
+/* 控制按鈕區域固定在底部 */
+.input-inline-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    height: 36px;
+    flex-shrink: 0; /* 不縮小 */
+    margin-top: 0; /* 移除上邊距，讓gap控制間距 */
+    background: transparent;
+}
+
+/* Token使用量區域 */
+.token-usage-top {
+    flex-shrink: 0;
+    margin-bottom: 0; /* 讓gap控制間距 */
+}
+
+.token-usage-container {
+    padding: 8px 12px;
+    margin: 0;
+}
+
+/* 拖曳時的特殊狀態 */
+.resize-divider.dragging {
+    background: #667eea;
+}
+
+.resize-divider.dragging .resize-handle-line {
+    background: #ffffff;
+}
+
+/* 確保在拖曳時textarea不會出現滾動條問題 */
+.ai-input-area.resizing .question-input {
+    overflow-y: hidden;
+}
+
+/* 響應式調整 */
+@media (max-height: 600px) {
+    .ai-input-area {
+        min-height: 80px;
+    }
+    
+    .question-input {
+        min-height: 40px;
+    }
+}
+
+/* Debug樣式 - 可選，幫助視覺化佈局 */
+.debug-layout .custom-question-wrapper {
+    border: 1px dashed #ff0000;
+}
+
+.debug-layout .question-input-container {
+    border: 1px dashed #00ff00;
+}
+
+.debug-layout .question-input {
+    border: 2px dashed #0000ff !important;
+}

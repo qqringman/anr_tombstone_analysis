@@ -1512,10 +1512,52 @@ function improvedResizeDivider() {
         const availableHeight = totalHeight - headerHeight - dividerHeight;
         
         const chatHeight = Math.floor(availableHeight * 0.8);
-        const inputHeight = Math.max(Math.floor(availableHeight * 0.2), 100);
+        const inputHeight = Math.max(Math.floor(availableHeight * 0.2), 120); // 增加最小高度
         
         chatArea.style.height = `${chatHeight}px`;
         inputArea.style.height = `${inputHeight}px`;
+        
+        // 初始化時也要設置textarea
+        setTextareaHeight();
+    };
+    
+    // 計算並設置textarea高度的專門函數
+    const setTextareaHeight = () => {
+        if (!textarea) return;
+        
+        const inputAreaHeight = inputArea.offsetHeight;
+        const tokenUsageEl = document.getElementById('realtimeTokenCount');
+        const controlsEl = document.querySelector('.input-inline-controls');
+        
+        // 實際測量各元素的高度
+        const tokenUsageHeight = tokenUsageEl ? tokenUsageEl.offsetHeight : 0;
+        const controlsHeight = controlsEl ? controlsEl.offsetHeight : 36;
+        const inputAreaPadding = 24; // wrapper的padding
+        const questionContainerPadding = 8; // question-input-container的gap
+        
+        const usedHeight = tokenUsageHeight + controlsHeight + inputAreaPadding + questionContainerPadding;
+        const availableHeight = inputAreaHeight - usedHeight;
+        const finalHeight = Math.max(60, availableHeight); // 最小60px
+        
+        console.log('設置textarea高度:', {
+            inputAreaHeight,
+            tokenUsageHeight,
+            controlsHeight,
+            usedHeight,
+            finalHeight
+        });
+        
+        // 使用flex: 1來填滿剩餘空間，而不是固定高度
+        textarea.style.height = 'auto';
+        textarea.style.minHeight = `${finalHeight}px`;
+        textarea.style.flex = '1'; // 關鍵：讓textarea填滿剩餘空間
+        
+        // 確保父容器也使用flex
+        const questionContainer = textarea.closest('.question-input-container');
+        if (questionContainer) {
+            questionContainer.style.display = 'flex';
+            questionContainer.style.flexDirection = 'column';
+        }
     };
     
     setTimeout(initializeRatio, 100);
@@ -1539,7 +1581,7 @@ function improvedResizeDivider() {
         let newInputHeight = availableHeight - newChatHeight;
         
         const minChatHeight = 200;
-        const minInputHeight = 100;
+        const minInputHeight = 120; // 增加最小高度
         const maxInputHeight = availableHeight * 0.6;
         
         newInputHeight = Math.max(minInputHeight, Math.min(newInputHeight, maxInputHeight));
@@ -1548,30 +1590,12 @@ function improvedResizeDivider() {
         chatArea.style.height = `${newChatHeight}px`;
         inputArea.style.height = `${newInputHeight}px`;
         
-        // 拖拽時：直接計算並設置 textarea 高度
-        if (textarea && isResizing) {
-            // 計算 textarea 可用空間（扣除 padding, controls 等）
-            const inputAreaPadding = 24; // 上下 padding
-            const controlsHeight = 44; // 控制按鈕區域高度
-            const tokenUsageHeight = textarea.parentElement.querySelector('.token-usage-top')?.offsetHeight || 0;
-            
-            const availableTextareaHeight = newInputHeight - inputAreaPadding - controlsHeight - tokenUsageHeight;
-            const minTextareaHeight = 60;
-            
-            const finalTextareaHeight = Math.max(minTextareaHeight, availableTextareaHeight);
-            
-            // 強制設置高度
-            textarea.style.height = `${finalTextareaHeight}px !important`;
-            textarea.style.minHeight = `${finalTextareaHeight}px`;
-            textarea.style.resize = 'none';
-        }
-        
         if (isResizing) {
             animationFrame = requestAnimationFrame(updateSizes);
         }
     }
     
-    // 拖拽開始
+    // 拖曳開始
     divider.addEventListener('mousedown', function(e) {
         isResizing = true;
         currentY = e.clientY;
@@ -1579,6 +1603,11 @@ function improvedResizeDivider() {
         divider.classList.add('dragging');
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
+        
+        // 拖曳時暫時禁用textarea的resize（避免衝突）
+        if (textarea) {
+            textarea.style.resize = 'none';
+        }
         
         e.preventDefault();
         updateSizes();
@@ -1589,7 +1618,7 @@ function improvedResizeDivider() {
         currentY = e.clientY;
     });
     
-    // 拖拽結束
+    // 拖曳結束
     document.addEventListener('mouseup', function() {
         if (!isResizing) return;
         
@@ -1600,35 +1629,28 @@ function improvedResizeDivider() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         
-        // 放開拖拽時：計算並設置合適的 textarea 高度
-        if (textarea) {
-            // 計算當前輸入區域的實際可用高度
-            const inputAreaHeight = inputArea.offsetHeight;
-            const inputAreaPadding = 24; // 上下 padding
-            const controlsHeight = 44; // 控制按鈕區域高度
-            const tokenUsageHeight = textarea.parentElement.querySelector('.token-usage-top')?.offsetHeight || 0;
+        // 拖曳結束後，重新計算並設置textarea
+        setTimeout(() => {
+            setTextareaHeight();
             
-            const availableHeight = inputAreaHeight - inputAreaPadding - controlsHeight - tokenUsageHeight;
-            const finalHeight = Math.max(60, availableHeight); // 最小 60px
-            
-            // 設置 textarea 填滿可用空間
-            textarea.style.height = `${finalHeight}px`;
-            textarea.style.minHeight = `${finalHeight}px`;
-            textarea.style.resize = 'vertical'; // 恢復手動調整功能
-            
-            console.log('設置 textarea 高度:', finalHeight, 'px'); // 調試用
-        }
+            // 恢復textarea的resize功能
+            if (textarea) {
+                textarea.style.resize = 'vertical';
+            }
+        }, 50); // 稍微延遲確保DOM更新完成
     });
     
     // 雙擊重置
     divider.addEventListener('dblclick', function() {
         initializeRatio();
         
-        // 重置後也要恢復 textarea resize 功能
-        if (textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.resize = 'vertical';
-        }
+        // 重置後也要設置textarea
+        setTimeout(() => {
+            setTextareaHeight();
+            if (textarea) {
+                textarea.style.resize = 'vertical';
+            }
+        }, 100);
     });
 }
 
@@ -2194,6 +2216,38 @@ document.addEventListener('DOMContentLoaded', function() {
 	// 使用改進的拖曳功能
 	improvedResizeDivider();
 
+    // 初始化textarea的flex佈局
+    const textarea = document.getElementById('customQuestion');
+    const questionContainer = textarea?.closest('.question-input-container');
+    const wrapper = textarea?.closest('.custom-question-wrapper');
+    
+    if (textarea && questionContainer && wrapper) {
+        // 確保flex佈局正確設置
+        wrapper.style.display = 'flex';
+        wrapper.style.flexDirection = 'column';
+        wrapper.style.flex = '1';
+        
+        questionContainer.style.display = 'flex';
+        questionContainer.style.flexDirection = 'column';
+        questionContainer.style.flex = '1';
+        
+        textarea.style.flex = '1';
+        textarea.style.resize = 'vertical';
+        
+        // 監聽textarea的手動調整
+        let resizeObserver = null;
+        if (window.ResizeObserver) {
+            resizeObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    // 當用戶手動調整textarea大小時，更新其父容器
+                    console.log('Textarea手動調整大小:', entry.target.offsetHeight);
+                }
+            });
+            resizeObserver.observe(textarea);
+        }
+        
+        console.log('✅ Textarea flex佈局初始化完成');
+    }    
 	// 設定輸入框自動調整高度
 	setupAutoResizeTextarea();
 
