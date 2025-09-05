@@ -649,7 +649,10 @@ function shouldUseSegmentAnalysisForFile(mode, fileSize, estimatedTokens) {
     }
     
     // 其他模式的判斷
-    return estimatedTokens > threshold || fileSize > 500000; // 500KB
+    //return estimatedTokens > threshold || fileSize > 500000; // 500KB
+
+    // 智能分析和快速分析都不使用分段分析
+    return false;    
 }
 
 /**
